@@ -561,7 +561,18 @@ Consumers in the same group receive copies of one encoded access unit. Allocatio
 use geometric 1.5× buckets rounded down, including the configured ceiling.
 A budget change can split or merge only the affected viewer; it retains its RTP
 connection, rejects stale group output, and resumes on a keyframe with a common
-monotonic timestamp. A sole viewer changes bitrate in place. Browser and native
+monotonic timestamp. A sole viewer, or an entire group moving to the same bandwidth
+bucket, changes bitrate in place without resetting output admission or waiting for
+a new keyframe. Pending feedback is collected for all viewers before regrouping.
+Upward changes that would split or merge workers wait for the same destination
+bucket to remain requested for 500 ms. This lets staggered transport feedback
+converge without repeatedly recreating encoders; reductions and resume from zero
+are immediate, and a whole group can still change bitrate in place immediately.
+Hardware frame timestamps follow capture time, not worker submission time, so
+queueing, conversion retries and driver readiness do not rewrite the media cadence.
+Static refreshes advance on the frame's preparation time and timestamps remain
+monotonic across retries and group changes.
+Browser and native
 software encoders remain managed by WebRTC and are not part of this pool. An explicitly selected
 codec restricts negotiation to that format: incompatible receivers fail instead
 of silently switching codecs. Driver/session limits and accepted resolution/rate
@@ -577,7 +588,36 @@ The optional driver DLL is loaded from Windows System32; neither CUDA nor NVIDIA
 SDK binaries are required or bundled. The pinned API 12.2 header retains its NVIDIA
 MIT notice in `crates/desktop-capture/vendor/nvcodec`.
 
-NVENC uses a low-latency preset, CBR and no B frames or lookahead. H.264 uses Baseline
+The native preset vocabulary is `balanced`, `quality` and `latency`. NVENC maps
+these to P3/ultra-low-latency/no AQ, P4/low-latency/spatial AQ strength 5, and
+P1/ultra-low-latency/no AQ respectively. All three use single-pass CBR, zero
+reordering, no B frames, no lookahead and no temporal AQ. Settings offer the three
+intents for backends with verified preset support, remembering each encoder ID
+separately (including auto). Missing preferences default to balanced. Changes
+apply to the next share; live resolution/bitrate updates and codec negotiation
+preserve the session's preset. Encoder groups include preset intent in their key.
+Preset intent is independent of codec, resolution, frame rate and bitrate limits.
+Media Foundation maps the intents to quality/speed values 33, 67 and 0 while
+retaining low-latency CBR and no B frames. Discovery initializes each preset;
+non-default MF choices also require matching control readback. Native software
+VP8, VP9, H.264 and AV1 expose the same three intents through the SDK's
+factory-local software preset API. Balanced preserves upstream defaults.
+Quality selects VP8 complexity max (desktop speed -3), VP9 speed 6, OpenH264
+high complexity, and AV1 speed 8. Latency selects VP8 low complexity (desktop
+speed -6), VP9 speed 9, OpenH264 low complexity, and AV1 speed 11. Explicit
+VP9/AV1 speeds bypass dynamic speed changes; other trials remain intact.
+Defaults can already use the fastest setting, so latency and balanced need
+not differ for every codec/resolution. OpenH264 retains single-slice CBR and
+its existing threading/drop policy. Software presets do not change the user's
+degradation preference or stream limits. Browser WebRTC does not expose these
+controls. Auto tries the
+chosen intent on its selected backend. A rejected preset retries balanced before
+the existing same-codec backend fallback. The `encodingPreset` diagnostic records
+requested/effective application intent as 0/1/2 (balanced/quality/latency), plus
+failure status; it is not a driver readback. Other controls retain their own
+readback semantics. Presets describe a tradeoff, not a guaranteed quality gain
+or an end-to-end latency target.
+H.264 uses Baseline
 and HEVC uses Main 8-bit, preserving the existing RTP and recording packet formats.
 Missing/older drivers, unsupported configurations or exhausted encoder sessions
 fall back to MF with the same codec. An active NVENC failure also reopens MF and
@@ -766,13 +806,24 @@ and actual IDs, name, capture/encoder adapters with LUIDs, whether they match, a
 the reason for using legacy selection. An unknown legacy adapter is left unset.
 
 GPU admission and CPU conversion have separate workers, notifications and bounded
-pools. Hardware peers share immutable BGRA snapshots (up to four); each encoder
-uses up to eight NV12 surfaces. Tracked MF samples retain their surface lease until
+pools. Hardware peers share immutable BGRA snapshots (up to four). Each capture
+memoizes up to eight NV12 results by output size and effective colour matrix/range,
+so compatible H.264/H.265 workers issue one conversion of that frame. Cache lookup
+and publication are serialized per capture; encoding and driver completion never
+run under that lock. Different formats and fresh captures remain isolated. A full
+cache still converts additional formats without retaining them in the capture.
+Each conversion worker's pool is bounded to eight surfaces. Shared leases keep
+their pixels immutable until the capture and all consumers release them, without
+keeping the source capture or producing worker alive through a reference cycle.
+Tracked MF samples retain their surface lease until
 the MFT releases its last sample reference. NVENC caches texture registrations and
 keeps at most four inputs in flight; it unmaps each texture before releasing its
 lease. A dedicated completion-event waiter only wakes the shared worker, which
 copies the compressed output and publishes transport before the bounded recording
 queue. Recording writes never run in that waiter or the encode worker.
+The NVENC registration cache remains bounded to eight entries even when shared
+inputs originate from different conversion pools. It retires only the least
+recently used idle registration; pending input mappings are never evicted.
 A full pool coalesces pending input and
 wakes on release instead of blocking the capture or recording producer. Shader
 command batches hold the D3D multithread lock so preview scaling and encoder
@@ -928,6 +979,11 @@ FPS from the video element's presentation FPS, using cumulative compositor
 counters where supported. Player
 drops and receive-to-presentation timing are shown only when available. These are
 browser presentation measurements, not physical display scan-out or end-to-end latency.
+MCP presentation samples include document visibility: cumulative player drop
+counters can include background frames and must not be interpreted alone as
+foreground stutter. Browser receive diagnostics expose first-packet-to-decoded
+processing time, target/minimum jitter-buffer delay and the power-efficient decoder
+flag when supported; missing fields remain unavailable rather than zero.
 Closing or navigating releases both shared-buffer mappings. A silent local audio
 track carries consent, mute and ownership through existing controls; actual system
 audio remains native.
@@ -947,6 +1003,11 @@ preventing counters from different workers from producing spurious rate/latency 
 Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` distinguish actual texture
 submission from memory input and identify a fallback reason. CPU pipeline frame
 counts can remain zero while a hardware-only stream is encoding normally.
+`sourceFrames`, `sourceAgeMs`, `sourceIntervals` and `sourceCopy` measure actual
+OS frame arrivals and the source-copy path independently of CPU readback and
+preview visibility. A long source interval with a short encode time identifies
+an upstream gap; replaced inputs with a normal source cadence identify encoder
+backpressure. Neither alone proves the user's screen was continuously moving.
 Hardware controls include the requested value, setter result and driver readback;
 an accepted setter alone does not establish that a low-latency/CBR/buffer request
 was honored. Unsupported optional controls remain diagnostic and do not silently
@@ -1158,6 +1219,19 @@ by default. No test sends pixels to external peers.
 ```sh
 cargo test -p weblink-desktop-capture --lib gpu_ -- --include-ignored --nocapture --test-threads=1
 ```
+
+The ignored `compare_interactive_presets_on_identical_1440p_input` benchmark uses
+synthetic NV12 inputs and real NVENC H.264/H.265 sessions. Set
+`WEBLINK_NVENC_COMPARE_DIR` to a new directory with an existing parent, then run
+it with `cargo test -p weblink-desktop-capture --release --lib
+compare_interactive_presets_on_identical_1440p_input -- --ignored --nocapture`.
+It compares all three intents at two bitrate budgets in reversed-order rounds,
+writes elementary streams and their exact eight-frame repeating NV12 reference,
+and reports input-to-output completion timing after warmup. It does not capture
+the desktop, alter active shares, measure maximum pipelined throughput or include
+capture/conversion/presentation latency. Concurrent GPU load affects timings;
+objective decoded-image metrics require an external decoder and are not a
+subjective picture-quality verdict.
 
 The ignored `native_dxgi_final_frame_survives_stop_and_readback_device_is_reusable`
 test also needs an interactive desktop. It checks bounded stopping and reads the

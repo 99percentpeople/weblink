@@ -16,7 +16,7 @@
 namespace {
 using Microsoft::WRL::ComPtr;
 constexpr size_t kSlots = 4; // SDK minimum for asynchronous output without B frames.
-constexpr size_t kTextures = 8; // Same bound as the shared NV12 surface pool.
+constexpr size_t kTextures = 8; // Bounded registration cache across shared surface pools.
 constexpr uint32_t kApi = (NVENCAPI_MAJOR_VERSION << 4) | NVENCAPI_MINOR_VERSION;
 
 void copy_error(char* error, const char* message) noexcept {
@@ -61,6 +61,7 @@ struct Texture {
     ComPtr<ID3D11Texture2D> texture;
     NV_ENC_REGISTERED_PTR registered = nullptr;
     bool busy = false;
+    uint64_t last_used = 0;
 };
 struct Slot {
     HANDLE event = nullptr;
@@ -79,6 +80,7 @@ struct Session {
     NV_ENC_INITIALIZE_PARAMS init{};
     std::array<Slot, kSlots> slots{};
     std::vector<Texture> textures;
+    uint64_t input_serial = 0;
     std::deque<size_t> pending;
     std::vector<uint8_t> packet;
     std::atomic<uint32_t> completed{0};
@@ -112,7 +114,10 @@ struct Session {
         wake = callback;
         context = callback_context;
         if (!device || (options.codec != 1 && options.codec != 2) || !options.fps ||
-            !options.width || !options.height || !options.bitrate || !options.ceiling)
+            !options.width || !options.height || !options.bitrate || !options.ceiling ||
+            options.preset < 1 || options.preset > 7 ||
+            (options.tuning != NV_ENC_TUNING_INFO_LOW_LATENCY && options.tuning != NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY) ||
+            options.spatial_aq > 15)
             throw std::runtime_error("Invalid NVENC device or codec");
         codec = options.codec == 1 ? NV_ENC_CODEC_H264_GUID : NV_ENC_CODEC_HEVC_GUID;
         NV_ENC_OPEN_ENCODE_SESSION_EX_PARAMS open{};
@@ -140,10 +145,14 @@ struct Session {
         if (std::find(formats.begin(), formats.end(), NV_ENC_BUFFER_FORMAT_NV12) == formats.end())
             throw std::runtime_error("NVENC NV12 input is unavailable");
         NV_ENC_PRESET_CONFIG preset{};
+        const GUID presets[] = {NV_ENC_PRESET_P1_GUID, NV_ENC_PRESET_P2_GUID, NV_ENC_PRESET_P3_GUID,
+            NV_ENC_PRESET_P4_GUID, NV_ENC_PRESET_P5_GUID, NV_ENC_PRESET_P6_GUID, NV_ENC_PRESET_P7_GUID};
+        const auto preset_guid = presets[options.preset - 1];
+        const auto tuning = static_cast<NV_ENC_TUNING_INFO>(options.tuning);
         preset.version = NV_ENC_PRESET_CONFIG_VER;
         preset.presetCfg.version = NV_ENC_CONFIG_VER;
-        check(driver.api.nvEncGetEncodePresetConfigEx(encoder, codec, NV_ENC_PRESET_P3_GUID,
-              NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY, &preset), "Query low-latency preset");
+        check(driver.api.nvEncGetEncodePresetConfigEx(encoder, codec, preset_guid,
+              tuning, &preset), "Query interactive preset");
         config = preset.presetCfg;
         config.profileGUID = options.codec == 1 ? NV_ENC_H264_PROFILE_BASELINE_GUID : NV_ENC_HEVC_PROFILE_MAIN_GUID;
         config.gopLength = options.fps * 2;
@@ -157,7 +166,8 @@ struct Session {
         rate.vbvInitialDelay = rate.vbvBufferSize;
         rate.enableLookahead = 0;
         rate.lookaheadDepth = 0;
-        rate.enableAQ = 0;
+        rate.enableAQ = options.spatial_aq != 0;
+        rate.aqStrength = options.spatial_aq;
         rate.enableTemporalAQ = 0;
         rate.zeroReorderDelay = 1;
         rate.multiPass = NV_ENC_MULTI_PASS_DISABLED;
@@ -183,8 +193,8 @@ struct Session {
         }
         init.version = NV_ENC_INITIALIZE_PARAMS_VER;
         init.encodeGUID = codec;
-        init.presetGUID = NV_ENC_PRESET_P3_GUID;
-        init.tuningInfo = NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY;
+        init.presetGUID = preset_guid;
+        init.tuningInfo = tuning;
         init.encodeWidth = init.darWidth = init.maxEncodeWidth = options.width;
         init.encodeHeight = init.darHeight = init.maxEncodeHeight = options.height;
         init.frameRateNum = options.fps;
@@ -230,7 +240,6 @@ struct Session {
         size_t index = 0;
         while (index < textures.size() && textures[index].texture.Get() != texture) ++index;
         if (index == textures.size()) {
-            if (textures.size() >= kTextures) throw std::runtime_error("NVENC texture pool overflow");
             D3D11_TEXTURE2D_DESC desc{};
             texture->GetDesc(&desc);
             ComPtr<ID3D11Device> owner;
@@ -238,6 +247,19 @@ struct Session {
             if (owner.Get() != device.Get() || desc.Format != DXGI_FORMAT_NV12 ||
                 desc.Width != init.encodeWidth || desc.Height != init.encodeHeight)
                 throw std::runtime_error("NVENC input texture does not match the encoding device/format");
+            if (textures.size() == kTextures) {
+                // A shared frame can originate from another worker's NV12 pool.
+                // Retire only the oldest idle registration, after poll unmapped it.
+                auto idle = textures.end();
+                for (auto candidate = textures.begin(); candidate != textures.end(); ++candidate)
+                    if (!candidate->busy && (idle == textures.end() || candidate->last_used < idle->last_used))
+                        idle = candidate;
+                if (idle == textures.end()) return 0;
+                index = static_cast<size_t>(idle - textures.begin());
+                if (idle->registered)
+                    check(driver.api.nvEncUnregisterResource(encoder, idle->registered), "Retire input texture");
+                *idle = Texture{};
+            }
             Texture resource;
             resource.texture = texture;
             NV_ENC_REGISTER_RESOURCE registration{};
@@ -250,7 +272,10 @@ struct Session {
             registration.bufferUsage = NV_ENC_INPUT_IMAGE;
             check(driver.api.nvEncRegisterResource(encoder, &registration), "Register input texture");
             resource.registered = registration.registeredResource;
-            try { textures.push_back(std::move(resource)); }
+            try {
+                if (index < textures.size()) textures[index] = std::move(resource);
+                else textures.push_back(std::move(resource));
+            }
             catch (...) {
                 driver.api.nvEncUnregisterResource(encoder, registration.registeredResource);
                 throw;
@@ -286,6 +311,7 @@ struct Session {
             check(status, "Submit texture");
         }
         resource.busy = slot.pending = true;
+        resource.last_used = ++input_serial;
         slot.texture = index;
         pending.push_back(slot_index);
         return 1;

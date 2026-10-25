@@ -76,6 +76,51 @@ it("keeps actual traffic separate from instantaneous transport and encoder budge
   expect(invalid.encoderBitrate).toBeUndefined();
   expect(invalid.availableOutgoingBitrate).toBeUndefined();
 });
+it("separates receive processing and buffering without inventing unsupported decoder metrics", () => {
+  const before: VideoStatsSample = {
+    id: "receiver",
+    timestamp: 1000,
+    frames: 100,
+    processingSeconds: 5,
+    jitterSeconds: 2,
+    jitterTargetSeconds: 1.5,
+    jitterMinimumSeconds: 1,
+    jitterFrames: 100,
+  };
+  const after = {
+    ...before,
+    timestamp: 3000,
+    frames: 200,
+    processingSeconds: 9,
+    jitterSeconds: 3,
+    jitterTargetSeconds: 2,
+    jitterMinimumSeconds: 1.2,
+    jitterFrames: 150,
+    powerEfficientDecoder: false,
+  };
+  const value = videoStatsValue(after, before);
+  expect(value.receiveToDecodeMs).toBe(40);
+  expect(value.jitterMs).toBe(20);
+  expect(value.jitterTargetMs).toBe(10);
+  expect(value.jitterMinimumMs).toBeCloseTo(4);
+  expect(value.powerEfficientDecoder).toBe(false);
+  expect(
+    videoStatsValue(after).receiveToDecodeMs,
+  ).toBeUndefined();
+  expect(
+    videoStatsValue({ ...after, timestamp: 4000 }, after)
+      .receiveToDecodeMs,
+  ).toBeUndefined();
+  expect(
+    videoStatsValue(
+      { ...after, processingSeconds: 0 },
+      before,
+    ).receiveToDecodeMs,
+  ).toBeUndefined();
+  expect(
+    videoStatsValue(sample).powerEfficientDecoder,
+  ).toBeUndefined();
+});
 it("does not invent rates before a baseline, after reset or when unavailable", () => {
   expect(videoStatsValue(sample).bitrate).toBeUndefined();
   expect(
@@ -260,6 +305,11 @@ it("reads only the selected receiver and excludes audio and repair payloads", as
             transportId: "transport",
             targetBitrate: 90_000_000,
             totalDecodeTime: 0.002,
+            totalProcessingDelay: 0.03,
+            keyFramesDecoded: 2,
+            powerEfficientDecoder: true,
+            jitterBufferTargetDelay: 0.02,
+            jitterBufferMinimumDelay: 0.01,
           },
         ],
         [
@@ -318,6 +368,11 @@ it("reads only the selected receiver and excludes audio and repair payloads", as
     frames: 7,
     bytes: 99,
     decodeSeconds: 0.002,
+    processingSeconds: 0.03,
+    keyFrames: 2,
+    powerEfficientDecoder: true,
+    jitterTargetSeconds: 0.02,
+    jitterMinimumSeconds: 0.01,
     receivedFrames: 10,
     droppedFrames: 3,
     packetsReceived: 120,

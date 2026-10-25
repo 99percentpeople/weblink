@@ -4,8 +4,8 @@ exclude = ["vender/rust-sdks"]
 resolver = "2"
 
 [patch.crates-io]
-libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "182d36e7933be029be959d0d83c43e91be8e4669" }
-webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "182d36e7933be029be959d0d83c43e91be8e4669" }
+libwebrtc = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "60a08910b4eba28bae7ca55d446d453359b3858e" }
+webrtc-sys = { git = "https://github.com/99percentpeople/rust-sdks.git", rev = "60a08910b4eba28bae7ca55d446d453359b3858e" }
 
 [profile.release]
 codegen-units = 1

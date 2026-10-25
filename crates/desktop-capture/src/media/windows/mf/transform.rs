@@ -2,6 +2,7 @@
 use super::encoders::Codec;
 use crate::damage::DirtyRect;
 use crate::media::latency::CodecControl;
+use crate::media::preset::EncodingPreset;
 use std::{ptr, sync::Arc};
 use windows::{
     core::Interface,
@@ -104,6 +105,52 @@ impl Transform {
         wake: Arc<dyn Fn() + Send + Sync>,
         device: Option<&ID3D11Device>,
     ) -> Result<Self> {
+        Self::create_configured(
+            activation,
+            configuration,
+            EncodingPreset::Balanced,
+            wake,
+            device,
+        )
+    }
+    pub(super) fn create_with_preset(
+        activation: IMFActivate,
+        configuration: Configuration,
+        preset: EncodingPreset,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        device: Option<&ID3D11Device>,
+    ) -> Result<Self> {
+        match Self::create_configured(
+            activation.clone(),
+            configuration,
+            preset,
+            wake.clone(),
+            device,
+        ) {
+            Ok(encoder) => Ok(encoder),
+            Err(error) if preset != EncodingPreset::Balanced => {
+                let mut encoder = Self::create(activation, configuration, wake, device)?;
+                if let Some(control) = encoder
+                    .configuration
+                    .iter_mut()
+                    .find(|c| c.name == "encodingPreset")
+                {
+                    control.requested = preset.code();
+                    control.accepted = false;
+                    control.error = Some(format!("Using balanced: {error}"));
+                }
+                Ok(encoder)
+            }
+            Err(error) => Err(error),
+        }
+    }
+    pub(super) fn create_configured(
+        activation: IMFActivate,
+        configuration: Configuration,
+        preset: EncodingPreset,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        device: Option<&ID3D11Device>,
+    ) -> Result<Self> {
         let Configuration {
             codec,
             width,
@@ -173,15 +220,7 @@ impl Transform {
                         eAVEncCommonRateControlMode_CBR.0 as u32,
                         false,
                     ));
-                    // Favor real-time screen interaction over compression efficiency.
-                    // Optional: a missing driver control must not disable hardware.
-                    configuration.push(set_control(
-                        api,
-                        "qualityVsSpeed",
-                        &CODECAPI_AVEncCommonQualityVsSpeed,
-                        33,
-                        false,
-                    ));
+                    configuration.push(super::preset::apply(api, preset));
                     // Some drivers latch HRD at SetOutputType and silently ignore
                     // later writes. Reserve one frame at the configured ceiling,
                     // not the conservative startup bandwidth estimate; otherwise
@@ -209,6 +248,33 @@ impl Transform {
                 color.apply_mf(&input_type)?;
                 input_type.SetUINT32(&MF_MT_DEFAULT_STRIDE, width)?;
                 transform.SetInputType(input[0], &input_type, 0)?;
+                if preset != EncodingPreset::Balanced {
+                    let api = controls.as_ref().unwrap();
+                    let control = configuration
+                        .iter_mut()
+                        .find(|c| c.name == "qualityVsSpeed")
+                        .unwrap();
+                    // Some drivers accept the control only after type negotiation.
+                    // Verify again after negotiation, retaining drivers that latch
+                    // the setting before types and disallow later writes.
+                    control.actual = super::preset::read(api);
+                    if !super::preset::confirmed(control) {
+                        *control = super::preset::apply(api, preset);
+                    }
+                    if !super::preset::confirmed(control) {
+                        return Err(windows::core::Error::new(
+                            windows::Win32::Foundation::E_NOTIMPL,
+                            "Encoder did not confirm the requested quality/speed preset",
+                        ));
+                    }
+                }
+                configuration.push(CodecControl {
+                    name: "encodingPreset".into(),
+                    requested: preset.code(),
+                    actual: Some(preset.code()),
+                    accepted: true,
+                    error: None,
+                });
                 if let Some(api) = &controls {
                     // Other vendors may require negotiated types before accepting
                     // this optional setting. Keep both paths and read back at runtime.

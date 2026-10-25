@@ -7,7 +7,7 @@ use crate::{
         Cursor, CursorShape, Rotation, TextureFrame,
     },
 };
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 use windows::{
     core::{s, Interface, Result, PCSTR},
     Win32::Graphics::{
@@ -29,6 +29,9 @@ pub(crate) struct Captured {
     rotation: Rotation,
     cursor: Option<Cursor>,
     damage: Damage,
+    // Shared only by consumers of this immutable capture. Keep a bounded number
+    // of formats, and retain leases until both capture and encoders release them.
+    converted: Mutex<Vec<(ConversionKey, Arc<Lease<Surface>>)>>,
 }
 impl Captured {
     pub(super) fn damage(&self, output: (u32, u32)) -> Damage {
@@ -102,6 +105,7 @@ impl CapturePool {
             rotation: frame.rotation,
             cursor: frame.cursor.filter(|c| cursor && c.visible).cloned(),
             damage: Damage::from_rects(frame.dirty_regions, self.size),
+            converted: Mutex::new(Vec::new()),
         })))
     }
 }
@@ -111,6 +115,13 @@ pub(crate) struct Surface {
     y: ID3D11RenderTargetView,
     uv: ID3D11RenderTargetView,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ConversionKey {
+    size: (u32, u32),
+    matrix: u8,
+    full_range: bool,
+}
+const MAX_SHARED_CONVERSIONS: usize = 8;
 pub(in crate::media::windows) struct Converter {
     pub device: ID3D11Device,
     size: (u32, u32),
@@ -121,7 +132,7 @@ pub(in crate::media::windows) struct Converter {
     raster: ID3D11RasterizerState,
     constants: ID3D11Buffer,
     pool: Arc<Pool<Surface>>,
-    cached: Option<(Weak<Captured>, Arc<Lease<Surface>>)>,
+    cached: Option<(Weak<Captured>, ConversionKey, Arc<Lease<Surface>>)>,
     cursor: Option<(Cursor, ID3D11ShaderResourceView)>,
 }
 fn bytecode(entry: PCSTR, target: PCSTR) -> Result<Vec<u8>> {
@@ -277,19 +288,37 @@ impl Converter {
         frame: &Arc<Captured>,
         options: &MediaOptions,
     ) -> Result<Option<Arc<Lease<Surface>>>> {
-        if let Some((source, surface)) = &self.cached {
-            if source
-                .upgrade()
-                .is_some_and(|source| Arc::ptr_eq(&source, frame))
+        if self.device != frame.device {
+            return Err(windows::Win32::Foundation::E_INVALIDARG.into());
+        }
+        let color = options.color_space().rtc();
+        let key = ConversionKey {
+            size: self.size,
+            matrix: color.matrix,
+            full_range: color.full_range,
+        };
+        if let Some((source, cached_key, surface)) = &self.cached {
+            if *cached_key == key
+                && source
+                    .upgrade()
+                    .is_some_and(|source| Arc::ptr_eq(&source, frame))
             {
                 return Ok(Some(surface.clone()));
             }
         }
         self.cached = None;
+        // Serialize lookup and publication so simultaneous H.264/H.265 workers
+        // issue only one shader conversion. No encoder/driver completion is
+        // awaited here; encoders hold independent references to the same lease.
+        let mut converted = frame.converted.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, surface)) = converted.iter().find(|(cached, _)| *cached == key) {
+            let surface = surface.clone();
+            self.cached = Some((Arc::downgrade(frame), key, surface.clone()));
+            return Ok(Some(surface));
+        }
         let Some(surface) = self.pool.take(|| self.surface())? else {
             return Ok(None);
         };
-        let color = options.color_space().rtc();
         let (kr, kb) = if color.matrix == 1 {
             (0.2126, 0.0722)
         } else {
@@ -377,7 +406,10 @@ impl Converter {
             self.device.GetDeviceRemovedReason()?;
         }
         let surface = Arc::new(surface);
-        self.cached = Some((Arc::downgrade(frame), surface.clone()));
+        if converted.len() < MAX_SHARED_CONVERSIONS {
+            converted.push((key, surface.clone()));
+        }
+        self.cached = Some((Arc::downgrade(frame), key, surface.clone()));
         Ok(Some(surface))
     }
 }

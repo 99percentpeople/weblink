@@ -3,6 +3,7 @@ mod backend;
 #[cfg(test)]
 mod color_probe;
 pub(super) mod gpu;
+mod timing;
 use super::super::{
     bitrate::{BitrateController, FrameBudget},
     MediaOptions,
@@ -19,7 +20,7 @@ pub use backend::detect;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,
     video_frame::{EncodedFrameType, EncodedVideoFrame, I420Buffer, VideoBuffer},
-    video_source::{native::NativeVideoSource, VideoResolution},
+    video_source::VideoResolution,
 };
 use std::{
     collections::HashMap,
@@ -212,12 +213,6 @@ struct InputTiming {
 
 // The source owns the notification, which only weakly references Pending.
 // Clear it on every worker exit, including transform initialization failures.
-struct RateControlSubscription(NativeVideoSource);
-impl Drop for RateControlSubscription {
-    fn drop(&mut self) {
-        self.0.set_rate_control_wakeup(None);
-    }
-}
 impl Encoder {
     #[cfg(test)]
     pub fn new(id: String, options: MediaOptions, preview: bool) -> Result<Self> {
@@ -249,13 +244,8 @@ impl Encoder {
         input_wake: crate::surface::gpu::Wake,
         bitrate: Option<u32>,
     ) -> Result<Self> {
-        let source = NativeVideoSource::new_encoded(VideoResolution::default());
-        if !source.set_color_space(Some(options.color_space().rtc())) {
-            return Err("Invalid hardware video color space".into());
-        }
         let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let error = Arc::new(Mutex::new(None));
-        let output = source.clone();
         let work = pending.clone();
         let failure = error.clone();
         let statistics = Arc::new(Mutex::new(EncodeStatistics::default()));
@@ -276,7 +266,6 @@ impl Encoder {
                     id,
                     options,
                     preview,
-                    output,
                     work,
                     measured,
                     &tap,
@@ -403,7 +392,6 @@ fn run(
     id: String,
     mut options: MediaOptions,
     preview: bool,
-    output: NativeVideoSource,
     work: Arc<(Mutex<Pending>, Condvar)>,
     statistics: Arc<Mutex<EncodeStatistics>>,
     recording: &EncodedRecordingTap,
@@ -413,6 +401,7 @@ fn run(
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
+    selection.set_preset(options.encoding_preset);
     let mut encoder: Option<backend::Encoder> = None;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
@@ -421,6 +410,7 @@ fn run(
     let mut damage = Damage::default();
     let started = Instant::now();
     let recording_origin = clock_us();
+    let mut timeline = timing::Timeline::new(started);
     let mut rate_control = if let Some(bitrate) = bitrate {
         BitrateController::with_start(options.max_bitrate as u32, bitrate)
     } else if preview {
@@ -438,8 +428,6 @@ fn run(
             work.1.notify_one();
         }
     });
-    let _rate_subscription = RateControlSubscription(output.clone());
-    output.set_rate_control_wakeup(Some(wake.clone()));
     let mut keyframe = true;
     // Bound outstanding timings to the transform's accepted inputs. Reconfiguration
     // discards outstanding frames; cumulative completed-frame counters survive it.
@@ -503,12 +491,8 @@ fn run(
                 }
             }
         }
-        keyframe |= output.take_keyframe_request();
-        if let Some(rate) = output.take_rate_control_request() {
-            if bitrate.is_none() {
-                rate_control.observe(rate.target_bitrate_bps);
-            }
-        }
+        // The pool collects feedback from real consumer sources and forwards
+        // it through pending.keyframe / pending.bitrate above.
         if let Some(rate) = next_bitrate {
             rate_control.observe(u64::from(rate));
         }
@@ -637,21 +621,6 @@ fn run(
                         }
                         stats.in_flight = in_flight.len();
                     }
-                    output.capture_encoded_frame(&EncodedVideoFrame {
-                        codec: active.codec,
-                        payload: &packet.bytes,
-                        timestamp_us: packet.timestamp_us,
-                        frame_type: if packet.keyframe {
-                            EncodedFrameType::Key
-                        } else {
-                            EncodedFrameType::Delta
-                        },
-                        resolution: VideoResolution {
-                            width: active.width,
-                            height: active.height,
-                        },
-                        frame_metadata: None,
-                    });
                     // Each output owns its own feedback state and RTP transport.
                     // Use one absolute clock across encoder-group migrations.
                     let consumers: Vec<_> = outputs
@@ -680,7 +649,7 @@ fn run(
                             },
                         );
                     }
-                    // Publish to the original transport first. Move the existing
+                    // Publish to attached transports first. Move the existing
                     // packet allocation into a bounded, non-waiting recording queue.
                     recording.publish(Packet {
                         bytes: packet.bytes,
@@ -715,7 +684,7 @@ fn run(
                         damage = Damage::default();
                         keyframe = false;
                     }
-                    let timestamp = started.elapsed().as_micros() as i64;
+                    let timestamp = timeline.timestamp(frame.captured_at, frame.ready_at);
                     let input_at = Instant::now();
                     let input = match &frame.input {
                         Input::Memory(bytes) => active.input(bytes, timestamp, damage.rects()),
@@ -766,6 +735,7 @@ fn run(
                         );
                         continue;
                     }
+                    timeline.accepted(timestamp);
                     damage.take();
                     if active.take_controls_changed() {
                         statistics
@@ -1219,5 +1189,38 @@ mod tests {
             panic!("expected memory input")
         };
         assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 11, 21]);
+    }
+
+    #[test]
+    #[ignore = "Requires Windows MF hardware encoders"]
+    fn hardware_packets_keep_capture_spacing_across_delayed_submission() {
+        let encoders = super::super::mf::detect().unwrap();
+        assert!(!encoders.is_empty());
+        for info in encoders {
+            let encoder = Encoder::new(info.id, MediaOptions::default(), true).unwrap();
+            let recording = encoder.recording.subscribe().unwrap();
+            let buffer = I420Buffer::new_black(320, 180);
+            encoder.submit(Arc::new(Frame::from_i420(&buffer, Some(Instant::now()))));
+            recording.receive(Duration::from_secs(5)).unwrap();
+            let captured = Instant::now();
+            thread::sleep(Duration::from_millis(40));
+            let mut timestamps = Vec::new();
+            for i in 0..3 {
+                encoder.submit(Arc::new(Frame::from_i420(
+                    &buffer,
+                    Some(captured + Duration::from_micros(i * 8_333)),
+                )));
+                timestamps.push(
+                    recording
+                        .receive(Duration::from_secs(5))
+                        .unwrap()
+                        .timestamp_us,
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
+            assert_eq!(timestamps[1] - timestamps[0], 8_333);
+            assert_eq!(timestamps[2] - timestamps[1], 8_333);
+            encoder.close();
+        }
     }
 }

@@ -18,6 +18,7 @@ fn candidate(id: &str, adapter: Option<&Adapter>) -> Candidate<String> {
             name: id.into(),
             hardware: true,
             codecs: vec![Codec::from_id(id).mime().into()],
+            presets: Vec::new(),
         },
         adapter: adapter.cloned(),
         activation: id.into(),
@@ -25,6 +26,53 @@ fn candidate(id: &str, adapter: Option<&Adapter>) -> Candidate<String> {
 }
 fn open(candidate: &Candidate<String>) -> Result<String> {
     Ok(candidate.activation.clone())
+}
+
+#[test]
+#[ignore = "requires installed hardware encoder drivers"]
+fn advertised_presets_initialize_and_report_the_effective_intent() {
+    let _runtime = Runtime::new().unwrap();
+    let detected = detect().unwrap();
+    assert!(
+        !detected.is_empty(),
+        "No hardware MFT available on this machine"
+    );
+    for info in detected {
+        println!("{} {}: {:?}", info.name, info.id, info.presets);
+        for preset in EncodingPreset::ALL {
+            let mut selection = Selection::new(info.id.clone(), false);
+            selection.set_preset(preset);
+            let encoder = selection
+                .open(
+                    320,
+                    180,
+                    30,
+                    1_000_000,
+                    1_000_000,
+                    MediaOptions::default().color_space(),
+                    Arc::new(|| {}),
+                    None,
+                )
+                .unwrap();
+            let controls = encoder.control_status();
+            let effective = controls
+                .iter()
+                .find(|c| c.name == "encodingPreset")
+                .unwrap();
+            assert_eq!(effective.requested, preset.code());
+            if info.presets.contains(&preset) {
+                assert!(effective.accepted);
+                assert_eq!(effective.actual, Some(preset.code()));
+            } else {
+                assert!(!effective.accepted);
+                assert_eq!(effective.actual, Some(EncodingPreset::Balanced.code()));
+                assert!(effective
+                    .error
+                    .as_ref()
+                    .is_some_and(|e| e.contains("Using balanced")));
+            }
+        }
+    }
 }
 
 #[test]

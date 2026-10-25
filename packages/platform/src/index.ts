@@ -341,7 +341,14 @@ export interface NativeEncoder {
   name: string;
   hardware: boolean;
   codecs: string[];
+  /** Successfully initialized presets; absent on older desktop versions. */
+  presets?: NativeEncodingPreset[];
 }
+
+export type NativeEncodingPreset =
+  | "balanced"
+  | "quality"
+  | "latency";
 
 export interface CaptureStatus {
   sessionId: string | null;
@@ -418,6 +425,8 @@ export interface NativeScreenOptions {
   maxBitrate: number;
   codec: string | null;
   encoder?: string;
+  /** Encoding intent for the next share; defaults to balanced. */
+  encodingPreset?: NativeEncodingPreset;
   /** GPU readback slots for the next native share; defaults to two. */
   readbackBuffers?: NativeReadbackBuffers;
   /** Colour conversion for the next native share. */

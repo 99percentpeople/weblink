@@ -11,6 +11,7 @@ pub(crate) struct EncodingProfile {
     limit: u64,
     matrix: super::color::ColorMatrix,
     range: super::color::ColorRange,
+    preset: super::preset::EncodingPreset,
     // Local compatibility receivers must not share network adaptation.
     preview: bool,
 }
@@ -25,6 +26,7 @@ impl EncodingProfile {
             limit: options.max_bitrate,
             matrix: options.color_matrix,
             range: options.color_range,
+            preset: options.encoding_preset,
             preview,
         }
     }
@@ -77,6 +79,10 @@ mod tests {
         assert_ne!(profile, EncodingProfile::new("mf:b", &options, false));
         assert_ne!(profile, EncodingProfile::new("mf:a", &options, true));
         for changed in [
+            MediaOptions {
+                encoding_preset: super::super::preset::EncodingPreset::Quality,
+                ..options.clone()
+            },
             MediaOptions {
                 codec: Some("video/h265".into()),
                 ..options.clone()

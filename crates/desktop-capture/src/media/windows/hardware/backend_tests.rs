@@ -131,6 +131,98 @@ fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i
 }
 
 #[test]
+#[ignore = "Requires NVIDIA NVENC H.264 and H.265"]
+fn nvenc_presets_accept_concurrent_shared_surfaces_and_bitrate_changes() {
+    use crate::media::preset::EncodingPreset;
+    let image = Image::new();
+    let captured = image.captured();
+    for preset in [
+        EncodingPreset::Balanced,
+        EncodingPreset::Quality,
+        EncodingPreset::Latency,
+    ] {
+        let mut first_converter =
+            gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+        let mut second_converter =
+            gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+        let surface = first_converter
+            .convert(&captured, &MediaOptions::default())
+            .unwrap()
+            .unwrap();
+        let shared = second_converter
+            .convert(&captured, &MediaOptions::default())
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(&surface, &shared));
+        let mut encoders: Vec<_> = [(nvenc::H264, Codec::H264), (nvenc::HEVC, Codec::Hevc)]
+            .into_iter()
+            .map(|(id, codec)| {
+                let mut selection = Selection::new(id.into(), false);
+                selection.set_preset(preset);
+                let config = configuration(codec);
+                let mut encoder = selection
+                    .open(
+                        config.width,
+                        config.height,
+                        config.fps,
+                        config.bitrate,
+                        config.bitrate_limit,
+                        config.color,
+                        Arc::new(|| {}),
+                        Some(&image.device),
+                    )
+                    .unwrap();
+                assert_eq!(encoder.implementation(), "NVENC");
+                let controls = encoder.control_status();
+                let effective = controls
+                    .iter()
+                    .find(|c| c.name == "encodingPreset")
+                    .unwrap();
+                assert_eq!(effective.requested, preset.code());
+                assert_eq!(effective.actual, Some(preset.code()));
+                assert!(effective.accepted);
+                assert!(encoder.input_gpu(surface.clone(), 123_456, None).unwrap());
+                encoder
+            })
+            .collect();
+        drop(first_converter);
+        drop(second_converter);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut completed = [false; 2];
+        while !completed.iter().all(|done| *done) {
+            for (index, encoder) in encoders.iter_mut().enumerate() {
+                for packet in encoder.poll().unwrap() {
+                    assert!(!completed[index]);
+                    assert_eq!(packet.timestamp_us, 123_456);
+                    assert!(packet.keyframe && !packet.bytes.is_empty());
+                    completed[index] = true;
+                }
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(1));
+        }
+        for encoder in &mut encoders {
+            encoder.set_bitrate(750_000).unwrap();
+            encode(encoder, shared.clone(), 160_000);
+            encoder.request_keyframe().unwrap();
+            assert!(encode(encoder, shared.clone(), 200_000).keyframe);
+            // Shared inputs can come from different conversion pools over time.
+            // More than eight distinct textures must retire idle registrations,
+            // not overflow the registration cache or force a backend fallback.
+            for index in 0..12 {
+                let mut converter =
+                    gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+                let fresh = converter
+                    .convert(&image.captured(), &MediaOptions::default())
+                    .unwrap()
+                    .unwrap();
+                encode(encoder, fresh, 240_000 + index * 40_000);
+            }
+        }
+    }
+}
+
+#[test]
 #[ignore = "Requires NVIDIA NVENC and Windows MF GPU encoding"]
 fn nvenc_gpu_output_and_same_codec_fallback_preserve_timestamps_and_keyframes() {
     let _runtime = transform::Runtime::new().unwrap();

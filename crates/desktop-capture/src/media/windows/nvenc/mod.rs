@@ -1,6 +1,9 @@
 //! Optional NVIDIA driver adapter. No static NVIDIA/CUDA library dependency.
+#[cfg(test)]
+mod compare;
 mod discovery;
 mod ffi;
+mod preset;
 use super::{
     hardware::gpu,
     mf::{
@@ -10,6 +13,7 @@ use super::{
 };
 use crate::{
     media::latency::CodecControl,
+    media::preset::EncodingPreset,
     surface::gpu::{Lease, Wake},
     Result,
 };
@@ -43,6 +47,8 @@ pub(super) struct Encoder {
     blocked_since: Option<Instant>,
     keyframe: Cell<bool>,
     configuration: Configuration,
+    preset: EncodingPreset,
+    preset_fallback: Option<(EncodingPreset, String)>,
 }
 
 extern "C" fn wake(context: *mut c_void) {
@@ -57,11 +63,36 @@ fn error(message: &[c_char; 512]) -> String {
 }
 
 impl Encoder {
+    pub fn open_requested_preset(
+        device: &ID3D11Device,
+        configuration: Configuration,
+        preset: EncodingPreset,
+        notify: Wake,
+    ) -> Result<Self> {
+        match Self::open_with_preset(device, configuration, preset, notify.clone()) {
+            Ok(encoder) => Ok(encoder),
+            Err(error) if preset != EncodingPreset::Balanced => {
+                let mut encoder = Self::open(device, configuration, notify)?;
+                encoder.preset_fallback = Some((preset, error));
+                Ok(encoder)
+            }
+            Err(error) => Err(error),
+        }
+    }
     pub fn open(device: &ID3D11Device, configuration: Configuration, notify: Wake) -> Result<Self> {
+        Self::open_with_preset(device, configuration, EncodingPreset::Balanced, notify)
+    }
+    pub fn open_with_preset(
+        device: &ID3D11Device,
+        configuration: Configuration,
+        preset: EncodingPreset,
+        notify: Wake,
+    ) -> Result<Self> {
         if !is_nvidia(device) {
             return Err("The capture adapter does not support NVIDIA NVENC".into());
         }
         let color = configuration.color.rtc();
+        let settings = preset::settings(preset);
         let config = ffi::Config {
             codec: match configuration.codec {
                 Codec::H264 => 1,
@@ -76,6 +107,9 @@ impl Encoder {
             transfer: color.transfer as u32,
             matrix: color.matrix as u32,
             full_range: u32::from(color.full_range),
+            preset: settings.level,
+            tuning: settings.tuning,
+            spatial_aq: settings.spatial_aq,
         };
         let mut notify = Box::new(notify);
         let mut message = [0; 512];
@@ -98,6 +132,8 @@ impl Encoder {
             blocked_since: None,
             keyframe: Cell::new(true),
             configuration,
+            preset,
+            preset_fallback: None,
         })
     }
     pub fn ready(&self) -> bool {
@@ -211,9 +247,12 @@ impl Encoder {
         }
     }
     pub fn control_status(&self) -> Vec<CodecControl> {
-        [
+        let settings = preset::settings(self.preset);
+        let mut controls: Vec<CodecControl> = [
             ("nvencApiVersion", 122),
-            ("nvencPreset", 3),
+            ("nvencPreset", settings.level),
+            ("nvencTuning", settings.tuning),
+            ("spatialAQ", settings.spatial_aq),
             ("nvencAsync", 1),
             ("lowLatency", 1),
             ("bFrames", 0),
@@ -235,7 +274,23 @@ impl Encoder {
             accepted: true,
             error: None,
         })
-        .collect()
+        .collect();
+        controls.push(CodecControl {
+            name: "encodingPreset".into(),
+            requested: self
+                .preset_fallback
+                .as_ref()
+                .map_or(self.preset, |(p, _)| *p)
+                .code(),
+            // Effective application intent, not a driver getter.
+            actual: Some(self.preset.code()),
+            accepted: self.preset_fallback.is_none(),
+            error: self
+                .preset_fallback
+                .as_ref()
+                .map(|(_, error)| format!("Using balanced: {error}")),
+        });
+        controls
     }
 }
 impl Drop for Encoder {

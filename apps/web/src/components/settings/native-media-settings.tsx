@@ -7,6 +7,7 @@ import { SelectSection } from "@/components/ui/select";
 
 import CaptureBackendSelect from "@/components/capture-backend-select";
 import NativeColorSettings from "./native-color-settings";
+import NativeEncodingPresetSettings from "./native-encoding-preset-settings";
 import { appState } from "@/libs/state/app-state";
 import { nativeScreenOptions } from "@/libs/application/meeting-video-settings";
 import { setAppOptions } from "@/options";
@@ -273,6 +274,9 @@ export default function NativeMediaSettings(props: {
         }
       >
         <div class="setting-group">
+          <NativeEncodingPresetSettings
+            encoders={props.available.encoders}
+          />
           <SettingHeading>
             {label("native_advanced")}
           </SettingHeading>

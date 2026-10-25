@@ -226,3 +226,126 @@ fn gpu_pool_waits_for_final_mf_sample_release_and_survives_owner_teardown() {
     assert!(pool.upgrade().is_none());
     drop(samples);
 }
+
+#[test]
+#[ignore = "Requires D3D11 NV12 render targets"]
+fn concurrent_encoders_share_conversion_but_separate_pixels_and_formats() {
+    let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let pixels = [32, 96, 192, 255].repeat(64 * 32);
+    let texture = texture(&device, &pixels);
+    let frame = TextureFrame {
+        device: &device,
+        context: &context,
+        texture: &texture,
+        rotation: Rotation::Identity,
+        cursor: None,
+        dirty_regions: None,
+    };
+    let pool = CapturePool::new(&frame, Arc::new(|| {}));
+    let captured = pool.capture(&frame, false).unwrap().unwrap();
+    let weak_capture = Arc::downgrade(&captured);
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let workers: Vec<_> = ["video/h264", "video/h265"]
+        .into_iter()
+        .map(|codec| {
+            let device = device.clone();
+            let captured = captured.clone();
+            let barrier = barrier.clone();
+            thread::spawn(move || {
+                let mut converter = Converter::new(&device, (64, 32), Arc::new(|| {})).unwrap();
+                let options = MediaOptions {
+                    codec: Some(codec.into()),
+                    ..Default::default()
+                };
+                barrier.wait();
+                let surface = converter.convert(&captured, &options).unwrap().unwrap();
+                (converter, surface)
+            })
+        })
+        .collect();
+    let mut results: Vec<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+    assert!(Arc::ptr_eq(&results[0].1, &results[1].1));
+    assert_eq!(captured.converted.lock().unwrap().len(), 1);
+
+    let options = MediaOptions {
+        codec: Some("video/h265".into()),
+        ..Default::default()
+    };
+    let full = MediaOptions {
+        color_range: ColorRange::Full,
+        ..options.clone()
+    };
+    let other = results[0].0.convert(&captured, &full).unwrap().unwrap();
+    assert!(!Arc::ptr_eq(&other, &results[1].1));
+    assert_ne!(
+        read_nv12(&device, &context, &other.texture),
+        read_nv12(&device, &context, &results[1].1.texture)
+    );
+    // Returning to the prior color must retrieve its original conversion.
+    let restored = results[0].0.convert(&captured, &options).unwrap().unwrap();
+    assert!(Arc::ptr_eq(&restored, &results[1].1));
+    let bt601 = MediaOptions {
+        color_matrix: ColorMatrix::Bt601,
+        ..options.clone()
+    };
+    let alternate = results[0].0.convert(&captured, &bt601).unwrap().unwrap();
+    assert!(!Arc::ptr_eq(&alternate, &restored));
+    assert_ne!(
+        read_nv12(&device, &context, &alternate.texture),
+        read_nv12(&device, &context, &restored.texture)
+    );
+    let mut resized = Converter::new(&device, (32, 16), Arc::new(|| {})).unwrap();
+    let small = resized.convert(&captured, &options).unwrap().unwrap();
+    assert!(!Arc::ptr_eq(&small, &restored));
+    let next = pool.capture(&frame, false).unwrap().unwrap();
+    let fresh = results[0].0.convert(&next, &options).unwrap().unwrap();
+    assert!(!Arc::ptr_eq(&fresh, &restored));
+    assert_eq!(
+        read_nv12(&device, &context, &fresh.texture),
+        read_nv12(&device, &context, &restored.texture)
+    );
+
+    // The shared result remains valid when its producing worker exits, without
+    // retaining the captured BGRA input or an encoder/pool ownership cycle.
+    drop(results);
+    drop(captured);
+    assert!(weak_capture.upgrade().is_none());
+    assert!(!read_nv12(&device, &context, &restored.texture).is_empty());
+}
+
+#[test]
+#[ignore = "Requires D3D11 NV12 render targets"]
+fn shared_conversion_cache_is_bounded_and_rejects_other_devices() {
+    let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let texture = texture(&device, &[96, 96, 96, 255].repeat(64 * 32));
+    let frame = TextureFrame {
+        device: &device,
+        context: &context,
+        texture: &texture,
+        rotation: Rotation::Identity,
+        cursor: None,
+        dirty_regions: None,
+    };
+    let captured = CapturePool::new(&frame, Arc::new(|| {}))
+        .capture(&frame, false)
+        .unwrap()
+        .unwrap();
+    for index in 0..MAX_SHARED_CONVERSIONS + 3 {
+        let mut converter =
+            Converter::new(&device, (16 + index as u32 * 2, 16), Arc::new(|| {})).unwrap();
+        let surface = converter
+            .convert(&captured, &MediaOptions::default())
+            .unwrap()
+            .unwrap();
+        assert!(!read_nv12(&device, &context, &surface.texture).is_empty());
+    }
+    assert_eq!(
+        captured.converted.lock().unwrap().len(),
+        MAX_SHARED_CONVERSIONS
+    );
+    let (other, _) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let mut converter = Converter::new(&other, (16, 16), Arc::new(|| {})).unwrap();
+    assert!(converter
+        .convert(&captured, &MediaOptions::default())
+        .is_err());
+}

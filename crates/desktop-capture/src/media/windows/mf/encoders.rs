@@ -4,7 +4,7 @@ use super::{
     transform::{Configuration, Runtime, Transform},
 };
 use crate::{
-    media::{latency::HardwareEncoderSelection, EncoderInfo, MediaOptions},
+    media::{latency::HardwareEncoderSelection, preset::EncodingPreset, EncoderInfo, MediaOptions},
     Result,
 };
 use std::{ptr, sync::Arc};
@@ -93,6 +93,7 @@ fn info(activation: &IMFActivate, codec: Codec) -> windows::core::Result<Encoder
             name: label,
             hardware: true,
             codecs: vec![codec.mime().into()],
+            presets: Vec::new(),
         })
     }
 }
@@ -165,23 +166,33 @@ pub fn detect() -> Result<Vec<EncoderInfo>> {
             if encoders.iter().any(|e| e.id == candidate.info.id) {
                 continue;
             }
-            if Transform::create(
-                candidate.activation,
-                Configuration {
-                    codec,
-                    width: 320,
-                    height: 180,
-                    fps: 30,
-                    bitrate: 1_000_000,
-                    bitrate_limit: 1_000_000,
-                    color: MediaOptions::default().color_space(),
-                },
-                Arc::new(|| {}),
-                None,
-            )
-            .is_ok()
-            {
-                encoders.push(candidate.info);
+            let configuration = Configuration {
+                codec,
+                width: 320,
+                height: 180,
+                fps: 30,
+                bitrate: 1_000_000,
+                bitrate_limit: 1_000_000,
+                color: MediaOptions::default().color_space(),
+            };
+            let presets: Vec<_> = EncodingPreset::ALL
+                .into_iter()
+                .filter(|preset| {
+                    Transform::create_configured(
+                        candidate.activation.clone(),
+                        configuration,
+                        *preset,
+                        Arc::new(|| {}),
+                        None,
+                    )
+                    .is_ok()
+                })
+                .collect();
+            if presets.contains(&EncodingPreset::Balanced) {
+                encoders.push(EncoderInfo {
+                    presets,
+                    ..candidate.info
+                });
             }
         }
     }
@@ -203,6 +214,7 @@ pub(in crate::media::windows) struct Selection {
     automatic: bool,
     codec: Codec,
     capture: Option<Adapter>,
+    preset: EncodingPreset,
     capture_error: Option<String>,
     pub report: Option<HardwareEncoderSelection>,
 }
@@ -219,9 +231,13 @@ impl Selection {
             requested,
             automatic,
             capture: None,
+            preset: EncodingPreset::Balanced,
             capture_error: None,
             report: None,
         }
+    }
+    pub fn set_preset(&mut self, preset: EncodingPreset) {
+        self.preset = preset;
     }
     pub fn capture_device(&mut self, device: &ID3D11Device) {
         match Adapter::from_device(device) {
@@ -267,6 +283,7 @@ impl Selection {
             bitrate_limit,
             color,
         };
+        let preset = self.preset;
         self.try_open(
             device.is_some(),
             |codec, adapter| {
@@ -277,9 +294,10 @@ impl Selection {
                 }
             },
             |candidate| {
-                Transform::create(
+                Transform::create_with_preset(
                     candidate.activation.clone(),
                     configuration,
+                    preset,
                     wake.clone(),
                     device,
                 )

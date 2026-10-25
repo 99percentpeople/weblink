@@ -6,6 +6,7 @@ pub mod control;
 mod encoding;
 pub mod latency;
 pub mod pipeline;
+pub mod preset;
 pub mod preview;
 
 #[cfg(any(windows, test))]
@@ -57,6 +58,8 @@ pub struct EncoderInfo {
     pub name: String,
     pub hardware: bool,
     pub codecs: Vec<String>,
+    /// Only presets successfully initialized by this backend during discovery.
+    pub presets: Vec<preset::EncodingPreset>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -114,6 +117,7 @@ pub struct MediaOptions {
     pub max_bitrate: u64,
     pub codec: Option<String>,
     pub encoder: String,
+    pub encoding_preset: preset::EncodingPreset,
     pub readback_buffers: u32,
     pub color_matrix: color::ColorMatrix,
     pub color_range: color::ColorRange,
@@ -133,6 +137,7 @@ impl Default for MediaOptions {
             max_bitrate: 25 * 1024 * 1024,
             codec: None,
             encoder: "auto".into(),
+            encoding_preset: Default::default(),
             readback_buffers: 2,
             color_matrix: Default::default(),
             color_range: Default::default(),
@@ -480,6 +485,32 @@ impl MediaSession {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preset_defaults_and_survives_live_video_and_codec_updates() {
+        let legacy: MediaOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy.encoding_preset, preset::EncodingPreset::Balanced);
+        let current: MediaOptions =
+            serde_json::from_str(r#"{"encodingPreset":"quality"}"#).unwrap();
+        assert_eq!(current.encoding_preset, preset::EncodingPreset::Quality);
+        assert!(serde_json::from_str::<MediaOptions>(r#"{"encodingPreset":"unknown"}"#).is_err());
+        let next = VideoSettings {
+            max_width: 1280,
+            max_height: 720,
+            frame_rate: 60,
+            max_bitrate: 2_000_000,
+            degradation_preference: "balanced".into(),
+        }
+        .apply(&current)
+        .unwrap();
+        assert_eq!(next.encoding_preset, current.encoding_preset);
+        let negotiated = SendCodecs {
+            video: "video/h265".into(),
+            audio: "audio/opus".into(),
+        }
+        .apply(&next)
+        .unwrap();
+        assert_eq!(negotiated.encoding_preset, current.encoding_preset);
+    }
     #[test]
     fn negotiated_codecs_preserve_capture_color_and_validate_formats() {
         let select = |video: &str, audio: &str| SendCodecs {

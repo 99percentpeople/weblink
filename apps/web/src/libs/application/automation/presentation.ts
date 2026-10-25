@@ -15,6 +15,11 @@ export class PresentationDiagnostics {
       const quality = video.getVideoPlaybackQuality?.();
       return {
         ...sampler.read(),
+        // Cumulative quality counters include frames intentionally not drawn
+        // in the background. Export visibility alongside them, never infer a
+        // foreground playback failure from those totals alone.
+        documentVisibility:
+          video.ownerDocument.visibilityState,
         paused: video.paused,
         readyState: video.readyState,
         networkState: video.networkState,

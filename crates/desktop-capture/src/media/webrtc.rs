@@ -13,6 +13,18 @@ pub(super) fn configure_software_vfr(
         .map_err(|error| error.to_string())
 }
 
+pub(super) fn configure_software_preset(
+    factory: &libwebrtc::peer_connection_factory::PeerConnectionFactory,
+    preset: super::preset::EncodingPreset,
+) {
+    use libwebrtc::peer_connection_factory::SoftwareEncodingPreset;
+    factory.set_software_encoding_preset(Some(match preset {
+        super::preset::EncodingPreset::Balanced => SoftwareEncodingPreset::Balanced,
+        super::preset::EncodingPreset::Quality => SoftwareEncodingPreset::Quality,
+        super::preset::EncodingPreset::Latency => SoftwareEncodingPreset::Latency,
+    }));
+}
+
 /// The clock used by both native video and encoded audio capture timestamps.
 pub(super) fn clock_us() -> i64 {
     libwebrtc::audio_source::native::NativeAudioSource::capture_clock_us()

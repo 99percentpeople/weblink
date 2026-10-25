@@ -50,6 +50,38 @@ pub fn validate(name: &str, args: &Value) -> Result<&'static Value, String> {
 mod tests {
     use super::*;
     #[test]
+    fn screen_preferences_are_bounded_and_use_existing_read_and_configure_scopes() {
+        use serde_json::json;
+        let get = validate("screen.settings.get", &json!({"target":"local"})).unwrap();
+        assert_eq!(get["scope"], "screen.read");
+        assert_eq!(get["readOnly"], true);
+        let update = validate(
+            "screen.settings.update",
+            &json!({"target":"peer","patch":{"encoder":"auto","codec":"auto","preset":"latency"}}),
+        )
+        .unwrap();
+        assert_eq!(update["scope"], "screen.configure");
+        assert_eq!(update["readOnly"], false);
+        assert_eq!(update["native"], true);
+        for patch in [
+            json!({"frameRate":1001}),
+            json!({"frameRate":60.5}),
+            json!({"maxBitrate":157286401}),
+            json!({"readbackBuffers":4}),
+            json!({"preset":"fast"}),
+            json!({"codec":null}),
+            json!({"automation":{"enabled":true}}),
+        ] {
+            assert!(validate(
+                "screen.settings.update",
+                &json!({"target":"local","patch":patch})
+            )
+            .is_err());
+        }
+        assert!(validate("screen.settings.get", &json!({})).is_err());
+        assert!(validate("screen.settings.update", &json!({"target":"local"})).is_err());
+    }
+    #[test]
     fn permission_groups_cover_the_catalog_and_keep_terminal_separate() {
         for tool in tools() {
             let scope = tool["scope"].as_str().unwrap();

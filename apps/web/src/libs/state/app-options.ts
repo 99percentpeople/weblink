@@ -1,4 +1,5 @@
 import type { AutomationPolicy } from "@weblink/automation";
+import type { NativeEncodingPreset } from "@weblink/platform";
 import {
   defaultNotificationOptions,
   type NotificationOptions,
@@ -168,6 +169,10 @@ export type AppOption = {
   nativeScreenCodec: string | null;
   nativeAudioCodec: string | null;
   nativeScreenEncoder: string;
+  nativeEncoderPresets: Record<
+    string,
+    NativeEncodingPreset
+  >;
   nativeReadbackBuffers: import("@weblink/platform").NativeReadbackBuffers;
   nativeColorMatrix: import("@weblink/platform").NativeColorMatrix;
   nativeColorRange: import("@weblink/platform").NativeColorRange;
@@ -289,6 +294,7 @@ export const getDefaultAppOptions = (): AppOption => {
     nativeScreenCodec: null,
     nativeAudioCodec: null,
     nativeScreenEncoder: "auto",
+    nativeEncoderPresets: {},
     nativeReadbackBuffers: 2,
     nativeColorMatrix: "auto",
     nativeColorRange: "limited",

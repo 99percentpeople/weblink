@@ -8,10 +8,16 @@ import type { PlatformRuntime } from "@weblink/platform";
 import type { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
 import { parseCall, validate } from "@weblink/automation";
+import {
+  getDefaultAppOptions,
+  type AppOption,
+} from "@/libs/state/app-options";
 const fixture = vi.hoisted(() => ({
   capture: vi.fn(),
   sessions: {} as Record<string, unknown>,
   views: {} as Record<string, unknown>,
+  options: {} as AppOption,
+  setState: vi.fn(),
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
@@ -33,12 +39,68 @@ vi.mock(
   () => ({ nativeScreenOptions: () => ({}) }),
 );
 vi.mock("@/libs/state/app-state", () => ({
-  appState: { options: {} },
+  appState: {
+    get options() {
+      return fixture.options;
+    },
+  },
+  setAppState: fixture.setState,
 }));
 afterEach(() => {
   vi.resetAllMocks();
   fixture.sessions = {};
   fixture.views = {};
+  fixture.options = {} as AppOption;
+});
+it("routes saved video preferences through the app store without native action or capture", async () => {
+  fixture.options = getDefaultAppOptions();
+  fixture.setState.mockImplementation((_key, patch) => {
+    Object.assign(fixture.options, patch);
+  });
+  const run = automationHandlers(
+    {} as AppStateContextProps,
+    {
+      kind: "desktop",
+      screenShare: { encoders: async () => [] },
+      capture: {
+        backends: async () => ({ screen: [], window: [] }),
+      },
+    } as unknown as PlatformRuntime,
+    {} as AutomationDiagnostics,
+  );
+  const native = vi.fn();
+  const signal = new AbortController().signal;
+  const result = await run(
+    {
+      name: "screen.settings.update",
+      arguments: {
+        target: "local",
+        patch: { readbackBuffers: 1 },
+      },
+    },
+    signal,
+    native,
+  );
+  expect(result).toMatchObject({
+    updated: true,
+    settings: { readbackBuffers: 1 },
+  });
+  expect(fixture.setState).toHaveBeenCalledExactlyOnceWith(
+    "options",
+    { nativeReadbackBuffers: 1 },
+  );
+  expect(
+    await run(
+      {
+        name: "screen.settings.get",
+        arguments: { target: "local" },
+      },
+      signal,
+      native,
+    ),
+  ).toMatchObject({ settings: { readbackBuffers: 1 } });
+  expect(native).not.toHaveBeenCalled();
+  expect(fixture.capture).not.toHaveBeenCalled();
 });
 it("exports receiver error codes without native error strings or file paths", async () => {
   fixture.sessions = { peer: { targetClientId: "peer" } };

@@ -1,5 +1,6 @@
 import { readAutomationPolicy } from "@weblink/automation";
 import { resolveAudioSampling } from "../application/meeting-audio-settings";
+import { resolveEncoderPresets } from "../application/native-encoding-presets";
 import { resolveRecordingContainer } from "../application/recording-options";
 import { normalizeTransferConcurrency } from "../application/transfer/transfer-queue";
 import { resolveApplicationOptions } from "../domain/application-options";
@@ -73,6 +74,9 @@ export function resolveStoredAppOptions(
   );
   options.recordingContainer = resolveRecordingContainer(
     options.recordingContainer,
+  );
+  options.nativeEncoderPresets = resolveEncoderPresets(
+    options.nativeEncoderPresets,
   );
   Object.assign(options, resolveAudioSampling(options));
   options.application = resolveApplicationOptions(

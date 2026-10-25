@@ -104,6 +104,10 @@ describe("live video settings", () => {
     controller.sync(stream(video), {
       ...current,
       nativeReadbackBuffers: 3,
+      nativeEncoderPresets: {
+        auto: "latency",
+        "nvenc:h265": "quality",
+      },
     });
     await tick();
     expect(updateVideoSettings).toHaveBeenCalledOnce();

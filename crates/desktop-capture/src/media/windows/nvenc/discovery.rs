@@ -3,7 +3,7 @@ use super::super::mf::{
     transform::{Configuration, Runtime},
 };
 use super::{Encoder, H264, HEVC};
-use crate::media::{EncoderInfo, MediaOptions};
+use crate::media::{preset::EncodingPreset, EncoderInfo, MediaOptions};
 use std::sync::Arc;
 use windows::{
     core::Interface,
@@ -28,7 +28,7 @@ pub(in crate::media::windows) fn detect() -> Vec<EncoderInfo> {
     let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
         return Vec::new();
     };
-    let mut available = [false; 2];
+    let mut available: [Vec<EncodingPreset>; 2] = Default::default();
     let mut index = 0;
     while let Ok(adapter) = unsafe { factory.EnumAdapters1(index) } {
         index += 1;
@@ -63,9 +63,6 @@ pub(in crate::media::windows) fn detect() -> Vec<EncoderInfo> {
             }
         }
         for (i, codec) in [Codec::H264, Codec::Hevc].into_iter().enumerate() {
-            if available[i] {
-                continue;
-            }
             let configuration = Configuration {
                 codec,
                 width: 320,
@@ -76,7 +73,14 @@ pub(in crate::media::windows) fn detect() -> Vec<EncoderInfo> {
                 color: MediaOptions::default().color_space(),
             };
             // Query + actual initialization. A stale DLL or codec GUID alone is not availability.
-            available[i] = Encoder::open(&device, configuration, Arc::new(|| {})).is_ok();
+            for preset in EncodingPreset::ALL {
+                if !available[i].contains(&preset)
+                    && Encoder::open_with_preset(&device, configuration, preset, Arc::new(|| {}))
+                        .is_ok()
+                {
+                    available[i].push(preset);
+                }
+            }
         }
     }
     [
@@ -85,12 +89,13 @@ pub(in crate::media::windows) fn detect() -> Vec<EncoderInfo> {
     ]
     .into_iter()
     .zip(available)
-    .filter(|(_, yes)| *yes)
-    .map(|((id, name, codec), _)| EncoderInfo {
+    .filter(|(_, presets)| presets.contains(&EncodingPreset::Balanced))
+    .map(|((id, name, codec), presets)| EncoderInfo {
         id: id.into(),
         name: name.into(),
         hardware: true,
         codecs: vec![codec.into()],
+        presets,
     })
     .collect()
 }

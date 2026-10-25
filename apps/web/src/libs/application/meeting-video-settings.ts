@@ -3,6 +3,7 @@ import {
   type NativeScreenOptions,
 } from "@weblink/platform";
 import type { AppOption } from "@/libs/state/app-options";
+import { resolveEncodingPreset } from "./native-encoding-presets";
 import {
   nativeAudioOptions,
   type MeetingAudioSettings,
@@ -61,6 +62,7 @@ export type MeetingVideoSettings = Pick<
     Pick<
       AppOption,
       | "nativeScreenEncoder"
+      | "nativeEncoderPresets"
       | "nativeReadbackBuffers"
       | "nativeColorMatrix"
       | "nativeColorRange"
@@ -103,6 +105,11 @@ export function nativeScreenOptions(
       : 25 * 1024 * 1024,
     codec,
     encoder: options.nativeScreenEncoder ?? "auto",
+    encodingPreset: resolveEncodingPreset(
+      options.nativeEncoderPresets?.[
+        options.nativeScreenEncoder ?? "auto"
+      ],
+    ),
     readbackBuffers:
       options.nativeReadbackBuffers === 1 ||
       options.nativeReadbackBuffers === 3

@@ -5,10 +5,15 @@ use crate::Result;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, Weak},
+    time::{Duration, Instant},
 };
 #[cfg(test)]
 #[path = "encoding_pool_tests.rs"]
 mod tests;
+
+// BWE feedback from different transports does not arrive atomically. Delay only
+// upward migrations; the current lower bitrate is safe while peers catch up.
+const UPGRADE_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
@@ -22,6 +27,7 @@ struct Slot {
     preview: bool,
     recording: bool,
     target: u64,
+    upgrade: Option<(u32, Instant)>,
     key: Key,
     encoder: Arc<hardware::Encoder>,
     output: Option<Arc<Output>>,
@@ -158,6 +164,7 @@ impl Pool {
                 preview,
                 recording,
                 target,
+                upgrade: None,
                 key,
                 encoder,
                 output: output.clone(),
@@ -293,12 +300,17 @@ impl Pool {
         result
     }
     pub fn reconcile(&self, wake: crate::surface::gpu::Wake) -> Result<()> {
+        self.reconcile_at(wake, Instant::now())
+    }
+    fn reconcile_at(&self, wake: crate::surface::gpu::Wake, now: Instant) -> Result<()> {
         let mut retired = Vec::new();
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut tokens: Vec<_> = state.slots.keys().copied().collect();
         tokens.sort_by_key(|token| !state.slots[token].recording);
-        for token in tokens {
-            let slot = state.slots.get_mut(&token).unwrap();
+        // Read every pending budget before deciding whether a shared group
+        // needs to split. Processing one viewer at a time can otherwise reopen
+        // an encoder even when all viewers are moving to the same bucket.
+        for slot in state.slots.values_mut() {
             if let Some(output) = &slot.output {
                 if output.take_keyframe_request() {
                     slot.encoder.request_recording_keyframe();
@@ -309,6 +321,9 @@ impl Pool {
                     }
                 }
             }
+        }
+        for token in tokens {
+            let slot = state.slots.get_mut(&token).unwrap();
             let key = Key {
                 profile: slot.key.profile.clone(),
                 bitrate: bitrate_bucket(slot.target, slot.options.max_bitrate),
@@ -326,6 +341,7 @@ impl Pool {
                 .and_then(Weak::upgrade)
                 .filter(|e| e.error().is_none());
             if recording {
+                state.slots.get_mut(&token).unwrap().upgrade = None;
                 // A recording's tap is bound to this worker. Reconfigure it in
                 // place; viewers sharing it can move after their budgets change.
                 if !unchanged {
@@ -345,21 +361,48 @@ impl Pool {
                     .as_ref()
                     .is_none_or(|encoder| Arc::ptr_eq(encoder, &old))
             {
+                state.slots.get_mut(&token).unwrap().upgrade = None;
                 continue;
             }
-            let sole = state
+            let moves_together = state
                 .slots
                 .values()
                 .filter(|s| Arc::ptr_eq(&s.encoder, &old))
-                .count()
-                == 1;
+                .all(|s| {
+                    s.key.profile == key.profile
+                        && bitrate_bucket(s.target, s.options.max_bitrate) == key.bitrate
+                });
+            let migrates = !moves_together
+                || existing
+                    .as_ref()
+                    .is_some_and(|encoder| !Arc::ptr_eq(encoder, &old));
+            let slot = state.slots.get_mut(&token).unwrap();
+            if migrates && old_key.bitrate > 0 && key.bitrate > old_key.bitrate {
+                let since = match slot.upgrade {
+                    Some((target, since)) if target == key.bitrate => since,
+                    _ => {
+                        slot.upgrade = Some((key.bitrate, now));
+                        now
+                    }
+                };
+                if now.saturating_duration_since(since) < UPGRADE_GRACE {
+                    continue;
+                }
+            }
+            slot.upgrade = None;
             let encoder = if let Some(existing) = existing {
                 existing
-            } else if sole {
-                // A sole viewer changes rate without opening another GPU session.
+            } else if moves_together {
+                // Keep the bitstream and all output generations intact when
+                // the entire group changes rate, including a sole viewer.
                 old.set_bitrate(key.bitrate);
                 state.groups.remove(&old_key);
                 state.groups.insert(key.clone(), Arc::downgrade(&old));
+                for member in state.slots.values_mut() {
+                    if Arc::ptr_eq(&member.encoder, &old) {
+                        member.key = key.clone();
+                    }
+                }
                 old.clone()
             } else {
                 self.get_or_create(&mut state, &key, &backend, &options, wake.clone())?

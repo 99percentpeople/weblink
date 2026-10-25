@@ -1,3 +1,4 @@
+import { sanitizePipeline } from "./pipeline-diagnostics";
 import type { PresentationDiagnostics } from "./presentation";
 import { nativeScreenOptions } from "../meeting-video-settings";
 import {
@@ -9,7 +10,11 @@ import type {
   NativeVideoSettings,
 } from "@weblink/platform";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
-import { appState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
+import { createScreenSettings } from "./screen-settings";
 import { sessionService } from "../session-service";
 import {
   createNativeScreenStream,
@@ -22,6 +27,11 @@ export function automationHandlers(
   platform: PlatformRuntime,
   diagnostics: AutomationDiagnostics,
 ) {
+  const screenSettings = createScreenSettings({
+    platform,
+    read: () => appState.options,
+    write: (patch) => setAppState("options", patch),
+  });
   const localTrack = (id: unknown) => {
     const track = state
       .localStream()
@@ -44,6 +54,9 @@ export function automationHandlers(
     signal.throwIfAborted();
     const args = call.arguments;
     switch (call.name) {
+      case "screen.settings.get":
+      case "screen.settings.update":
+        return screenSettings(call, signal, check);
       case "commands.capabilities":
         return native
           ? native()
@@ -272,43 +285,8 @@ export function diagnosticSources(
               await platform.screenShare?.pipelineStats?.(
                 capture.sessionId!,
               );
-            // Keep counters, stage timings and error codes; strip paths and arbitrary native strings.
-            const sanitize = (
-              value: unknown,
-              depth = 0,
-            ): unknown => {
-              if (depth > 6) return undefined;
-              if (typeof value === "number")
-                return Number.isFinite(value)
-                  ? value
-                  : undefined;
-              if (
-                typeof value === "boolean" ||
-                value === null
-              )
-                return value;
-              if (typeof value === "string")
-                return (
-                  value.match(/0x[0-9a-f]{8}/gi) ??
-                  undefined
-                );
-              if (Array.isArray(value))
-                return value
-                  .slice(0, 32)
-                  .map((v) => sanitize(v, depth + 1));
-              if (value && typeof value === "object")
-                return Object.fromEntries(
-                  Object.entries(value)
-                    .slice(0, 64)
-                    .map(([k, v]) => [
-                      k,
-                      sanitize(v, depth + 1),
-                    ]),
-                );
-              return undefined;
-            };
             if (raw)
-              pipeline = sanitize(raw) as Record<
+              pipeline = sanitizePipeline(raw) as Record<
                 string,
                 unknown
               >;

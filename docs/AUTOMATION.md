@@ -356,6 +356,8 @@ contracts belong to `packages/platform`; Tauri imports remain in `apps/desktop`.
 - `devices.list`, `sessions.list`: connected devices and active streams.
 - `screen.sources`, `screen.start`, `screen.stop`, `screen.configure`: native
   capture discovery, sharing without audio, and live stream configuration.
+- `screen.settings.get`, `screen.settings.update`: read and update saved desktop
+  video preferences, including the encoder, codec and per-encoder preset.
 - `control.acquire`, `control.bindWindow`, `control.release`, `control.screenshot`, `control.pointer`,
   `control.key`, `control.text`: exclusive monitor control and bounded screenshots.
   Screenshots default to fitting inside 1024×1024, with window/rectangle crops.
@@ -372,6 +374,51 @@ contracts belong to `packages/platform`; Tauri imports remain in `apps/desktop`.
 - `accessibility.capabilities`, `accessibility.windows`,
   `accessibility.snapshot`, `accessibility.action`: desktop accessibility
   discovery, bounded element trees, and semantic control.
+
+## Video preferences
+
+`screen.settings.get` returns saved video preferences, discovered encoders with
+their codecs and presets, and available monitor/window capture backends. It uses
+`screen.read`; `screen.settings.update` uses `screen.configure`. Both require a
+desktop target with automation enabled and reuse the existing local token or
+remote device permissions. Only video preferences are exposed, not credentials,
+network configuration, audio consent or automation permissions.
+
+Pass a nonempty `patch` to update only the requested fields. Unknown fields,
+out-of-range values and unsupported encoder/codec/preset/backend selections are
+rejected before any preference is written. Encoder and codec must either both be
+`auto` or form a pair returned by the getter. The preset belongs to the resulting
+encoder; changing encoders restores that encoder's remembered preset unless the
+patch also supplies one. `maxBitrate` is in bits per second.
+
+```json
+{
+  "name": "screen.settings.update",
+  "arguments": {
+    "target": "local",
+    "patch": {
+      "encoder": "software",
+      "codec": "video/h264",
+      "preset": "latency"
+    }
+  }
+}
+```
+
+Updates use the same persisted preference store as Settings. The response includes
+`previous`, `settings` and changed fields grouped under `application`:
+
+- `liveUpdateRequested`: resolution, frame rate, bitrate and degradation preference
+  use the application's asynchronous live-update path. This is not confirmation
+  that a running stream accepted the update; inspect diagnostics afterward.
+- `nextShare`: encoder, codec, preset, capture backends, readback buffers and color
+  preferences apply to the next share. No capture is restarted by this tool.
+
+The getter reports saved preferences, not negotiated or effective running values.
+Automatic encoder selection can fall back to the balanced preset, and VP8 uses
+BT.601 limited range regardless of other saved color preferences. Explicit VP8
+color patches must match that restriction. `screen.configure` remains available
+for direct, temporary changes to one active track without saving preferences.
 
 ## Coordinates
 

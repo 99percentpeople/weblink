@@ -29,6 +29,11 @@ impl StageStats {
 #[derive(Default, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineStats {
+    /// Real OS frame callbacks, independent of preview/CPU readback activity.
+    pub source_frames: u64,
+    pub source_age_ms: Option<f64>,
+    pub source_intervals: StageStats,
+    pub source_copy: StageStats,
     pub frames: u64,
     pub input_size: (u32, u32),
     pub readback_size: (u32, u32),
@@ -54,6 +59,10 @@ pub struct PipelineStats {
 #[cfg(any(windows, test))]
 #[derive(Default)]
 pub(crate) struct Timings {
+    source_frames: u64,
+    source_at: Option<std::time::Instant>,
+    source_intervals: super::latency::Distribution,
+    source_copy: super::latency::Distribution,
     frames: u64,
     samples: VecDeque<[f64; 7]>,
     pub input_size: (u32, u32),
@@ -63,6 +72,15 @@ pub(crate) struct Timings {
 }
 #[cfg(any(windows, test))]
 impl Timings {
+    pub fn record_source(&mut self, at: std::time::Instant, copy: std::time::Duration) {
+        if let Some(previous) = self.source_at {
+            self.source_intervals
+                .record(at.saturating_duration_since(previous));
+        }
+        self.source_frames += 1;
+        self.source_at = Some(at);
+        self.source_copy.record(copy);
+    }
     pub fn record(&mut self, sample: [f64; 7]) {
         if sample
             .iter()
@@ -79,6 +97,10 @@ impl Timings {
     pub fn snapshot(&self) -> PipelineStats {
         let stage = |i| StageStats::from_samples(self.samples.iter().map(|s| s[i]));
         PipelineStats {
+            source_frames: self.source_frames,
+            source_age_ms: self.source_at.map(|at| at.elapsed().as_secs_f64() * 1000.0),
+            source_intervals: self.source_intervals.snapshot(),
+            source_copy: self.source_copy.snapshot(),
             frames: self.frames,
             input_size: self.input_size,
             readback_size: self.readback_size,
@@ -121,6 +143,21 @@ impl Clock {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn source_frames_are_visible_without_cpu_readbacks_or_preview() {
+        use std::time::{Duration, Instant};
+        let mut timings = Timings::default();
+        assert_eq!(timings.snapshot().source_age_ms, None);
+        let start = Instant::now();
+        timings.record_source(start, Duration::from_millis(2));
+        timings.record_source(start + Duration::from_millis(500), Duration::from_millis(3));
+        let report = timings.snapshot();
+        assert_eq!(report.frames, 0);
+        assert_eq!(report.source_frames, 2);
+        assert_eq!(report.source_intervals.max_ms, 500.0);
+        assert_eq!(report.source_copy.max_ms, 3.0);
+        assert!(report.source_age_ms.is_some());
+    }
     #[test]
     fn timings_are_bounded_and_percentiles_expose_spikes() {
         let mut timings = Timings::default();

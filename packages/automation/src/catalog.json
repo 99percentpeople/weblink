@@ -174,6 +174,121 @@
     }
   },
   {
+    "name": "screen.settings.get",
+    "description": "Read saved desktop video sharing preferences and available encoders, codecs, presets and capture backends. These are preferences, not the effective settings of a running stream; use diagnostics for those. Requires automation on the target.",
+    "scope": "screen.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": ["target"],
+      "additionalProperties": false
+    },
+    "outputSchema": { "type": "object" }
+  },
+  {
+    "name": "screen.settings.update",
+    "description": "Update a nonempty subset of saved desktop video preferences. Read screen.settings.get first for supported choices. Encoder and codec must form a supported pair (automatic selection requires both encoder and codec to be auto); preset is remembered for the selected encoder. Resolution, frameRate, maxBitrate and degradationPreference request asynchronous live updates through the app; other fields apply on the next share. Returns previous/settings and changed fields grouped by application timing, not confirmation of live success. Does not restart sharing. Requires automation on the target.",
+    "scope": "screen.configure",
+    "native": true,
+    "readOnly": false,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "resolution": {
+              "type": "string",
+              "enum": [
+                "480p",
+                "720p",
+                "1080p",
+                "1440p",
+                "2160p"
+              ]
+            },
+            "frameRate": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "maxBitrate": {
+              "type": "integer",
+              "minimum": 131072,
+              "maximum": 157286400,
+              "description": "Bits per second."
+            },
+            "degradationPreference": {
+              "type": "string",
+              "enum": [
+                "balanced",
+                "maintain-framerate",
+                "maintain-resolution"
+              ]
+            },
+            "encoder": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "codec": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "video/h264",
+                "video/h265",
+                "video/vp8",
+                "video/vp9",
+                "video/av1"
+              ]
+            },
+            "preset": {
+              "type": "string",
+              "enum": ["balanced", "quality", "latency"]
+            },
+            "readbackBuffers": {
+              "type": "integer",
+              "enum": [1, 2, 3]
+            },
+            "colorMatrix": {
+              "type": "string",
+              "enum": ["auto", "bt601", "bt709"]
+            },
+            "colorRange": {
+              "type": "string",
+              "enum": ["limited", "full"]
+            },
+            "screenCaptureBackend": {
+              "type": "string",
+              "enum": ["auto", "wgc", "dxgi"]
+            },
+            "windowCaptureBackend": {
+              "type": "string",
+              "enum": ["wgc", "dxgi"]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": ["target", "patch"],
+      "additionalProperties": false
+    },
+    "outputSchema": { "type": "object" }
+  },
+  {
     "name": "control.acquire",
     "description": "Acquire control of a live native monitor stream. New leases default to desktop input: call control.pointer/key/text directly without bindWindow or accessibility focus; keys/text go to the current foreground application and pointer coordinates are physical desktop pixels. Reuses the same verified device's manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Repeated acquisition preserves the existing lease and any optional window binding. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
     "scope": "input.control",

@@ -31,6 +31,7 @@ describe("meeting capture settings", () => {
       maxBitrate: 4_000_000,
       codec: "video/h264",
       encoder: "auto",
+      encodingPreset: "balanced",
       readbackBuffers: 2,
       colorMatrix: "auto",
       colorRange: "limited",

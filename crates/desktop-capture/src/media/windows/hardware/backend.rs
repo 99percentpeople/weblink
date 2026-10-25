@@ -14,6 +14,7 @@ use crate::{
     media::{
         color::ColorDescription,
         latency::{CodecControl, HardwareEncoderSelection},
+        preset::EncodingPreset,
         EncoderInfo,
     },
     surface::gpu::{Lease, Wake},
@@ -56,6 +57,7 @@ pub(super) struct Selection {
     preference: Preference,
     mf: encoders::Selection,
     nvenc_active: bool,
+    preset: EncodingPreset,
     pub report: Option<HardwareEncoderSelection>,
 }
 impl Selection {
@@ -72,8 +74,13 @@ impl Selection {
             codec,
             mf,
             nvenc_active: false,
+            preset: EncodingPreset::Balanced,
             report: None,
         }
+    }
+    pub fn set_preset(&mut self, preset: EncodingPreset) {
+        self.preset = preset;
+        self.mf.set_preset(preset);
     }
     pub fn capture_device(&mut self, device: &ID3D11Device) {
         self.mf.capture_device(device);
@@ -108,7 +115,15 @@ impl Selection {
             bitrate_limit,
             color,
         };
-        self.open_with(configuration, wake, device, nvenc::Encoder::open)
+        let preset = self.preset;
+        self.open_with(
+            configuration,
+            wake,
+            device,
+            |device, configuration, wake| {
+                nvenc::Encoder::open_requested_preset(device, configuration, preset, wake)
+            },
+        )
     }
     fn open_with(
         &mut self,

@@ -141,6 +141,7 @@ impl MediaSession {
             name: "Software".into(),
             hardware: false,
             codecs: Self::software_codecs(),
+            presets: super::preset::EncodingPreset::ALL.to_vec(),
         }];
         encoders.extend(hardware::detect().unwrap_or_default());
         Ok(encoders)
@@ -253,6 +254,7 @@ impl MediaSession {
         )
         .map_err(|e| e.to_string())?;
         super::webrtc::configure_software_vfr(&factory, options.frame_rate)?;
+        super::webrtc::configure_software_preset(&factory, options.encoding_preset);
         // Bundled OpenH264's screen-content preset can overshoot the short-term
         // budget on scene cuts. Its real-time preset responds to rate control;
         // resolution/degradation and screen identity are still set explicitly.
@@ -889,6 +891,7 @@ impl MediaSession {
             }
             .apply(&options)?;
             super::webrtc::configure_software_vfr(&factory, options.frame_rate)?;
+            super::webrtc::configure_software_preset(&factory, options.encoding_preset);
             // Preview keeps its own congestion feedback and encoder, at the selected
             // resolution. Use the selected hardware encoder locally too; forcing a
             // software preview can trigger CPU adaptation to tiny frame dimensions.
@@ -1197,6 +1200,10 @@ impl FrameSink for MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .copy_at(&frame, captured_at)?;
+        self.pipeline
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record_source(captured_at, captured_at.elapsed());
         if self.has_consumers() {
             self.wake_capture();
         }
@@ -1243,6 +1250,7 @@ fn select_hardware_encoder(
                     name: "NVIDIA NVENC (Media Foundation fallback)".into(),
                     hardware: true,
                     codecs: vec![codec.into()],
+                    presets: Vec::new(),
                 }));
             }
         }

@@ -13,6 +13,9 @@ pub(super) struct Config {
     pub transfer: u32,
     pub matrix: u32,
     pub full_range: u32,
+    pub preset: u32,
+    pub tuning: u32,
+    pub spatial_aq: u32,
 }
 #[repr(C)]
 pub(super) struct Packet {

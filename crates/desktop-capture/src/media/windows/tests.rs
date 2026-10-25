@@ -9,6 +9,7 @@ mod late_join_probe;
 mod latency_probe;
 mod recording;
 mod shared_encoding;
+mod software_presets;
 mod startup_probe;
 mod vfr;
 
@@ -988,12 +989,14 @@ fn hardware_selection_matches_codec_and_preserves_h264_default() {
                 name: "HEVC".into(),
                 hardware: true,
                 codecs: vec!["video/h265".into()],
+                presets: Vec::new(),
             },
             EncoderInfo {
                 id: "mf:h264".into(),
                 name: "H264".into(),
                 hardware: true,
                 codecs: vec!["video/h264".into()],
+                presets: Vec::new(),
             },
         ]
     };
@@ -1129,6 +1132,7 @@ fn saved_nvenc_selection_can_use_mf_without_changing_the_requested_codec() {
             name: "Existing hardware".into(),
             hardware: true,
             codecs: vec![codec.into()],
+            presets: Vec::new(),
         }];
         let selected = select_hardware_encoder(&options, available.clone())
             .unwrap()

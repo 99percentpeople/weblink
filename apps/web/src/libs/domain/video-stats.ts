@@ -15,6 +15,7 @@ export interface VideoStatsSample {
   encoderBitrate?: number;
   availableOutgoingBitrate?: number;
   frames?: number;
+  keyFrames?: number;
   encodeFrames?: number;
   encodeSeconds?: number;
   captureFrames?: number;
@@ -32,7 +33,12 @@ export interface VideoStatsSample {
   /** Sum of squared decoder frame intervals, in seconds squared. */
   squaredInterFrameSeconds?: number;
   decodeSeconds?: number;
+  /** First packet received to decoded frame; includes receive/decode waiting. */
+  processingSeconds?: number;
+  powerEfficientDecoder?: boolean;
   jitterSeconds?: number;
+  jitterTargetSeconds?: number;
+  jitterMinimumSeconds?: number;
   jitterFrames?: number;
   encoderQueueSeconds?: number;
   captureToEncodeSeconds?: number;
@@ -62,7 +68,11 @@ export interface VideoStatsValue {
   fps?: number;
   encodeMs?: number;
   decodeMs?: number;
+  receiveToDecodeMs?: number;
+  powerEfficientDecoder?: boolean;
   jitterMs?: number;
+  jitterTargetMs?: number;
+  jitterMinimumMs?: number;
   encoderQueueMs?: number;
   captureToEncodeMs?: number;
   sendDelayMs?: number;
@@ -93,6 +103,7 @@ export function videoStatsValue(
   const value: VideoStatsValue = {
     codec: sample.codec,
     implementation: sample.implementation,
+    powerEfficientDecoder: sample.powerEfficientDecoder,
     width: sample.width || undefined,
     height: sample.height || undefined,
     targetBitrate: number(sample.targetBitrate),
@@ -143,8 +154,29 @@ export function videoStatsValue(
       delta(sample.decodeSeconds, previous.decodeSeconds),
       frames,
     ),
+    receiveToDecodeMs: averageMs(
+      delta(
+        sample.processingSeconds,
+        previous.processingSeconds,
+      ),
+      frames,
+    ),
     jitterMs: averageMs(
       delta(sample.jitterSeconds, previous.jitterSeconds),
+      delta(sample.jitterFrames, previous.jitterFrames),
+    ),
+    jitterTargetMs: averageMs(
+      delta(
+        sample.jitterTargetSeconds,
+        previous.jitterTargetSeconds,
+      ),
+      delta(sample.jitterFrames, previous.jitterFrames),
+    ),
+    jitterMinimumMs: averageMs(
+      delta(
+        sample.jitterMinimumSeconds,
+        previous.jitterMinimumSeconds,
+      ),
       delta(sample.jitterFrames, previous.jitterFrames),
     ),
     encoderQueueMs: averageMs(
@@ -247,8 +279,19 @@ export async function readBrowserVideoStats(
           : s.framesDecoded,
       ),
       encodeFrames: number(s.framesEncoded),
+      keyFrames: number(
+        direction === "send"
+          ? s.keyFramesEncoded
+          : s.keyFramesDecoded,
+      ),
       encodeSeconds: number(s.totalEncodeTime),
       decodeSeconds: number(s.totalDecodeTime),
+      processingSeconds: number(s.totalProcessingDelay),
+      powerEfficientDecoder:
+        direction === "receive" &&
+        typeof s.powerEfficientDecoder === "boolean"
+          ? s.powerEfficientDecoder
+          : undefined,
       receivedFrames: number(s.framesReceived),
       droppedFrames: number(s.framesDropped),
       packetsReceived: number(s.packetsReceived),
@@ -262,6 +305,12 @@ export async function readBrowserVideoStats(
         s.totalSquaredInterFrameDelay,
       ),
       jitterSeconds: number(s.jitterBufferDelay),
+      jitterTargetSeconds: number(
+        s.jitterBufferTargetDelay,
+      ),
+      jitterMinimumSeconds: number(
+        s.jitterBufferMinimumDelay,
+      ),
       jitterFrames: number(s.jitterBufferEmittedCount),
       packetsSent: number(s.packetsSent),
       sendDelaySeconds: number(s.totalPacketSendDelay),

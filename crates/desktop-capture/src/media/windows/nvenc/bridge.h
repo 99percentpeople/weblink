@@ -5,6 +5,7 @@
 struct WeblinkNvencConfig {
     uint32_t codec, width, height, fps, bitrate, ceiling;
     uint32_t primaries, transfer, matrix, full_range;
+    uint32_t preset, tuning, spatial_aq;
 };
 struct WeblinkNvencPacket {
     const uint8_t* bytes;
