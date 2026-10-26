@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-10-26
+
+Weblink 1.3.2 adds movable video controls, improves audio capture settings, and completes shared interface and Windows installer translations.
+
+### Video controls
+
+- **Movable assistive dot:** drag the main video's control button and snap it to any of the four edges. The dot stays translucent when idle and opens with a click or hover.
+- **Adaptive action menus:** use a full circle when space permits, or a compact fan near screen edges. Stagger inner and outer controls with more actions on the outside, merge their blurred background into one continuous surface, and keep remaining actions accessible through pagination.
+- **Thumbnail and fullscreen behavior:** open thumbnail menus outside the video bounds to avoid clipping. Keep fullscreen menus within the fullscreen surface and hide the upper-left video label while fullscreen is active.
+- **Control indicators:** preserve the outlined pointer and sparkle in AI control icons instead of filling them with the surrounding SVG color.
+
+### Audio capture
+
+- **Local playback suppression:** add an optional setting to mute this device while sharing system audio. Windows restores the original endpoint mute state when capture ends; browser support depends on the selected source and available capture constraints. Microphone and outgoing-audio mute controls remain independent.
+- **Supported capture formats:** discover native system-audio sample-rate and channel combinations independently of microphone and preview tracks. Offer supported rates up to 192 kHz and select a compatible channel count when the rate changes.
+- **Recording compatibility:** resample high-rate PCM audio to 48 kHz for Opus recording while preserving capture timestamps.
+
+### Localization and maintenance
+
+- Complete missing translations and keep common loading, search, selection and dialog labels consistent across the eight supported languages, including locale fallback behavior.
+- Add a language selector to the Windows installer for English, Simplified Chinese, Traditional Chinese, Japanese, Korean, German, French and Spanish.
+- Fix the meeting-stage test environment for the floating controls' resize observer and distinguish localized dialog close actions in integration tests, restoring CI coverage for source lifetimes and settings autosave.
+
 ## [1.3.1] - 2026-10-25
 
 Weblink 1.3.1 adds native encoder presets and MCP video-preference tools, reduces duplicate screen-encoding work, and expands diagnostics for investigating dropped frames and freezes.
