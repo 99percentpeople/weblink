@@ -9,10 +9,15 @@ import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import { resolveAudioSampling } from "@/libs/application/meeting-audio-settings";
 import AudioCodecSelect from "./audio-codec-select";
+import LocalAudioPlaybackSetting from "./local-audio-playback-setting";
 
 export default function AudioSettings() {
   const capabilities = useAppState().mediaCapabilities;
-  const browserSampling = capabilities.browserSampling;
+  // An unavailable native query must not turn microphone formats into system formats.
+  const browserSampling = () =>
+    capabilities.native() === null
+      ? capabilities.browserSampling()
+      : [];
   const label = (key: string) =>
     t(`setting.meeting_settings.audio.${key}`);
   const sampling = () =>
@@ -26,9 +31,17 @@ export default function AudioSettings() {
   );
   return (
     <>
-      <SettingHeading description={label("description")}>
+      <SettingHeading
+        description={label(
+          capabilities.native() !== null
+            ? "native_description"
+            : "description",
+        )}
+      >
         {label("title")}
       </SettingHeading>
+
+      <LocalAudioPlaybackSetting />
 
       <Show when={capabilities.native() !== null}>
         <AudioCodecSelect
@@ -56,16 +69,21 @@ export default function AudioSettings() {
             (kind === "sample_rate"
               ? available().sampleRates
               : available().channelCounts) ?? [];
-          const options = () => [
-            ...new Set([
-              kind === "sample_rate" ? "48000" : "2",
-              ...supported().map(String),
-              value(),
-            ]),
-          ];
+          const options = () =>
+            [
+              ...new Set([
+                kind === "sample_rate" ? "48000" : "2",
+                ...supported().map(String),
+                value(),
+              ]),
+            ].sort((a, b) => Number(a) - Number(b));
           const isDefault = (value: string) =>
             value ===
             (kind === "sample_rate" ? "48000" : "2");
+          const unavailable = (value: string) =>
+            !supported().includes(Number(value)) &&
+            (!isDefault(value) ||
+              capabilities.audioFormats() !== undefined);
           const optionName = (value: string) => {
             const name =
               kind === "sample_rate"
@@ -75,32 +93,47 @@ export default function AudioSettings() {
                       ? "channels.mono"
                       : "channels.stereo",
                   );
-            return isDefault(value)
+            const formatted = isDefault(value)
               ? `${name} (${label("default")})`
               : name;
+            return unavailable(value)
+              ? `${formatted} (${label("unavailable")})`
+              : formatted;
           };
           return (
             <SettingSelect<string>
               modal
               value={value()}
               options={options()}
-              optionDisabled={(option) =>
-                !isDefault(option) &&
-                !supported().includes(Number(option))
-              }
+              optionDisabled={unavailable}
               onChange={(value) => {
-                if (
-                  !value ||
-                  (!isDefault(value) &&
-                    !supported().includes(Number(value)))
-                )
-                  return;
-                if (kind === "sample_rate")
-                  setAppOptions(
-                    "audioSampleRate",
-                    Number(value),
-                  );
-                else
+                if (!value || unavailable(value)) return;
+                if (kind === "sample_rate") {
+                  const audioSampleRate = Number(value);
+                  const current = sampling();
+                  const channels = audioSamplingChoices(
+                    browserSampling(),
+                    capabilities.audioFormats(),
+                    { ...current, audioSampleRate },
+                  ).channelCounts;
+                  const audioChannelCount =
+                    capabilities.audioFormats() ===
+                    undefined
+                      ? current.audioChannelCount
+                      : ((
+                          [
+                            current.audioChannelCount,
+                            2,
+                            1,
+                          ] as const
+                        ).find((count) =>
+                          channels?.includes(count),
+                        ) ?? current.audioChannelCount);
+                  setAppOptions({
+                    audioSampleRate,
+                    audioChannelCount,
+                  });
+                } else
                   setAppOptions(
                     "audioChannelCount",
                     Number(value) as 1 | 2,
@@ -112,15 +145,7 @@ export default function AudioSettings() {
                   state.selectedOption() ?? value(),
                 )
               }
-              optionLabel={(option) => (
-                <>
-                  {optionName(option)}
-                  {!isDefault(option) &&
-                  !supported().includes(Number(option))
-                    ? ` (${label("unavailable")})`
-                    : ""}
-                </>
-              )}
+              optionLabel={optionName}
             />
           );
         }}
@@ -129,6 +154,7 @@ export default function AudioSettings() {
         when={
           capabilities.audioFormatsLoading() ||
           capabilities.audioFormatsFailed() ||
+          available().sampleRates?.length === 0 ||
           available().sampleRates === null ||
           available().channelCounts === null
         }
@@ -137,7 +163,8 @@ export default function AudioSettings() {
           {label(
             capabilities.audioFormatsLoading()
               ? "sampling_loading"
-              : capabilities.audioFormatsFailed()
+              : capabilities.audioFormatsFailed() ||
+                  available().sampleRates?.length === 0
                 ? "sampling_failed"
                 : "sampling_unknown",
           )}

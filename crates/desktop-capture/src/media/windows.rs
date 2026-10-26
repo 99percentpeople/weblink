@@ -207,6 +207,7 @@ impl MediaSession {
         start_audio: impl FnOnce(
             u32,
             u32,
+            bool,
             Arc<crate::lifecycle::Subscription>,
         ) -> Result<audio::Loopback>,
     ) -> Result<Arc<Self>> {
@@ -284,6 +285,7 @@ impl MediaSession {
                     start_audio(
                         options.audio_sample_rate,
                         options.audio_channel_count,
+                        options.suppress_local_audio_playback,
                         changed.clone(),
                     )
                 })

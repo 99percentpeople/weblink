@@ -41,7 +41,10 @@ mod cadence;
 pub const MAX_FRAME_RATE: u32 = 1000;
 
 // Formats supported by the application's PCM/WebRTC path; Windows probes each pair.
-pub const AUDIO_SAMPLE_RATES: [u32; 5] = [8000, 16000, 32000, 44100, 48000];
+// Whole 10 ms PCM frames are required by the native WebRTC source.
+pub const AUDIO_SAMPLE_RATES: [u32; 10] = [
+    8000, 16000, 24000, 32000, 44100, 48000, 88200, 96000, 176400, 192000,
+];
 pub const AUDIO_CHANNEL_COUNTS: [u32; 2] = [1, 2];
 
 #[derive(Clone, Debug, Serialize)]
@@ -108,6 +111,7 @@ impl SendCodecs {
 #[serde(rename_all = "camelCase", default)]
 pub struct MediaOptions {
     pub audio: bool,
+    pub suppress_local_audio_playback: bool,
     pub audio_sample_rate: u32,
     pub audio_channel_count: u32,
     pub audio_codec: Option<String>,
@@ -128,6 +132,7 @@ impl Default for MediaOptions {
     fn default() -> Self {
         Self {
             audio: false,
+            suppress_local_audio_playback: false,
             audio_sample_rate: 48_000,
             audio_channel_count: 2,
             audio_codec: None,
@@ -599,6 +604,11 @@ mod tests {
     #[test]
     fn audio_requires_consent_and_gathered_candidates_keep_their_media_section() {
         assert!(!MediaOptions::default().audio);
+        assert!(!MediaOptions::default().suppress_local_audio_playback);
+        let muted: MediaOptions =
+            serde_json::from_str(r#"{"suppressLocalAudioPlayback":true}"#).unwrap();
+        assert!(muted.suppress_local_audio_playback);
+        assert!(!muted.audio);
         let sdp = gathered_sdp("v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:1\r\n", &[
             IceCandidate { candidate: "candidate:video".into(), sdp_mid: Some("0".into()), sdp_m_line_index: Some(0) },
             IceCandidate { candidate: "candidate:audio".into(), sdp_mid: Some("1".into()), sdp_m_line_index: Some(1) },
@@ -616,7 +626,7 @@ mod tests {
         assert_eq!(legacy.audio_sample_rate, 48_000);
         assert_eq!(legacy.audio_channel_count, 2);
         assert!(!legacy.audio);
-        for rate in [8000, 16000, 32000, 44100, 48000] {
+        for rate in AUDIO_SAMPLE_RATES {
             for channels in [1, 2] {
                 let options = MediaOptions {
                     audio_sample_rate: rate,
@@ -626,7 +636,7 @@ mod tests {
                 assert!(options.validate().is_ok());
             }
         }
-        for rate in [0, 1, 96000, u32::MAX] {
+        for rate in [0, 1, 22050, 384000, u32::MAX] {
             assert!(MediaOptions {
                 audio_sample_rate: rate,
                 ..Default::default()

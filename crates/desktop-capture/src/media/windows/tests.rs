@@ -4,6 +4,7 @@ use libwebrtc::video_frame::{I420Buffer, VideoRotation};
 use libwebrtc::{
     peer_connection::AnswerOptions, stats::RtcStats, video_stream::native::NativeVideoStream,
 };
+mod audio_sampling;
 mod gpu;
 mod late_join_probe;
 mod latency_probe;

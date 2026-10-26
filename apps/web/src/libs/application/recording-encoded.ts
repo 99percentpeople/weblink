@@ -179,10 +179,12 @@ class EncodedRecording
       }
       await this.probeVideo(packet);
       const pcmFormat = this.subscription.audioFormat;
+      // Capture can exceed Opus input rates. Resample PCM while preserving its clock.
+      const pcmSampleRate = 48000;
       if (
         pcmFormat &&
         !(await canEncodeAudio("opus", {
-          sampleRate: pcmFormat.sampleRate,
+          sampleRate: pcmSampleRate,
           numberOfChannels: pcmFormat.channelCount,
           bitrate: 128000,
         }))
@@ -216,6 +218,10 @@ class EncodedRecording
         this.pcm = new AudioSampleSource({
           codec: "opus",
           bitrate: 128000,
+          transform:
+            pcmFormat.sampleRate === pcmSampleRate
+              ? undefined
+              : { sampleRate: pcmSampleRate },
           onEncodedPacket: (packet) => {
             try {
               this.writes.accountPacket(packet.data.length);

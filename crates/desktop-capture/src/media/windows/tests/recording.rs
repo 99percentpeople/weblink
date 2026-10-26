@@ -13,7 +13,7 @@ fn native_recording_uses_capture_audio_independently_of_viewer_codec_and_lifetim
             audio: true, audio_codec: Some(audio_codec.into()),
             frame_rate: 30, max_width: 640, max_height: 360, max_bitrate: 2_000_000,
             ..Default::default()
-        }, |rate, channels, _| audio::Loopback::synthetic(rate, channels)).unwrap();
+        }, |rate, channels, _, _| audio::Loopback::synthetic(rate, channels)).unwrap();
         let remote = connect(&media, "remote", false).await.unwrap();
         async fn pump(media: &MediaSession, count: u32) {
             use libwebrtc::audio_frame::AudioFrame;

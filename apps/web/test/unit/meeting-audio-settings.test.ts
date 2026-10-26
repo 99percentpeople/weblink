@@ -8,9 +8,11 @@ import {
 import {
   audioCodecChoices,
   browserAudioCodecs,
+  displayAudioConstraints,
   meetingAudioConstraints,
   nativeAudioOptions,
   resolveAudioSampling,
+  supportsLocalAudioSuppression,
 } from "@/libs/application/meeting-audio-settings";
 import { nativeScreenOptions } from "@/libs/application/meeting-video-settings";
 import { getDefaultAppOptions } from "@/libs/state/app-options";
@@ -27,6 +29,7 @@ describe("audio capture preferences", () => {
       audioSampleRate: 48000,
       audioChannelCount: 2,
       audioCodec: null,
+      suppressLocalAudioPlayback: false,
     });
   });
   it("requests optional browser constraints and forwards native sampling and codec without enabling audio", () => {
@@ -49,7 +52,29 @@ describe("audio capture preferences", () => {
     });
     expect(native.audio).toBeUndefined();
   });
-  it.each([null, NaN, Infinity, -1, 0, 96000, "48000"])(
+  it.each([24000, 88200, 96000, 176400, 192000])(
+    "preserves supported system sampling preferences (%s)",
+    (audioSampleRate) => {
+      expect(
+        nativeAudioOptions({ audioSampleRate }),
+      ).toMatchObject({ audioSampleRate });
+      expect(
+        meetingAudioConstraints({ audioSampleRate }),
+      ).toMatchObject({
+        sampleRate: { ideal: audioSampleRate },
+      });
+    },
+  );
+  it.each([
+    null,
+    NaN,
+    Infinity,
+    -1,
+    0,
+    22050,
+    384000,
+    "48000",
+  ])(
     "sanitizes invalid saved sampling values (%s)",
     (value) => {
       const options = {
@@ -79,6 +104,47 @@ describe("audio capture preferences", () => {
       ]),
     ).toEqual(["audio/opus", "audio/pcma"]);
   });
+  it("suppresses only local screen playback and keeps microphone constraints unchanged", () => {
+    const options = { suppressLocalAudioPlayback: true };
+    expect(
+      displayAudioConstraints(options, {
+        echoCancellation: false,
+      }),
+    ).toEqual({
+      echoCancellation: false,
+      sampleRate: { ideal: 48000 },
+      channelCount: { ideal: 2 },
+      suppressLocalAudioPlayback: true,
+    });
+    expect(
+      meetingAudioConstraints(options),
+    ).not.toHaveProperty("suppressLocalAudioPlayback");
+    expect(nativeAudioOptions(options)).toMatchObject({
+      suppressLocalAudioPlayback: true,
+    });
+    expect(nativeAudioOptions(options)).not.toHaveProperty(
+      "audio",
+    );
+    expect(displayAudioConstraints({})).toHaveProperty(
+      "suppressLocalAudioPlayback",
+      false,
+    );
+  });
+  it.each([undefined, false, true])(
+    "checks the browser's declared suppression support (%s)",
+    (supported) => {
+      vi.stubGlobal("navigator", {
+        mediaDevices: {
+          getSupportedConstraints: () => ({
+            suppressLocalAudioPlayback: supported,
+          }),
+        },
+      });
+      expect(supportsLocalAudioSuppression()).toBe(
+        supported === true,
+      );
+    },
+  );
   it("handles missing and failing codec capability discovery", () => {
     vi.stubGlobal("RTCRtpSender", undefined);
     expect(browserAudioCodecs()).toEqual([]);

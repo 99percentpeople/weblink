@@ -129,7 +129,10 @@ export function browserAudioSampling(
   ];
 }
 
-/** One preference serves the known sources; preserve native rate/channel pair constraints. */
+/** Native capture uses exact formats; browser capture requests an ideal format
+ * and may fall back independently. A fixed-rate microphone or preview must not
+ * hide supported system-audio formats. Offer all native rates so selecting a
+ * rate can also select a compatible channel count without trapping the picker. */
 export function audioSamplingChoices(
   browser: readonly AudioSamplingCapabilities[],
   nativeFormats: readonly AudioCaptureFormat[] | undefined,
@@ -158,25 +161,28 @@ export function audioSamplingChoices(
         format.sampleRate as (typeof audioSampleRates)[number],
       ) && audioChannelCounts.includes(format.channelCount),
   );
+  if (formats !== undefined) {
+    return {
+      sampleRates: intersect([
+        formats.map((format) => format.sampleRate),
+      ]),
+      channelCounts: intersect([
+        formats
+          .filter(
+            (format) =>
+              format.sampleRate ===
+              selected.audioSampleRate,
+          )
+          .map((format) => format.channelCount),
+      ]),
+    };
+  }
   return {
-    sampleRates: intersect([
-      ...browser.map((source) => source.sampleRates),
-      formats
-        ?.filter(
-          (format) =>
-            format.channelCount ===
-            selected.audioChannelCount,
-        )
-        .map((format) => format.sampleRate) ?? null,
-    ]),
-    channelCounts: intersect([
-      ...browser.map((source) => source.channelCounts),
-      formats
-        ?.filter(
-          (format) =>
-            format.sampleRate === selected.audioSampleRate,
-        )
-        .map((format) => format.channelCount) ?? null,
-    ]),
+    sampleRates: intersect(
+      browser.map((source) => source.sampleRates),
+    ),
+    channelCounts: intersect(
+      browser.map((source) => source.channelCounts),
+    ),
   };
 }

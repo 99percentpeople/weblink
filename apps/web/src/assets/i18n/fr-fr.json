@@ -317,6 +317,12 @@
       "color_vp8": "VP8 utilise la portée limitée BT.601. D'autres codecs restaurent vos paramètres sélectionnés.",
       "color_format": "Format de couleur de sortie",
       "audio": {
+        "local_playback": {
+          "title": "Couper le son local pendant le partage",
+          "desktop_description": "S’applique au prochain partage d’écran avec le son système. Coupe le son des périphériques de lecture actifs sans interrompre le son transmis, puis rétablit leur état précédent à la fin du partage.",
+          "browser_description": "Au prochain partage avec audio, demande au navigateur de couper la lecture locale de la source partagée. La prise en charge dépend du navigateur et de la source ; elle concerne généralement les onglets partagés.",
+          "unsupported": "Ce navigateur ne permet pas de couper la lecture audio locale pendant le partage d’écran."
+        },
         "title": "Capture audio",
         "auto": "Automatique",
         "unavailable": "Actuellement indisponible",
@@ -333,6 +339,7 @@
           "stereo": "Stéréo (deux canaux)"
         },
         "description": "Par défaut : 48 kHz, stéréo. Applicable à la prochaine capture ; le navigateur peut utiliser un format proche proposé par le périphérique.",
+        "native_description": "Par défaut : 48 kHz, stéréo. Les options dépendent des formats audio pris en charge par le système et s’appliquent à la prochaine capture. Les microphones et l’audio encodé peuvent utiliser d’autres formats.",
         "sampling_loading": "Chargement des formats audio…",
         "codecs_loading": "Chargement des codecs audio…",
         "sampling_failed": "Les formats audio du système ne sont actuellement pas disponibles.",

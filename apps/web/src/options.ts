@@ -67,6 +67,10 @@ export function initializeAppOptions() {
   optionsInitialized = true;
 
   const defaults = getDefaultAppOptions();
+  // Preserve the former session-only screen audio preference on migration.
+  defaults.suppressLocalAudioPlayback =
+    appState.media.constraints.speaker
+      .suppressLocalAudioPlayback === true;
 
   const loadFromLocalStorage = () => {
     if (typeof localStorage === "undefined") {

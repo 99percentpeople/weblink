@@ -87,6 +87,37 @@ it("restores a paged background image and releases its URL when cleared", async 
   expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
 });
 
+it("migrates session playback suppression to a persistent preference", async () => {
+  sessionStorage.setItem(
+    "mediaConstraints",
+    JSON.stringify({
+      speaker: { suppressLocalAudioPlayback: true },
+    }),
+  );
+  const { appState } = await boot();
+  expect(appState.options.suppressLocalAudioPlayback).toBe(
+    true,
+  );
+  expect(saved().suppressLocalAudioPlayback).toBe(true);
+  const { setAppOptions } = await import("@/options");
+  setAppOptions("suppressLocalAudioPlayback", false);
+  expect(saved().suppressLocalAudioPlayback).toBe(false);
+});
+
+it("prefers the saved playback setting over the legacy session setting", async () => {
+  sessionStorage.setItem(
+    "mediaConstraints",
+    JSON.stringify({
+      speaker: { suppressLocalAudioPlayback: true },
+    }),
+  );
+  store({ suppressLocalAudioPlayback: false });
+  const { appState } = await boot();
+  expect(appState.options.suppressLocalAudioPlayback).toBe(
+    false,
+  );
+});
+
 it("round-trips current settings while discarding unknown fields at every settings level", async () => {
   store({
     maxConcurrentTransfers: 7,

@@ -119,6 +119,11 @@ function mount(native = false) {
 }
 
 it("passes sampling preferences and exact device selection to microphone capture", async () => {
+  setAppState(
+    "options",
+    "suppressLocalAudioPlayback",
+    true,
+  );
   mount();
   await f.port!.getUserMedia({
     audio: { deviceId: { exact: "microphone" } },
@@ -140,6 +145,11 @@ it("passes sampling preferences and exact device selection to microphone capture
 it("uses current preferences for browser screen audio while retaining audio processing preferences", async () => {
   mount();
   setAppState("options", "audioSampleRate", 48000);
+  setAppState(
+    "options",
+    "suppressLocalAudioPlayback",
+    true,
+  );
   await f.port!.getDisplayMedia!();
   expect(f.display).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -147,6 +157,7 @@ it("uses current preferences for browser screen audio while retaining audio proc
         ...appState.media.constraints.speaker,
         sampleRate: { ideal: 48000 },
         channelCount: { ideal: 1 },
+        suppressLocalAudioPlayback: true,
       },
     }),
   );
@@ -154,6 +165,11 @@ it("uses current preferences for browser screen audio while retaining audio proc
 
 it("forwards native audio format and codec without overriding the picker audio choice", async () => {
   mount(true);
+  setAppState(
+    "options",
+    "suppressLocalAudioPlayback",
+    true,
+  );
   await f.port!.getDisplayMedia!();
   expect(f.native).toHaveBeenCalledWith(
     expect.anything(),
@@ -165,6 +181,7 @@ it("forwards native audio format and codec without overriding the picker audio c
       audioSampleRate: 16000,
       audioChannelCount: 1,
       audioCodec: "audio/opus",
+      suppressLocalAudioPlayback: true,
     }),
     { backend: "wgc" },
   );

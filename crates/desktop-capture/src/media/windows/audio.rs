@@ -1,6 +1,7 @@
 //! WASAPI PCM stays on a native worker and is fed directly to WebRTC.
 mod activation;
 mod events;
+mod playback;
 use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
 use crate::media::webrtc::clock_us;
 use crate::media::{AudioCaptureFormat, AUDIO_CHANNEL_COUNTS, AUDIO_SAMPLE_RATES};
@@ -53,6 +54,7 @@ impl Loopback {
     pub fn start(
         rate: u32,
         channels: u32,
+        suppress_local_playback: bool,
         changed: Arc<crate::lifecycle::Subscription>,
     ) -> Result<Self> {
         let source = NativeAudioSource::new(AudioSourceOptions::default(), rate, channels, 0);
@@ -77,6 +79,7 @@ impl Loopback {
                     rate,
                     channels,
                     &tap,
+                    suppress_local_playback,
                 );
                 tap.end();
                 if let Err(error) = result {
@@ -197,6 +200,7 @@ fn run(
     rate: u32,
     channels: u32,
     recording: &EncodedRecordingTap,
+    suppress_local_playback: bool,
 ) -> Result<()> {
     let frame_samples = (rate / 100 * channels) as usize;
     unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
@@ -210,6 +214,9 @@ fn run(
     let capture: IAudioCaptureClient = unsafe { client.GetService() }.map_err(|e| e.to_string())?;
     unsafe { client.Start() }.map_err(|e| e.to_string())?;
     let _started = Started(client);
+    // Process loopback captures before endpoint playback volume/mute. Keep the
+    // output lease on this worker so every exit restores it before COM teardown.
+    let _playback = suppress_local_playback.then(playback::mute).transpose()?;
     ready.send(Ok(())).map_err(|e| e.to_string())?;
     let mut queue = VecDeque::with_capacity(frame_samples * 4);
     let mut samples = vec![0i16; frame_samples];

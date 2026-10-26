@@ -25,6 +25,7 @@ describe("meeting capture settings", () => {
       audioSampleRate: 48000,
       audioChannelCount: 2,
       audioCodec: null,
+      suppressLocalAudioPlayback: false,
       maxWidth: 1280,
       maxHeight: 720,
       frameRate: 60,

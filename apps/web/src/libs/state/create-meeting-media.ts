@@ -1,5 +1,8 @@
 import { appState } from "@/libs/state/app-state";
-import { meetingAudioConstraints } from "@/libs/application/meeting-audio-settings";
+import {
+  displayAudioConstraints,
+  meetingAudioConstraints,
+} from "@/libs/application/meeting-audio-settings";
 import { sessionService } from "@/libs/application/session-service";
 import {
   meetingVideoConstraints,
@@ -48,10 +51,10 @@ export function createMeetingMedia({
             video: meetingVideoConstraints(
               appState.options,
             ),
-            audio: {
-              ...appState.media.constraints.speaker,
-              ...meetingAudioConstraints(appState.options),
-            },
+            audio: displayAudioConstraints(
+              appState.options,
+              appState.media.constraints.speaker,
+            ),
             systemAudio: "include",
           } as DisplayMediaStreamOptions)
       : undefined;

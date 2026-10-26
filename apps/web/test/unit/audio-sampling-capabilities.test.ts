@@ -17,7 +17,7 @@ it("filters app formats against the source's reported ranges", () => {
       channelCount: { min: 2, max: 8 },
     }),
   ).toEqual({
-    sampleRates: [44100, 48000],
+    sampleRates: [44100, 48000, 88200, 96000],
     channelCounts: [2],
   });
 });
@@ -28,7 +28,7 @@ it("keeps unknown ranges distinct from ranges with no supported app format", () 
   });
   expect(
     audioSamplingCapabilities({
-      sampleRate: { min: 96000, max: 192000 },
+      sampleRate: { min: 352800, max: 384000 },
     }).sampleRates,
   ).toEqual([]);
 });
@@ -98,7 +98,7 @@ it("reads the selected input and a live shared track without treating another mi
     )[0].sampleRates,
   ).toBeNull();
 });
-it("retains native rate/channel pairs instead of inventing their cross product", () => {
+it("offers every native rate and limits channels to the selected rate", () => {
   const formats = [
     { sampleRate: 16000, channelCount: 1 },
     { sampleRate: 48000, channelCount: 2 },
@@ -108,15 +108,18 @@ it("retains native rate/channel pairs instead of inventing their cross product",
       audioSampleRate: 48000,
       audioChannelCount: 1,
     }),
-  ).toEqual({ sampleRates: [16000], channelCounts: [2] });
+  ).toEqual({
+    sampleRates: [16000, 48000],
+    channelCounts: [2],
+  });
   expect(
     audioSamplingChoices([], formats, defaults),
   ).toEqual({
-    sampleRates: [48000],
+    sampleRates: [16000, 48000],
     channelCounts: [2],
   });
 });
-it("intersects known sources without treating undisclosed capabilities as supported values", () => {
+it("keeps undisclosed capabilities unknown and native formats independent of browser capture", () => {
   expect(
     audioSamplingChoices(
       [{ sampleRates: null, channelCounts: null }],
@@ -130,5 +133,32 @@ it("intersects known sources without treating undisclosed capabilities as suppor
       [{ sampleRate: 48000, channelCount: 2 }],
       defaults,
     ),
-  ).toEqual({ sampleRates: [], channelCounts: [] });
+  ).toEqual({ sampleRates: [48000], channelCounts: [2] });
+});
+
+it("does not let a 48 kHz preview or microphone collapse the system format list", () => {
+  const rates = [
+    8000, 16000, 24000, 32000, 44100, 48000, 88200, 96000,
+    176400, 192000,
+  ];
+  const formats = rates.flatMap((sampleRate) =>
+    ([1, 2] as const).map((channelCount) => ({
+      sampleRate,
+      channelCount,
+    })),
+  );
+  expect(
+    audioSamplingChoices(
+      [
+        { sampleRates: [48000], channelCounts: [1] },
+        { sampleRates: [48000], channelCounts: [2] },
+      ],
+      formats,
+      defaults,
+    ),
+  ).toEqual({ sampleRates: rates, channelCounts: [1, 2] });
+  expect(audioSamplingChoices([], [], defaults)).toEqual({
+    sampleRates: [],
+    channelCounts: [],
+  });
 });

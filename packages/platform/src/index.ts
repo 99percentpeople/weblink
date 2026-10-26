@@ -414,6 +414,8 @@ export function isExternalLink(url: URL): boolean {
 export interface NativeScreenOptions {
   /** Capture system playback only after explicit picker consent. */
   audio?: boolean;
+  /** Mute local playback for this audio capture and restore it when capture ends. */
+  suppressLocalAudioPlayback?: boolean;
   /** Capture format; automatic defaults are 48 kHz and two channels. */
   audioSampleRate?: number;
   audioChannelCount?: 1 | 2;

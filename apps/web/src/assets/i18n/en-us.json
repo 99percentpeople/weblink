@@ -357,6 +357,13 @@
           "stereo": "Stereo (two channels)"
         },
         "description": "Defaults: 48 kHz, stereo. Preferences apply to the next capture; browsers may use the nearest device format.",
+        "native_description": "Defaults: 48 kHz, stereo. Options follow system audio support and apply to the next capture. Microphones and encoded audio may use different formats.",
+        "local_playback": {
+          "title": "Mute this device while sharing",
+          "desktop_description": "Applies to the next screen share with system audio. Mutes active playback devices while keeping audio available to viewers, then restores their previous mute state when sharing ends.",
+          "browser_description": "Applies to the next screen share with audio. Asks the browser to mute local playback of the shared source. Support depends on the browser and source; this usually works for shared tabs.",
+          "unsupported": "This browser does not support muting local playback during screen sharing."
+        },
         "sampling_loading": "Loading audio formats…",
         "codecs_loading": "Loading audio codecs…",
         "sampling_failed": "System audio formats are currently unavailable.",

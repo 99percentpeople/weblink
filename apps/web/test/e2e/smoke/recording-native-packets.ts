@@ -82,11 +82,17 @@ export async function checkNativeRecordingPackets(
 ): Promise<unknown[]> {
   const results: unknown[] = [];
   const opus = await senderOpusPackets();
-  for (const audioMode of [
-    "pcm",
-    "opus",
-    "fallback",
-  ] as const) {
+  for (const { audioMode, sampleRate } of [
+    ...[
+      8000, 24000, 44100, 48000, 88200, 96000, 176400,
+      192000,
+    ].map((sampleRate) => ({
+      audioMode: "pcm" as const,
+      sampleRate,
+    })),
+    { audioMode: "opus" as const, sampleRate: 48000 },
+    { audioMode: "fallback" as const, sampleRate: 48000 },
+  ]) {
     for (const [codec, base64] of [
       ["h264", h264Keyframe],
       ["h265", hevcKeyframe],
@@ -151,7 +157,7 @@ export async function checkNativeRecordingPackets(
               audioMode === "opus"
                 ? undefined
                 : {
-                    sampleRate: 48000,
+                    sampleRate,
                     channelCount: 2,
                   },
             resume() {
@@ -231,16 +237,21 @@ export async function checkNativeRecordingPackets(
         const feed = async () => {
           for (let index = 0; index < 100; index++) {
             if (index % 3 === 0) await frame();
-            const samples = new Int16Array(480 * 2);
-            for (let sample = 0; sample < 480; sample++) {
+            const frameCount = sampleRate / 100;
+            const samples = new Int16Array(frameCount * 2);
+            for (
+              let sample = 0;
+              sample < frameCount;
+              sample++
+            ) {
               const value = Math.round(
                 12000 *
                   Math.sin(
                     (2 *
                       Math.PI *
                       440 *
-                      (index * 480 + sample)) /
-                      48000,
+                      (index * frameCount + sample)) /
+                      sampleRate,
                   ),
               );
               samples[sample * 2] = samples[
@@ -254,7 +265,7 @@ export async function checkNativeRecordingPackets(
                 data: samples.buffer,
                 timestamp: time,
                 segment,
-                sampleRate: 48000,
+                sampleRate,
                 channelCount: 2,
               });
             time += 10000;
@@ -330,6 +341,12 @@ export async function checkNativeRecordingPackets(
           const decoded = await audio.decodeAudioData(
             data.slice(0),
           );
+          const audioTrack =
+            await input.getPrimaryAudioTrack();
+          if (audioTrack?.sampleRate !== 48000)
+            throw new Error(
+              "Native PCM was not encoded at the Opus recording rate",
+            );
           const samples = decoded.getChannelData(0);
           const rms = Math.sqrt(
             samples.reduce(
@@ -348,6 +365,7 @@ export async function checkNativeRecordingPackets(
             container,
             nativePackets: codec,
             audioMode,
+            captureSampleRate: sampleRate,
             audioEncoders,
             fallbackStops,
             videoCodec: track.codec,

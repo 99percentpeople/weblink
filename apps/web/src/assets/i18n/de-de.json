@@ -317,6 +317,12 @@
       "color_vp8": "VP8 nutzt die begrenzte Reichweite von BT.601. Andere Codecs stellen Ihre ausgewählten Einstellungen wieder her.",
       "color_format": "Ausgabefarbformat",
       "audio": {
+        "local_playback": {
+          "title": "Dieses Gerät beim Teilen stummschalten",
+          "desktop_description": "Gilt für die nächste Bildschirmfreigabe mit Systemaudio. Aktive Wiedergabegeräte werden stummgeschaltet, während Zuschauer weiterhin Ton erhalten. Nach dem Teilen wird der vorherige Stummschaltzustand wiederhergestellt.",
+          "browser_description": "Bei der nächsten Freigabe mit Audio wird der Browser gebeten, die lokale Wiedergabe der geteilten Quelle stummzuschalten. Die Unterstützung hängt von Browser und Quelle ab und gilt meist für geteilte Tabs.",
+          "unsupported": "Dieser Browser unterstützt das Stummschalten der lokalen Audiowiedergabe bei Bildschirmfreigaben nicht."
+        },
         "title": "Audioaufnahme",
         "auto": "Automatisch",
         "unavailable": "Derzeit nicht verfügbar",
@@ -333,6 +339,7 @@
           "stereo": "Stereo (zwei Kanäle)"
         },
         "description": "Standard: 48 kHz, Stereo. Gilt für die nächste Aufnahme; Browser können ein ähnliches Geräteformat verwenden.",
+        "native_description": "Standard: 48 kHz, Stereo. Die verfügbaren Formate richten sich nach der Systemaudio-Unterstützung und gelten ab der nächsten Aufnahme. Mikrofone und codiertes Audio können andere Formate verwenden.",
         "sampling_loading": "Audioformate werden geladen…",
         "codecs_loading": "Audio-Codecs werden geladen…",
         "sampling_failed": "Systemaudioformate sind derzeit nicht verfügbar.",

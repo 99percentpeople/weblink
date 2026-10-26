@@ -12,6 +12,7 @@ import {
 } from "@/routes/home/components/track-constaints";
 import { SettingSwitch } from "@/components/settings/setting-controls";
 import VideoCaptureSettings from "@/components/settings/video-capture-settings";
+import LocalAudioPlaybackSetting from "@/components/settings/local-audio-playback-setting";
 import {
   appState,
   setAppState,
@@ -113,28 +114,7 @@ export const createPresetSpeakerTrackConstraintsDialog =
       title: () => t("common.action.settings"),
       content: () => (
         <SettingSection>
-          <SettingSwitch
-            label={t(
-              "common.media_selection_dialog.constraints.suppress_local_audio_playback",
-            )}
-            disabled={
-              appState.media.constraints.speaker
-                .suppressLocalAudioPlayback === undefined
-            }
-            checked={
-              appState.media.constraints.speaker
-                .suppressLocalAudioPlayback === true
-            }
-            onChange={(value) =>
-              setAppState(
-                "media",
-                "constraints",
-                "speaker",
-                "suppressLocalAudioPlayback",
-                value,
-              )
-            }
-          />
+          <LocalAudioPlaybackSetting />
           <SettingSwitch
             label={t(
               "common.media_selection_dialog.constraints.auto_gain_control",

@@ -1070,9 +1070,28 @@ no periodic stop check; stopping also wakes a silent audio device. Preview audio
 is excluded from browser re-publication and local
 playback, while received audio belongs to its screen's existing mute controls.
 
+Settings → Audio & video → Audio capture includes “Mute this device while sharing”,
+off by default and saved for the next screen capture with audio. Windows mutes the
+playback endpoints active at capture startup; process loopback continues supplying
+the outgoing audio. Each endpoint's original mute state is restored after its last
+requesting capture ends, including startup failures and cancellation. Already-muted
+endpoints and manual unmuting are preserved. Microphone and outgoing-audio mute
+controls remain independent. Browser capture requests `suppressLocalAudioPlayback`
+through `getDisplayMedia`; support depends on the browser and shared source
+(typically browser tabs), and the setting is disabled when unsupported.
+
 Audio capture defaults are explicit: 48 kHz, stereo. Legacy null sampling preferences
 resolve to these same values. Browser constraints express them as preferences, so the
 device may supply a nearby format; they are not advertised as automatic negotiation.
+Native system-audio formats are discovered independently of microphone and preview
+tracks, which may be fixed at 48 kHz. WASAPI probes 8, 16, 24, 32, 44.1, 48, 88.2,
+96, 176.4 and 192 kHz in mono/stereo; only successful rate/channel pairs are offered.
+Selecting a native sample rate retains the current channel count when supported,
+otherwise selects a compatible count in the same settings update.
+These are capture formats, not promises about the physical device or encoded stream.
+WebRTC resamples to the negotiated codec, and local PCM recording resamples to 48 kHz
+for Opus while retaining capture timestamps. Rates such as 22.05 kHz are excluded
+because the native WebRTC source requires whole 10 ms frames.
 Device pickers use “System default”. Capture-backend Auto remains a real selection and
 fallback policy; it is independent of codec negotiation.
 

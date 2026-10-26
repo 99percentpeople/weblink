@@ -1,7 +1,8 @@
 import type { AppOption } from "@/libs/state/app-options";
 
 export const audioSampleRates = [
-  8000, 16000, 32000, 44100, 48000,
+  8000, 16000, 24000, 32000, 44100, 48000, 88200, 96000,
+  176400, 192000,
 ] as const;
 export const audioChannelCounts = [1, 2] as const;
 export type MeetingAudioSettings = Partial<
@@ -10,6 +11,7 @@ export type MeetingAudioSettings = Partial<
     | "audioSampleRate"
     | "audioChannelCount"
     | "nativeAudioCodec"
+    | "suppressLocalAudioPlayback"
   >
 >;
 
@@ -48,7 +50,40 @@ export function nativeAudioOptions(
   return {
     ...sampling,
     audioCodec: options.nativeAudioCodec ?? null,
+    suppressLocalAudioPlayback:
+      options.suppressLocalAudioPlayback === true,
   };
+}
+
+/** Screen playback suppression must never be applied to microphone capture. */
+export function displayAudioConstraints(
+  options: MeetingAudioSettings,
+  processing: MediaTrackConstraints = {},
+): MediaTrackConstraints & {
+  suppressLocalAudioPlayback: boolean;
+} {
+  return {
+    ...processing,
+    ...meetingAudioConstraints(options),
+    suppressLocalAudioPlayback:
+      options.suppressLocalAudioPlayback === true,
+  };
+}
+
+export function supportsLocalAudioSuppression(): boolean {
+  const supported =
+    typeof navigator !== "undefined"
+      ? navigator.mediaDevices?.getSupportedConstraints?.()
+      : undefined;
+  return (
+    (
+      supported as
+        | (MediaTrackSupportedConstraints & {
+            suppressLocalAudioPlayback?: boolean;
+          })
+        | undefined
+    )?.suppressLocalAudioPlayback === true
+  );
 }
 
 export function browserAudioCodecs(): string[] {

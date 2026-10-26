@@ -118,12 +118,14 @@ beforeEach(() => {
     window: [{ id: "wgc", name: "WGC" }],
   });
   native.audioFormats.mockResolvedValue(
-    [8000, 16000, 32000, 44100, 48000].flatMap(
-      (sampleRate) =>
-        [1, 2].map((channelCount) => ({
-          sampleRate,
-          channelCount,
-        })),
+    [
+      8000, 16000, 24000, 32000, 44100, 48000, 88200, 96000,
+      176400, 192000,
+    ].flatMap((sampleRate) =>
+      [1, 2].map((channelCount) => ({
+        sampleRate,
+        channelCount,
+      })),
     ),
   );
   native.codecs.mockResolvedValue([
@@ -959,6 +961,49 @@ it("separates automatic codec selection from explicit sampling defaults", async 
   expect(appState.options.audioChannelCount).toBe(2);
 });
 
+it.each([44100, 96000, 192000])(
+  "keeps system audio rate %s selectable while a browser audio track is fixed at 48 kHz",
+  async (rate) => {
+    const track = Object.assign(new EventTarget(), {
+      kind: "audio",
+      contentHint: "music",
+      readyState: "live",
+      getCapabilities: () => ({
+        sampleRate: { min: 48000, max: 48000 },
+        channelCount: { min: 2, max: 2 },
+      }),
+      getSettings: () => ({
+        sampleRate: 48000,
+        channelCount: 2,
+      }),
+    });
+    const stream = Object.assign(new EventTarget(), {
+      getAudioTracks: () => [track],
+    }) as unknown as MediaStream;
+    setAppState("session", "localStream", stream);
+    render(() => <MeetingSettings />);
+    await waitFor(() =>
+      expect(native.audioFormats).toHaveBeenCalled(),
+    );
+    await choose(
+      "setting.meeting_settings.audio.sample_rate.title",
+      `${rate / 1000} kHz`,
+    );
+    expect(appState.options.audioSampleRate).toBe(rate);
+    expect(
+      nativeScreenOptions(appState.options).audioSampleRate,
+    ).toBe(rate);
+    expect(appState.session.localStream).toBe(stream);
+    cleanup();
+    render(() => <MeetingSettings />);
+    expect(
+      screen.getByRole("button", {
+        name: /audio.sample_rate.title/,
+      }),
+    ).toHaveTextContent(`${rate / 1000} kHz`);
+  },
+);
+
 it("discovers native audio codecs separately from video capabilities", async () => {
   native.codecs.mockImplementation(async (kind?: string) =>
     kind === "audio"
@@ -1001,6 +1046,115 @@ it("discovers native audio codecs separately from video capabilities", async () 
       name: "G.711 A-law (PCMA)",
     }),
   ).toBeNull();
+});
+
+it("switches between native rates with different channel support without getting stuck", async () => {
+  native.audioFormats.mockResolvedValue([
+    { sampleRate: 48000, channelCount: 2 },
+    { sampleRate: 96000, channelCount: 1 },
+  ]);
+  render(() => <MeetingSettings />);
+  await choose(
+    "setting.meeting_settings.audio.sample_rate.title",
+    "96 kHz",
+  );
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    audioSampleRate: 96000,
+    audioChannelCount: 1,
+  });
+  const channels = screen.getByRole("button", {
+    name: /audio.channels.title/,
+  });
+  fireEvent.keyDown(channels, { key: "ArrowDown" });
+  const stereo = screen.getByRole("option", {
+    name: /audio.channels.stereo/,
+  });
+  expect(stereo).toHaveAttribute("aria-disabled", "true");
+  fireEvent.click(stereo);
+  expect(appState.options.audioChannelCount).toBe(1);
+  fireEvent.keyDown(stereo, { key: "Escape" });
+  await choose(
+    "setting.meeting_settings.audio.sample_rate.title",
+    "48 kHz (setting.meeting_settings.audio.default)",
+  );
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    audioSampleRate: 48000,
+    audioChannelCount: 2,
+  });
+});
+
+it("marks an unsupported saved rate and lets the user return to 48 kHz stereo", async () => {
+  native.audioFormats.mockResolvedValue([
+    { sampleRate: 48000, channelCount: 2 },
+  ]);
+  setAppState("options", {
+    audioSampleRate: 192000,
+    audioChannelCount: 1,
+  });
+  render(() => <MeetingSettings />);
+  const rate = screen.getByRole("button", {
+    name: /audio.sample_rate.title/,
+  });
+  await waitFor(() =>
+    expect(rate).toHaveTextContent(
+      "192 kHz (setting.meeting_settings.audio.unavailable)",
+    ),
+  );
+  expect(appState.options.audioSampleRate).toBe(192000);
+  await choose(
+    "setting.meeting_settings.audio.sample_rate.title",
+    "48 kHz (setting.meeting_settings.audio.default)",
+  );
+  expect(
+    nativeScreenOptions(appState.options),
+  ).toMatchObject({
+    audioSampleRate: 48000,
+    audioChannelCount: 2,
+  });
+});
+
+it("does not substitute browser microphone formats when native format discovery fails", async () => {
+  native.audioFormats.mockRejectedValue(
+    new Error("Unavailable"),
+  );
+  const track = Object.assign(new EventTarget(), {
+    kind: "audio",
+    contentHint: "speech",
+    readyState: "live",
+    getSettings: () => ({
+      sampleRate: 44100,
+      channelCount: 1,
+    }),
+  });
+  setAppState(
+    "session",
+    "localStream",
+    Object.assign(new EventTarget(), {
+      getAudioTracks: () => [track],
+    }) as unknown as MediaStream,
+  );
+  render(() => <MeetingSettings />);
+  await screen.findByText(
+    "setting.meeting_settings.audio.sampling_failed",
+  );
+  fireEvent.keyDown(
+    screen.getByRole("button", {
+      name: /audio.sample_rate.title/,
+    }),
+    { key: "ArrowDown" },
+  );
+  expect(
+    screen.queryByRole("option", { name: "44.1 kHz" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("option", {
+      name: "48 kHz (setting.meeting_settings.audio.default)",
+    }),
+  ).not.toHaveAttribute("aria-disabled", "true");
 });
 
 it("keeps an unavailable saved audio codec visible without overwriting it", async () => {

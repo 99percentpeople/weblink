@@ -184,6 +184,8 @@ export type AppOption = {
   preferredAudioCodec: string | null;
   audioSampleRate: number;
   audioChannelCount: 1 | 2;
+  /** Suppress local playback during the next screen capture, retaining sent audio. */
+  suppressLocalAudioPlayback: boolean;
   recordingContainer: import("../application/recording-options").RecordingContainer;
 };
 
@@ -304,6 +306,7 @@ export const getDefaultAppOptions = (): AppOption => {
     preferredAudioCodec: null,
     audioSampleRate: 48000,
     audioChannelCount: 2,
+    suppressLocalAudioPlayback: false,
     recordingContainer: "auto",
   } satisfies AppOption;
 };

@@ -317,6 +317,12 @@
       "color_vp8": "VP8 usa BT.601 con rango limitado. Los demás códecs restauran tus ajustes seleccionados.",
       "color_format": "Formato de color de salida",
       "audio": {
+        "local_playback": {
+          "title": "Silenciar este dispositivo al compartir",
+          "desktop_description": "Se aplica a la próxima pantalla compartida con audio del sistema. Silencia los dispositivos de reproducción activos sin interrumpir el audio enviado y restaura su estado anterior al finalizar.",
+          "browser_description": "Se aplica al próximo uso compartido con audio. Solicita al navegador silenciar la reproducción local de la fuente compartida. La compatibilidad depende del navegador y la fuente; suele funcionar con pestañas compartidas.",
+          "unsupported": "Este navegador no permite silenciar la reproducción local al compartir pantalla."
+        },
         "title": "Captura de audio",
         "auto": "Automático",
         "unavailable": "No disponible actualmente",
@@ -333,6 +339,7 @@
           "stereo": "Estéreo (dos canales)"
         },
         "description": "Valores predeterminados: 48 kHz, estéreo. Se aplican a la próxima captura; el navegador puede usar un formato cercano del dispositivo.",
+        "native_description": "Valores predeterminados: 48 kHz, estéreo. Las opciones dependen de los formatos de audio del sistema y se aplican a la próxima captura. Los micrófonos y el audio codificado pueden usar otros formatos.",
         "sampling_loading": "Cargando formatos de audio…",
         "codecs_loading": "Cargando códecs de audio…",
         "sampling_failed": "Los formatos de audio del sistema no están disponibles actualmente.",
