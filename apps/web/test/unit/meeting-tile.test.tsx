@@ -158,6 +158,14 @@ const activateFullscreen = (element: Element | null) => {
 };
 
 beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -1069,9 +1077,13 @@ it("keeps one remote control action across request, cancellation, active control
   const button = screen.getByRole("button", {
     name: "remote_control.request",
   });
-  expect(
-    button.closest(".meeting-tile-actions"),
-  ).not.toBeNull();
+  const trigger = screen.getByRole("button", {
+    name: "meeting.source_actions",
+  });
+  const menu = document.getElementById(
+    trigger.getAttribute("aria-controls")!,
+  );
+  expect(menu?.contains(button)).toBe(true);
   fireEvent.click(button);
   expect(
     screen.getByRole("button", {

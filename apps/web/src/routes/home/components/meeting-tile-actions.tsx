@@ -1,34 +1,38 @@
 import type { TileActionProps } from "./meeting-tile-actions-scope";
 import { useViewScopes } from "@/libs/state/view-scopes";
 import {
+  createEffect,
+  createMemo,
   createSignal,
+  createUniqueId,
   For,
   onCleanup,
+  on,
   onMount,
   Show,
   useContext,
   type ParentProps,
 } from "solid-js";
-import { Ellipsis } from "lucide-solid";
-import { Motion } from "@/components/ui/motion";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ChevronRight, Ellipsis } from "lucide-solid";
+import { Portal } from "solid-js/web";
+import { t } from "@/i18n";
+import { createFloatingTileActions } from "./create-floating-tile-actions";
+import { layoutActionFan } from "./meeting-action-fan";
+import { createPortaledActionMenu } from "./create-portaled-action-menu";
+import { MeetingActionGlass } from "./meeting-action-glass";
 
 /** Action owners and the invisible keyboard editor survive menu open/close. */
 export function MeetingTileActions(
   props: ParentProps<{
     compact: boolean;
+    floating?: boolean;
     label: string;
     portalMount?: HTMLElement;
   }>,
 ) {
   const ActionsContext = useViewScopes().tileActions;
+  const menuId = createUniqueId();
   const [touch, setTouch] = createSignal(false);
-  const [open, setOpen] = createSignal(false);
   const [hovered, setHovered] = createSignal(false);
   const [clicked, setClicked] = createSignal(false);
   const [keyboardFocus, setKeyboardFocus] =
@@ -36,24 +40,159 @@ export function MeetingTileActions(
   const [actions, setActions] = createSignal<
     TileActionProps[]
   >([]);
-  let keepFocus = false;
+  const [page, setPage] = createSignal(0);
   let container!: HTMLDivElement;
-  let trigger: HTMLButtonElement | undefined;
+  let trigger!: HTMLButtonElement;
+  let panel!: HTMLDivElement;
+  const [panelMount, setPanelMount] =
+    createSignal<HTMLDivElement>();
+  const mount = () =>
+    props.portalMount ?? panelMount()?.ownerDocument.body;
+  let hoverBlocked = false;
+  let hoverTimer: number | undefined;
+  const assistive = () => props.floating !== false;
+  const compact = () => props.compact || touch();
+  const cancelHoverDismiss = () => {
+    container?.ownerDocument.defaultView?.clearTimeout(
+      hoverTimer,
+    );
+    hoverTimer = undefined;
+  };
   const dismiss = () => {
+    cancelHoverDismiss();
     setClicked(false);
     setHovered(false);
     setKeyboardFocus(false);
   };
+  const floating = createFloatingTileActions({
+    enabled: assistive,
+    container: () => container,
+    trigger: () => trigger,
+    onActivate() {
+      hoverBlocked = false;
+      if (clicked()) dismiss();
+      else setClicked(true);
+    },
+    onDragStart() {
+      hoverBlocked = true;
+      dismiss();
+    },
+  });
+  createEffect(on(assistive, dismiss, { defer: true }));
+  const expanded = () =>
+    !floating.dragging() &&
+    (clicked() ||
+      (!compact() && (hovered() || keyboardFocus())));
+  const portaled = createPortaledActionMenu({
+    radial: () => assistive() && !!fan(),
+    open: expanded,
+    anchor: () => trigger,
+    panel: () => panel,
+    mount,
+  });
+  const contains = (target: Node | null) =>
+    !!target &&
+    (container.contains(target) || panel.contains(target));
+  const pointerEnter = (event: PointerEvent) => {
+    if (
+      event.pointerType !== "mouse" ||
+      hoverBlocked ||
+      floating.dragging()
+    )
+      return;
+    cancelHoverDismiss();
+    setHovered(true);
+  };
+  const pointerLeave = (event: PointerEvent) => {
+    if (contains(event.relatedTarget as Node | null))
+      return;
+    cancelHoverDismiss();
+    hoverTimer =
+      container.ownerDocument.defaultView!.setTimeout(
+        () => setHovered(false),
+        150,
+      );
+    if (!floating.dragging()) hoverBlocked = false;
+  };
+  const focusOut = (event: FocusEvent) => {
+    if (contains(event.relatedTarget as Node | null))
+      return;
+    setClicked(false);
+    setKeyboardFocus(false);
+  };
+  const ordered = createMemo(() =>
+    compact()
+      ? [...actions()].sort(
+          (a, b) => (a.order ?? 2) - (b.order ?? 2),
+        )
+      : actions(),
+  );
+  const availableFan = createMemo(() => {
+    if (!assistive()) return;
+    const layout = layoutActionFan(
+      ordered().length,
+      portaled.space(),
+    );
+    // Very small windows retain a scrollable menu instead of shrinking targets.
+    return layout &&
+      layout.points.length >= Math.min(2, ordered().length)
+      ? layout
+      : undefined;
+  });
+  const pageSize = () =>
+    availableFan() &&
+    availableFan()!.points.length < ordered().length
+      ? Math.max(1, availableFan()!.points.length - 1)
+      : ordered().length || 1;
+  const pages = () =>
+    Math.ceil(ordered().length / pageSize());
+  const visibleActions = createMemo(() =>
+    ordered().slice(
+      page() * pageSize(),
+      (page() + 1) * pageSize(),
+    ),
+  );
+  const fan = createMemo(() => {
+    const available = availableFan();
+    if (!available) return;
+    // The final page has its own row counts, including the next-page button.
+    const count =
+      visibleActions().length + (pages() > 1 ? 1 : 0);
+    return count === available.points.length
+      ? available
+      : layoutActionFan(count, portaled.space());
+  });
+  createEffect(() => {
+    if (!expanded() || page() >= pages()) setPage(0);
+  });
+  const buttons = () =>
+    Array.from(
+      panel.querySelectorAll<HTMLButtonElement>(
+        "button[data-meeting-action]:not(:disabled)",
+      ),
+    );
+  const focusAction = (last = false) => {
+    const items = buttons();
+    (last ? items.at(-1) : items[0])?.focus({
+      preventScroll: true,
+    });
+  };
+  const openWithKeyboard = (last = false) => {
+    setClicked(true);
+    queueMicrotask(() => {
+      if (expanded()) focusAction(last);
+    });
+  };
   const select = (action: TileActionProps) => {
     if (action.disabled) return;
-    keepFocus = action.keepFocus === true;
-    setOpen(false);
+    if (compact()) {
+      dismiss();
+      if (!action.keepFocus)
+        trigger.focus({ preventScroll: true });
+    }
+    // Keep text input in the completed click/keydown gesture on mobile Safari.
     action.onAction();
   };
-  const compact = () => props.compact || touch();
-  const expanded = () =>
-    !compact() &&
-    (clicked() || hovered() || keyboardFocus());
   onMount(() => {
     const doc = container.ownerDocument;
     const win = doc.defaultView!;
@@ -73,8 +212,9 @@ export function MeetingTileActions(
       "pointerdown",
       (event) => {
         if (
-          clicked() &&
-          !event.composedPath().includes(container)
+          expanded() &&
+          !event.composedPath().includes(container) &&
+          !event.composedPath().includes(panel)
         )
           dismiss();
       },
@@ -83,7 +223,14 @@ export function MeetingTileActions(
     win.addEventListener("blur", dismiss, {
       signal: abort.signal,
     });
-    onCleanup(() => abort.abort());
+    onCleanup(() => {
+      cancelHoverDismiss();
+      abort.abort();
+    });
+  });
+  const itemStyle = (index: number) => ({
+    "--fan-x": `${fan()?.points[index]?.x ?? 0}px`,
+    "--fan-y": `${fan()?.points[index]?.y ?? 0}px`,
   });
   return (
     <ActionsContext.Provider
@@ -97,161 +244,178 @@ export function MeetingTileActions(
         },
       }}
     >
-      <div
-        ref={container}
-        class="meeting-tile-actions"
-        data-expanded={
-          expanded() || open() ? "" : undefined
-        }
-        onPointerEnter={(event) => {
-          if (event.pointerType === "mouse")
-            setHovered(true);
-        }}
-        onPointerLeave={() => setHovered(false)}
-        onFocusIn={(event) =>
-          setKeyboardFocus(
-            event.target.matches(
-              ".meeting-icon-button:focus-visible",
-            ),
-          )
-        }
-        onFocusOut={(event) => {
-          if (
-            !event.currentTarget.contains(
-              event.relatedTarget as Node | null,
-            )
-          ) {
-            setClicked(false);
-            setKeyboardFocus(false);
+      <div class="meeting-tile-actions-boundary">
+        <div
+          ref={container}
+          class="meeting-tile-actions"
+          classList={{ "is-static": !assistive() }}
+          data-edge={floating.edge()}
+          data-side={
+            floating.opensRight() ? "left" : "right"
           }
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape" || !expanded()) return;
-          event.preventDefault();
-          event.stopPropagation();
-          trigger?.focus({ preventScroll: true });
-          dismiss();
-        }}
-      >
-        <Show when={!compact()}>
+          data-below={floating.below() ? "" : undefined}
+          data-dragging={
+            floating.dragging() ? "" : undefined
+          }
+          data-expanded={expanded() ? "" : undefined}
+          onPointerEnter={pointerEnter}
+          onPointerLeave={pointerLeave}
+          onFocusIn={(event) =>
+            setKeyboardFocus(
+              event.target.matches(
+                ".meeting-icon-button:focus-visible",
+              ),
+            )
+          }
+          onFocusOut={focusOut}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || !expanded())
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            trigger.focus({ preventScroll: true });
+            dismiss();
+          }}
+        >
           <button
             ref={trigger}
             type="button"
             class="meeting-icon-button meeting-tile-actions-trigger"
             aria-label={props.label}
+            aria-controls={menuId}
+            aria-haspopup={compact() ? "menu" : undefined}
             aria-expanded={expanded()}
-            aria-pressed={clicked()}
+            aria-pressed={compact() ? undefined : clicked()}
             title={props.label}
-            onPointerDown={(event) =>
-              event.stopPropagation()
-            }
-            onClick={(event) => {
+            onKeyDown={(event) => {
+              if (
+                event.key !== "ArrowDown" &&
+                event.key !== "ArrowUp"
+              )
+                return;
+              event.preventDefault();
               event.stopPropagation();
-              if (clicked()) dismiss();
-              else setClicked(true);
+              openWithKeyboard(event.key === "ArrowUp");
             }}
           >
-            <Ellipsis />
+            <Show
+              when={assistive()}
+              fallback={<Ellipsis aria-hidden="true" />}
+            >
+              <span
+                class="meeting-assistive-dot"
+                aria-hidden="true"
+              />
+            </Show>
           </button>
-          <div class="meeting-tile-actions-row">
-            <For each={actions()}>
-              {(action, index) => (
-                <Motion.div
-                  native
-                  class="meeting-tile-action-slot"
-                  initial={false}
-                  animate={{
-                    width: expanded()
-                      ? "calc(var(--meeting-tile-action-size) + var(--meeting-tile-action-gap))"
-                      : "0px",
-                    opacity: expanded() ? 1 : 0,
-                  }}
-                  transition={{
-                    duration: 0.22,
-                    ease: [0.22, 1, 0.36, 1],
-                    // Unfold from the trigger, then fold back toward it.
-                    delay:
-                      Math.min(
-                        expanded()
-                          ? actions().length - 1 - index()
-                          : index(),
-                        5,
-                      ) * 0.025,
-                  }}
-                  inert={!expanded()}
-                >
-                  <TileActionButton {...action} />
-                </Motion.div>
-              )}
-            </For>
-          </div>
-        </Show>
-        {/* Keep action owners and the keyboard editor outside the clipped, inert reveal. */}
-        {props.children}
-        <Show when={compact()}>
-          <DropdownMenu
-            modal={false}
-            placement="top-end"
-            // Fullscreen escapes the tile's clipping ancestors, but Floating UI
-            // still sees them. Keep its menu above the bottom-right trigger.
-            flip={!props.portalMount}
-            slide={!props.portalMount}
-            open={open()}
-            onOpenChange={(next) => {
-              if (next) keepFocus = false;
-              setOpen(next);
-            }}
-          >
-            <DropdownMenuTrigger
-              ref={trigger}
-              class="meeting-icon-button"
+          <div ref={setPanelMount} class="contents" />
+          <Portal mount={mount()}>
+            <div
+              ref={panel}
+              id={menuId}
+              role={compact() ? "menu" : "toolbar"}
               aria-label={props.label}
-              title={props.label}
-              onPointerDown={(event) =>
-                event.stopPropagation()
+              aria-hidden={
+                compact() ? !expanded() : undefined
               }
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Ellipsis />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              portalMount={props.portalMount}
-              // The dropdown wrapper otherwise restores trigger focus even
-              // when onCloseAutoFocus is prevented, dismissing the mobile IME.
-              manualFocus
-              class="min-w-44 max-w-[calc(100vw-1rem)] overflow-y-auto"
+              inert={!expanded()}
+              class="meeting-action-panel"
+              classList={{
+                "is-fan": !!fan(),
+                "is-list": !fan(),
+                "is-portal": true,
+              }}
+              data-layout={fan()?.shape ?? "list"}
+              data-expanded={expanded() ? "" : undefined}
+              onPointerEnter={pointerEnter}
+              onPointerLeave={pointerLeave}
+              onFocusOut={focusOut}
               style={{
-                // The computed popper height includes the same stale ancestors.
-                "max-height": props.portalMount
-                  ? "calc(100dvh - 4rem)"
-                  : "var(--kb-popper-content-available-height)",
+                "--menu-width": `${floating.menuSize()?.width ?? 280}px`,
+                "--menu-height": `${floating.menuSize()?.height ?? 320}px`,
               }}
-              onInteractOutside={() => {
-                keepFocus = true;
-              }}
-              onCloseAutoFocus={(event) => {
+              onKeyDown={(event) => {
+                const items = buttons();
+                const index = items.indexOf(
+                  event.target as HTMLButtonElement,
+                );
+                let next: number;
+                switch (event.key) {
+                  case "Escape":
+                    event.preventDefault();
+                    event.stopPropagation();
+                    trigger.focus({ preventScroll: true });
+                    dismiss();
+                    return;
+                  case "ArrowDown":
+                  case "ArrowRight":
+                    next = (index + 1) % items.length;
+                    break;
+                  case "ArrowUp":
+                  case "ArrowLeft":
+                    next =
+                      (index - 1 + items.length) %
+                      items.length;
+                    break;
+                  case "Home":
+                    next = 0;
+                    break;
+                  case "End":
+                    next = items.length - 1;
+                    break;
+                  default:
+                    return;
+                }
                 event.preventDefault();
-                if (
-                  !keepFocus &&
-                  !open() &&
-                  trigger?.isConnected
-                )
-                  trigger.focus({ preventScroll: true });
+                event.stopPropagation();
+                items[next]?.focus({ preventScroll: true });
               }}
             >
-              <For
-                each={[...actions()].sort(
-                  (a, b) => (a.order ?? 2) - (b.order ?? 2),
+              <Show when={fan()}>
+                {(layout) => (
+                  <div
+                    class="meeting-action-fan-surface"
+                    aria-hidden="true"
+                    style={{
+                      width: `${layout().radius * 2}px`,
+                      height: `${layout().radius * 2}px`,
+                      left: `calc(50% - ${layout().radius}px)`,
+                      top: `calc(50% - ${layout().radius}px)`,
+                    }}
+                  >
+                    <MeetingActionGlass shape={layout()} />
+                    {/* Keep hit testing separate: ancestor clipping blocks backdrop blur. */}
+                    <svg
+                      class="meeting-action-fan-hit"
+                      width={layout().radius * 2}
+                      height={layout().radius * 2}
+                      viewBox={`${-layout().radius} ${-layout().radius} ${layout().radius * 2} ${layout().radius * 2}`}
+                    >
+                      <path d={layout().path} />
+                    </svg>
+                  </div>
                 )}
-              >
-                {(action) => (
-                  <DropdownMenuItem
+              </Show>
+              <For each={visibleActions()}>
+                {(action, index) => (
+                  <button
+                    type="button"
+                    data-meeting-action=""
+                    class="meeting-icon-button meeting-tile-action"
+                    role={
+                      compact() ? "menuitem" : undefined
+                    }
+                    aria-label={action.label}
+                    aria-pressed={action.active}
                     disabled={action.disabled}
-                    closeOnSelect={false}
-                    // Wait for click after touch-generated mouse focus. The
-                    // keyboard must open synchronously in that completed gesture.
+                    title={action.title ?? action.label}
+                    style={itemStyle(index())}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      if (action.keepFocus && action.active)
+                        event.preventDefault();
+                    }}
                     onClick={(event) => {
-                      event.preventDefault();
                       event.stopPropagation();
                       select(action);
                     }}
@@ -269,12 +433,43 @@ export function MeetingTileActions(
                   >
                     {action.children}
                     <span>{action.label}</span>
-                  </DropdownMenuItem>
+                  </button>
                 )}
               </For>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </Show>
+              <Show when={pages() > 1}>
+                <button
+                  type="button"
+                  data-meeting-action=""
+                  class="meeting-icon-button meeting-tile-action"
+                  role={compact() ? "menuitem" : undefined}
+                  aria-label={t("common.pagination.next")}
+                  title={t("common.pagination.page", {
+                    page: page() + 1,
+                    count: pages(),
+                  })}
+                  style={itemStyle(visibleActions().length)}
+                  onPointerDown={(event) =>
+                    event.stopPropagation()
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setPage(
+                      (current) => (current + 1) % pages(),
+                    );
+                    focusAction();
+                  }}
+                >
+                  <ChevronRight />
+                  <span>
+                    {page() + 1} / {pages()}
+                  </span>
+                </button>
+              </Show>
+            </div>
+          </Portal>
+          {/* Keep action owners and the keyboard editor outside the inert menu. */}
+          {props.children}
+        </div>
       </div>
     </ActionsContext.Provider>
   );

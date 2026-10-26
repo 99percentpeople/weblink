@@ -577,6 +577,10 @@ function TileActions(props: {
       <Show when={hasActions()}>
         <MeetingTileActions
           compact={isMobile()}
+          floating={
+            props.pinned ||
+            fullscreen.isThisElementFullscreen()
+          }
           label={t("meeting.source_actions", {
             name: props.name,
           })}

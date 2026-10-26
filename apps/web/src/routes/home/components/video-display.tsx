@@ -438,8 +438,8 @@ export const VideoDisplay = (
         <div class="meeting-video-overlays absolute inset-0">
           <div
             use:layoutOverlay={"name"}
-            class="pointer-events-none absolute left-1 right-1 top-1 z-20 flex
-              gap-1"
+            class="meeting-video-label pointer-events-none absolute left-1
+              right-1 top-1 z-20 flex gap-1"
           >
             <VideoLabel
               name={props.label?.name ?? props.name}

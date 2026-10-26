@@ -159,6 +159,9 @@
   /* Keep letterbox UI in a full-surface layer above WebView2's video plane. */
   transform: translateZ(0);
 }
+.meeting-tile-video:fullscreen .meeting-video-label {
+  display: none;
+}
 .meeting-tile-video:fullscreen:has(
     .meeting-tile-focus-target:focus-visible
   )::after {
@@ -261,60 +264,292 @@
 .meeting-thumbnails .meeting-icon-button {
   @apply size-7;
 }
+.meeting-tile-actions-boundary {
+  @apply pointer-events-none absolute z-20;
+  inset: max(--spacing(2), env(safe-area-inset-top))
+    max(--spacing(2), env(safe-area-inset-right))
+    max(--spacing(2), env(safe-area-inset-bottom))
+    max(--spacing(2), env(safe-area-inset-left));
+}
 .meeting-tile-actions {
-  @apply p-0.75 absolute bottom-2 right-2 z-20 flex rounded-lg bg-[#10151cb3] text-white opacity-0;
-  --meeting-tile-action-size: --spacing(8.5);
-  --meeting-tile-action-gap: --spacing(0.75);
-  transition: opacity 0.15s;
+  @apply pointer-events-auto absolute bottom-0 right-0 size-11 text-white;
+  --action-opacity: 0.5;
 }
-.meeting-thumbnails .meeting-tile-actions {
-  --meeting-tile-action-size: --spacing(7);
+.meeting-tile-actions[data-positioned] {
+  @apply left-0 top-0;
+  right: auto;
+  bottom: auto;
 }
-.meeting-tile-actions .meeting-icon-button {
-  width: var(--meeting-tile-action-size);
-  height: var(--meeting-tile-action-size);
+.meeting-tile-actions[data-settling] {
+  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.meeting-tile-actions-trigger {
-  /* Keep the hover target anchored while actions expand to its left. */
-  order: 1;
+.meeting-tile-actions[data-dragging] {
+  --action-opacity: 1;
+  will-change: transform;
 }
-.meeting-tile-action-slot {
-  @apply w-0 flex-none overflow-hidden opacity-0;
+.meeting-tile-actions .meeting-tile-actions-trigger,
+.meeting-action-fan-surface {
+  isolation: isolate;
+  background: transparent;
 }
-.meeting-tile-actions-row {
-  @apply flex;
+.meeting-action-glass {
+  @apply -z-1 pointer-events-none absolute;
+  inset: calc(0px - var(--glass-bleed, 0px));
+  border-radius: inherit;
 }
-.meeting-tile-actions-row
-  .meeting-icon-button:focus-visible {
-  /* Keep the keyboard focus ring inside the animated clipping area. */
-  outline-offset: -2px;
+.meeting-action-glass-layer {
+  @apply absolute inset-0;
+  border-radius: inherit;
+  background: rgb(12 17 25 / 10%);
+  /* Opacity belongs on each filter, never on an ancestor backdrop root. */
+  opacity: calc(
+    var(--glass-visibility, 1) * var(--action-opacity, 1)
+  );
+  transition: opacity 0.28s ease;
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
 }
-.meeting-tile-actions .meeting-icon-button:hover {
+.meeting-tile-actions .meeting-tile-actions-trigger {
+  @apply relative z-10 size-full rounded-2xl;
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  cursor: pointer;
+}
+.meeting-tile-actions-trigger::before {
+  @apply -z-1 pointer-events-none absolute inset-0;
+  content: "";
+  border-radius: inherit;
+  background: rgb(12 17 25 / 56%);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 3px 12px #0002;
+  opacity: var(--action-opacity, 1);
+  transition: opacity 0.2s;
+}
+.meeting-tile-actions[data-dragging]
+  .meeting-tile-actions-trigger {
+  cursor: grabbing;
+}
+.meeting-tile-actions.is-static {
+  @apply size-8.5;
+  --action-opacity: 0.6;
+}
+.meeting-tile-actions.is-static
+  .meeting-tile-actions-trigger {
+  @apply rounded-lg;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.meeting-tile-actions.is-static
+  .meeting-tile-actions-trigger::before {
+  box-shadow: none;
+}
+.meeting-assistive-dot {
+  @apply pointer-events-none size-5 rounded-full bg-white;
+  box-shadow: 0 1px 8px #0003;
+  transition:
+    scale 0.18s,
+    opacity 0.2s;
+}
+.meeting-assistive-dot,
+.meeting-tile-actions-trigger > svg {
+  opacity: var(--action-opacity, 1);
+}
+.meeting-tile-actions-trigger > svg {
+  transition: opacity 0.2s;
+}
+.meeting-tile-actions[data-dragging]
+  .meeting-assistive-dot {
+  scale: 0.9;
+}
+.meeting-action-panel {
+  @apply pointer-events-none absolute inset-0;
+  --glass-visibility: 0;
+}
+.meeting-action-panel[data-expanded] {
+  --glass-visibility: 1;
+}
+.meeting-action-fan-surface {
+  @apply pointer-events-none absolute;
+  visibility: hidden;
+  /* Keep the filtered masks at their final size while the buttons move. */
+  transition: visibility 0s 0.28s;
+}
+.meeting-action-fan-hit {
+  @apply pointer-events-none absolute inset-0;
+  fill: transparent;
+}
+.meeting-action-panel.is-fan .meeting-tile-action {
+  @apply pointer-events-none absolute left-1/2 top-1/2 flex size-12 flex-col gap-0.5 rounded-xl bg-white/5 p-1 text-white opacity-0;
+  text-shadow: 0 1px 3px #0006;
+  margin: --spacing(-6);
+  transform: translate(0, 0) scale(0.35);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s,
+    background 0.15s;
+}
+.meeting-action-panel.is-fan .meeting-tile-action > span {
+  @apply line-clamp-2 max-w-full text-center text-[9px] leading-[11px];
+  overflow-wrap: anywhere;
+}
+.meeting-action-panel[data-expanded]
+  .meeting-action-fan-surface {
+  visibility: visible;
+  transition-delay: 0s;
+}
+.meeting-action-panel[data-expanded]
+  .meeting-action-fan-hit
+  path {
+  pointer-events: fill;
+}
+.meeting-action-panel.is-fan[data-expanded]
+  .meeting-tile-action {
+  @apply pointer-events-auto opacity-100;
+  transform: translate(var(--fan-x), var(--fan-y)) scale(1);
+  /* Portaled items must clear the dot before their moving hit areas activate. */
+  animation: meeting-action-ready 0.18s both;
+}
+@keyframes meeting-action-ready {
+  0%,
+  99% {
+    pointer-events: none;
+  }
+  100% {
+    pointer-events: auto;
+  }
+}
+.meeting-action-panel.is-list {
+  @apply inset-auto bottom-full right-0 flex w-max flex-col gap-1 overflow-auto rounded-xl p-1.5;
+  visibility: hidden;
+  /* One continuous surface also covers the menu while its content scrolls. */
+  background: rgb(
+    12 17 25 / calc(var(--glass-visibility) * 68%)
+  );
+  -webkit-backdrop-filter: blur(
+    calc(var(--glass-visibility) * 18px)
+  );
+  backdrop-filter: blur(
+    calc(var(--glass-visibility) * 18px)
+  );
+  box-shadow: 0 8px 24px
+    rgb(0 0 0 / calc(var(--glass-visibility) * 18%));
+  max-width: var(--menu-width);
+  max-height: var(--menu-height);
+  overscroll-behavior: contain;
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff40 transparent;
+  transition:
+    visibility 0s 0.28s,
+    background 0.2s,
+    backdrop-filter 0.2s,
+    box-shadow 0.2s;
+}
+.meeting-action-panel.is-list .meeting-tile-action {
+  @apply h-auto min-h-10 w-full justify-start gap-2 px-2 py-1.5 text-left text-xs opacity-0;
+  transition:
+    opacity 0.18s,
+    background 0.15s;
+}
+.meeting-action-panel.is-list[data-expanded]
+  .meeting-tile-action {
+  @apply opacity-100;
+}
+.meeting-action-panel.is-list .meeting-tile-action > span {
+  @apply min-w-0;
+  overflow-wrap: anywhere;
+}
+.meeting-tile-actions[data-side="left"] .is-list {
+  @apply left-0;
+  right: auto;
+}
+.meeting-tile-actions[data-below] .is-list {
+  @apply top-full;
+  bottom: auto;
+}
+.meeting-tile-actions[data-expanded] .is-list {
+  @apply pointer-events-auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.meeting-action-panel.is-list.is-portal {
+  @apply z-60 fixed overflow-x-hidden text-white;
+  right: auto;
+  bottom: auto;
+  min-width: min(
+    11rem,
+    var(--portaled-menu-width, calc(100dvw - 1rem))
+  );
+  max-width: min(
+    22rem,
+    var(--portaled-menu-width, calc(100dvw - 1rem))
+  );
+  max-height: var(
+    --portaled-menu-height,
+    calc(100dvh - 1rem)
+  );
+}
+.meeting-action-panel.is-list.is-portal[data-expanded] {
+  @apply pointer-events-auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.meeting-action-panel.is-fan.is-portal {
+  @apply z-60 fixed text-white;
+  right: auto;
+  bottom: auto;
+}
+.meeting-action-panel.is-portal button {
+  @apply cursor-pointer;
+}
+.meeting-action-panel.is-portal button:disabled {
+  @apply cursor-not-allowed opacity-45;
+}
+.meeting-action-panel.is-portal .meeting-icon-button:hover {
   @apply bg-white/15 text-white;
 }
-.meeting-tile-actions
+.meeting-action-panel.is-portal
   .meeting-icon-button[aria-pressed="true"] {
   @apply bg-white/25 text-white;
 }
-.meeting-tile-actions
+.meeting-action-panel.is-portal
+  .meeting-icon-button:focus-visible {
+  outline: 2px solid white;
+}
+.meeting-action-panel .meeting-icon-button:focus-visible {
+  outline-offset: -2px;
+}
+.meeting-tile-actions.is-static .meeting-icon-button:hover {
+  @apply bg-white/15 text-white;
+}
+.meeting-tile-actions.is-static
+  .meeting-icon-button[aria-pressed="true"] {
+  @apply bg-white/25 text-white;
+}
+.meeting-tile-actions.is-static
   .meeting-icon-button[aria-pressed="true"]:hover {
   @apply bg-white/35;
 }
 .meeting-tile-actions .meeting-icon-button:focus-visible {
   outline-color: white;
 }
-.meeting-tile:hover .meeting-tile-actions,
 .meeting-tile-actions[data-expanded],
-.meeting-tile:focus-within .meeting-tile-actions,
-.meeting-tile-video:fullscreen:hover .meeting-tile-actions,
+.meeting-tile:hover .meeting-tile-actions.is-static,
+.meeting-tile:focus-within .meeting-tile-actions.is-static,
+.meeting-tile-video:fullscreen:hover
+  .meeting-tile-actions.is-static,
 .meeting-tile-video:fullscreen:focus-within
-  .meeting-tile-actions {
-  /* Fullscreen letterboxing extends beyond the original tile's hover area. */
-  @apply opacity-100;
+  .meeting-tile-actions.is-static {
+  /* Only interaction with the dot itself brightens the floating control. */
+  --action-opacity: 1;
 }
 @media (hover: none), (any-pointer: coarse) {
-  .meeting-tile-actions {
-    @apply opacity-100;
+  .meeting-tile-actions.is-static {
+    --action-opacity: 1;
   }
 }
 .meeting-panel-slot {
@@ -559,8 +794,8 @@
   .meeting-leave {
     @apply min-h-11.5 w-11.5 gap-0 p-3;
   }
-  .meeting-tile-actions {
-    @apply opacity-100;
+  .meeting-tile-actions.is-static {
+    --action-opacity: 1;
   }
 }
 @media (max-width: 389px) {
@@ -584,8 +819,11 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .meeting * {
+  .meeting *,
+  .meeting-action-panel.is-portal,
+  .meeting-action-panel.is-portal * {
     transition: none !important;
+    animation: none !important;
   }
 }
 
