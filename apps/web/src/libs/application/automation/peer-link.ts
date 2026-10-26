@@ -2,6 +2,8 @@ import { createUuid } from "../../domain/ids";
 import {
   AutomationError,
   failure,
+  withRecovery,
+  tools,
   parseCall,
   type ToolCall,
   type ToolResult,
@@ -49,6 +51,7 @@ export class AutomationPeerLink {
     string,
     {
       resolve(result: ToolResult): void;
+      readOnly: boolean;
       timer: ReturnType<typeof setTimeout>;
       abort(): void;
     }
@@ -199,8 +202,13 @@ export class AutomationPeerLink {
         clearTimeout(p.timer);
         p.abort();
         p.resolve(
-          packet.result ??
-            failure(new AutomationError("INVALID_RESULT")),
+          withRecovery(
+            packet.result ??
+              failure(
+                new AutomationError("INVALID_RESULT"),
+              ),
+            { readOnly: p.readOnly },
+          ),
         );
       }
       return;
@@ -218,14 +226,17 @@ export class AutomationPeerLink {
     }
     this.seen.add(packet.id);
     const call = packet.call;
-    parseCall(call);
+    const tool = parseCall(call);
     if (call.arguments.target !== "local")
       throw new Error("Forwarding prohibited");
     if (this.executing.size >= 4) {
       void this.send({
         kind: "result",
         id: packet.id,
-        result: failure(new AutomationError("BUSY")),
+        result: failure(new AutomationError("BUSY"), {
+          readOnly: tool.readOnly,
+          dispatched: false,
+        }),
       });
       return;
     }
@@ -237,13 +248,17 @@ export class AutomationPeerLink {
           this.send({
             kind: "result",
             id: packet.id,
-            result,
+            result: withRecovery(result, {
+              readOnly: tool.readOnly,
+            }),
           }),
         (error) =>
           this.send({
             kind: "result",
             id: packet.id,
-            result: failure(error),
+            result: failure(error, {
+              readOnly: tool.readOnly,
+            }),
           }),
       )
       .catch(() => this.close())
@@ -311,21 +326,31 @@ export class AutomationPeerLink {
     if (this.pending.size >= 4)
       throw new AutomationError("BUSY");
     const id = createUuid();
+    const readOnly =
+      tools.find((tool) => tool.name === call.name)
+        ?.readOnly === true;
     return new Promise((resolve) => {
-      const cancel = () => {
+      const finish = (code: "CANCELLED" | "TIMEOUT") => {
         const pending = this.pending.get(id);
         if (!pending) return;
         this.pending.delete(id);
         clearTimeout(pending.timer);
         pending.abort();
-        resolve(failure(new AutomationError("CANCELLED")));
+        resolve(
+          failure(new AutomationError(code), { readOnly }),
+        );
         void this.send({ kind: "cancel", id }).catch(
           () => {},
         );
       };
-      const timer = setTimeout(cancel, 270000);
+      const cancel = () => finish("CANCELLED");
+      const timer = setTimeout(
+        () => finish("TIMEOUT"),
+        270000,
+      );
       this.pending.set(id, {
         resolve,
+        readOnly,
         timer,
         abort: () =>
           signal.removeEventListener("abort", cancel),
@@ -354,7 +379,10 @@ export class AutomationPeerLink {
       clearTimeout(p.timer);
       p.abort();
       p.resolve(
-        failure(new AutomationError("TARGET_DISCONNECTED")),
+        failure(
+          new AutomationError("TARGET_DISCONNECTED"),
+          { readOnly: p.readOnly },
+        ),
       );
     }
     this.pending.clear();

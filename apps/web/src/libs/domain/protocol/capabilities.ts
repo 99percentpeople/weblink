@@ -25,17 +25,26 @@ export interface ControlCapability {
   occupancy: ControlOccupancy;
 }
 
+/** Optional fields extend automation/1 without assuming older peers implement them. */
+export interface AutomationCapability {
+  diagnostics?: boolean;
+  /** This recipient currently holds an input lease on the sender. */
+  controlActive?: boolean;
+  runtime?: "browser" | "desktop";
+  os?: string | null;
+  appVersion?: string | null;
+  /** Local OS automation switch, independent of MCP exposure and permission. */
+  automationEnabled?: boolean;
+  /** Implemented tools, not an authorization or a promise of current availability. */
+  supportedTools?: string[];
+}
+
 /** Negotiated descriptors for consumers. Only implemented entries are exposed. */
 export interface PeerCapabilities {
   identity?: { receiveContent: boolean };
   [service: string]: unknown;
   messaging?: Record<string, never>;
-  automation?: {
-    /** Diagnostic tools are available independently of automation switches. */
-    diagnostics?: boolean;
-    /** This recipient currently holds an automation input lease on the sender. */
-    controlActive?: boolean;
-  };
+  automation?: AutomationCapability;
   fileDrop?: { hover?: boolean; hoverUpdates?: boolean };
   files?: {
     content: boolean;
@@ -106,7 +115,29 @@ const validators: Record<
     (v.diagnostics === undefined ||
       typeof v.diagnostics === "boolean") &&
     (v.controlActive === undefined ||
-      typeof v.controlActive === "boolean"),
+      typeof v.controlActive === "boolean") &&
+    (v.runtime === undefined ||
+      v.runtime === "browser" ||
+      v.runtime === "desktop") &&
+    [v.os, v.appVersion].every(
+      (field) =>
+        field === undefined ||
+        field === null ||
+        (typeof field === "string" && field.length <= 128),
+    ) &&
+    (v.automationEnabled === undefined ||
+      typeof v.automationEnabled === "boolean") &&
+    (v.supportedTools === undefined ||
+      (Array.isArray(v.supportedTools) &&
+        v.supportedTools.length <= 128 &&
+        new Set(v.supportedTools).size ===
+          v.supportedTools.length &&
+        v.supportedTools.every(
+          (name) =>
+            typeof name === "string" &&
+            name.length > 0 &&
+            name.length <= 128,
+        ))),
   fileDrop: (v) =>
     record(v) &&
     (v.hover === undefined ||

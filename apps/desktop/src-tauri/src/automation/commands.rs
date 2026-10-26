@@ -413,7 +413,7 @@ pub async fn automation_finish(
         let _ = t.answer.send(if valid {
             result
         } else {
-            error("GRANT_EXPIRED")
+            errors::after_revocation(&t.call.name, &result)
         });
         Ok(())
     })

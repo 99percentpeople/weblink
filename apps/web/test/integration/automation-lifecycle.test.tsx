@@ -40,6 +40,7 @@ const fixture = vi.hoisted(() => ({
         signal: AbortSignal,
       ) => Promise<ToolResult>),
   advertise: vi.fn(),
+  discovery: vi.fn(),
   setController: vi.fn(),
   remoteCall:
     vi.fn<
@@ -57,10 +58,18 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock("@/libs/platform/runtime", () => ({
   platform: {
+    kind: "desktop",
     remoteControl: {
       configureShortcut: fixture.configureShortcut,
     },
-    getCapabilities: async () => ({ remoteInput: true }),
+    getCapabilities: async () => ({
+      runtime: "desktop",
+      os: "windows",
+      version: "1.2.3",
+      nativeScreenCapture: true,
+      displayRefreshRates: [60],
+      remoteInput: true,
+    }),
     get automation() {
       return fixture.native;
     },
@@ -82,7 +91,7 @@ vi.mock("@/libs/application/session-service", () => ({
     canReceive: () => fixture.receive,
     canShareScreen: () => true,
     setAutomationEnabled: fixture.advertise,
-    setDiagnosticsReady: vi.fn(),
+    setDiagnosticsReady: fixture.discovery,
     setAutomationController: fixture.setController,
   },
 }));
@@ -134,6 +143,47 @@ const mount = () => {
   });
   return { runtime, ...view };
 };
+it("announces the actual OS automation switch independently of the MCP controller switch", async () => {
+  const { runtime } = mount();
+  await waitFor(() => expect(runtime.ready()).toBe(true));
+  await runtime.configureMcp(true);
+  await waitFor(() =>
+    expect(fixture.discovery).toHaveBeenLastCalledWith(
+      true,
+      expect.objectContaining({
+        runtime: "desktop",
+        os: "windows",
+        appVersion: "1.2.3",
+        automationEnabled: false,
+      }),
+    ),
+  );
+  const tools =
+    fixture.discovery.mock.lastCall?.[1].supportedTools;
+  expect(tools).toContain("commands.run");
+  await runtime.configure(true);
+  await waitFor(() =>
+    expect(fixture.discovery).toHaveBeenLastCalledWith(
+      true,
+      expect.objectContaining({
+        automationEnabled: true,
+        supportedTools: tools,
+      }),
+    ),
+  );
+  await runtime.configure(false);
+  await waitFor(() =>
+    expect(fixture.discovery).toHaveBeenLastCalledWith(
+      true,
+      expect.objectContaining({
+        automationEnabled: false,
+        supportedTools: tools,
+      }),
+    ),
+  );
+  expect(fixture.native.decide).not.toHaveBeenCalled();
+});
+
 it.each(["mcp", "peer"] as const)(
   "observes native %s control and clears it on release or disable",
   async (kind) => {
@@ -505,10 +555,15 @@ it("aborts application work immediately on a native cancellation event", async (
     expect(fixture.native.finish).toHaveBeenCalledWith(
       "epoch",
       "active",
-      {
+      expect.objectContaining({
         ok: false,
-        error: { code: "CANCELLED", message: "CANCELLED" },
-      },
+        error: expect.objectContaining({
+          code: "CANCELLED",
+          outcome: "unknown",
+          retryable: false,
+          nextAction: "stop",
+        }),
+      }),
     ),
   );
 });
@@ -591,13 +646,15 @@ it.each([false, true])(
         expect(fixture.native.finish).toHaveBeenCalledWith(
           "epoch",
           "old",
-          {
+          expect.objectContaining({
             ok: false,
-            error: {
+            error: expect.objectContaining({
               code: "CANCELLED",
-              message: "CANCELLED",
-            },
-          },
+              outcome: "unknown",
+              retryable: false,
+              nextAction: "stop",
+            }),
+          }),
         );
       expect(signals.get("new")!.aborted).toBe(false);
       finish.get("new")!();
@@ -853,7 +910,17 @@ it.each([true, false])(
       expect(fixture.native.finish).toHaveBeenCalledWith(
         "epoch",
         "forwarded",
-        result,
+        allowed
+          ? result
+          : expect.objectContaining({
+              ok: false,
+              error: expect.objectContaining({
+                code: "PERMISSION_DENIED",
+                outcome: "not_applied",
+                retryable: false,
+                nextAction: "request_permission",
+              }),
+            }),
       ),
     );
     expect(fixture.native.check).toHaveBeenCalledWith(

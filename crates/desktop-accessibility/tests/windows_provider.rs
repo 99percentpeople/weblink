@@ -6,7 +6,9 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use weblink_desktop_accessibility::{Access, Action, Client, Error, Request};
+use weblink_desktop_accessibility::{
+    Access, Action, Client, Error, Observation, ReadOptions, Request,
+};
 
 struct Fixture {
     process: Child,
@@ -121,6 +123,10 @@ fn snapshot(client: &Client, fixture: &Fixture) -> Value {
                 element_id: root,
                 max_depth: 4,
                 max_nodes: 64,
+                options: ReadOptions {
+                    include_values: true,
+                    ..Default::default()
+                },
             },
             access(),
         )
@@ -158,22 +164,30 @@ fn real_uia_inspects_redacts_sets_value_and_invokes_only_owned_fixture() {
     assert_eq!(secret["actions"], serde_json::json!([]));
     let input = named(&tree, "Fixture input");
     let button = named(&tree, "Fixture save");
-    client
+    let applied = client
         .call(
             Request::Action {
                 element_id: input,
                 action: Action::SetValue,
                 value: Some("UIA 测试 ✓".into()),
+                observe_after: Some(Observation {
+                    include_values: true,
+                    ..Default::default()
+                }),
             },
             access(),
         )
         .unwrap();
+    assert_eq!(applied["applied"], true);
+    assert_eq!(applied["refreshRequired"], false);
+    assert_eq!(applied["observation"]["nodes"][0]["value"], "UIA 测试 ✓");
     assert_eq!(
         client.call(
             Request::Action {
                 element_id: button,
                 action: Action::Invoke,
-                value: None
+                value: None,
+                observe_after: None,
             },
             access()
         ),
@@ -186,6 +200,7 @@ fn real_uia_inspects_redacts_sets_value_and_invokes_only_owned_fixture() {
                 element_id: button,
                 action: Action::Invoke,
                 value: None,
+                observe_after: None,
             },
             access(),
         )

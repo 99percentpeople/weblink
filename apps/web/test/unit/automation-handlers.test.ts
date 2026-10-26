@@ -17,6 +17,10 @@ const fixture = vi.hoisted(() => ({
   sessions: {} as Record<string, unknown>,
   views: {} as Record<string, unknown>,
   options: {} as AppOption,
+  capabilities: {} as Record<
+    string,
+    import("@/libs/domain/protocol/capabilities").PeerCapabilities
+  >,
   setState: vi.fn(),
 }));
 vi.mock("@/libs/application/session-service", () => ({
@@ -26,6 +30,10 @@ vi.mock("@/libs/application/session-service", () => ({
     },
     get clientViewData() {
       return fixture.views;
+    },
+    capabilities: {
+      get: (session: { targetClientId: string }) =>
+        fixture.capabilities[session.targetClientId],
     },
   },
 }));
@@ -50,8 +58,94 @@ afterEach(() => {
   vi.resetAllMocks();
   fixture.sessions = {};
   fixture.views = {};
+  fixture.capabilities = {};
   fixture.options = {} as AppOption;
 });
+it("discovers runtime and real automation transport without invoking or granting remote tools", async () => {
+  fixture.sessions = {
+    browser: {
+      targetClientId: "browser",
+      peerConnection: { connectionState: "connected" },
+    },
+    legacy: {
+      targetClientId: "legacy",
+      peerConnection: { connectionState: "connected" },
+    },
+  };
+  fixture.capabilities = {
+    browser: {
+      automation: {
+        diagnostics: true,
+        runtime: "browser",
+        os: "browser",
+        appVersion: "1.2.3",
+        automationEnabled: false,
+        supportedTools: ["diagnostics.snapshot"],
+      },
+    },
+    legacy: { automation: {} },
+  };
+  const native = vi.fn();
+  const run = automationHandlers(
+    {} as AppStateContextProps,
+    { kind: "desktop" } as PlatformRuntime,
+    {} as AutomationDiagnostics,
+    {
+      local: () => ({
+        runtime: "desktop",
+        os: "windows",
+        appVersion: "1.2.3",
+        automationEnabled: false,
+        supportedTools: ["commands.run"],
+      }),
+      connection: (id) =>
+        id === "browser" ? "connected" : "connecting",
+    },
+  );
+  const result = await run(
+    {
+      name: "devices.list",
+      arguments: { target: "local" },
+    },
+    new AbortController().signal,
+    native,
+  );
+  expect(result).toMatchObject({
+    devices: [
+      {
+        id: "local",
+        runtime: "desktop",
+        automationEnabled: false,
+        supportedTools: ["commands.run"],
+        disabledReason: "automation_disabled",
+        automationConnection: "local",
+        permissionsVerified: false,
+      },
+      {
+        id: "browser",
+        automation: true,
+        connection: "connected",
+        runtime: "browser",
+        disabledReason: "browser_runtime",
+        automationConnection: "connected",
+        permissionsVerified: false,
+      },
+      {
+        id: "legacy",
+        automation: true,
+        connection: "connected",
+        runtime: null,
+        supportedTools: null,
+        automationConnection: "connecting",
+        disabledReason: "capabilities_unavailable",
+        permissionsVerified: false,
+      },
+    ],
+  });
+  expect(native).not.toHaveBeenCalled();
+  expect(fixture.setState).not.toHaveBeenCalled();
+});
+
 it("routes saved video preferences through the app store without native action or capture", async () => {
   fixture.options = getDefaultAppOptions();
   fixture.setState.mockImplementation((_key, patch) => {

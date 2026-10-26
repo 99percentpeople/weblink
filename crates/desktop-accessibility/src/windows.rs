@@ -191,61 +191,139 @@ impl Backend for Windows {
         }
         self.enumerate(&element.raw, Some(&element.root), limit, check)
     }
-    fn inspect(&mut self, element: &Element, check: &Check) -> Result<ElementInfo> {
+    fn inspect(
+        &mut self,
+        element: &Element,
+        options: &ReadOptions,
+        check: &Check,
+    ) -> Result<ElementInfo> {
         self.allowed(element, check)?;
         unsafe {
             let raw = &element.raw;
-            // Fail closed: do not even request names or patterns until protection is known.
-            let protected = raw.CurrentIsPassword().map_err(mapped)?.as_bool();
+            // Do not request names, patterns or content from protected controls.
+            let mut protected = raw.CurrentIsPassword().map_err(mapped)?.as_bool();
             let enabled = raw.CurrentIsEnabled().map_err(mapped)?.as_bool();
             let mut actions = vec![];
-            if !protected && enabled {
-                if raw.CurrentIsKeyboardFocusable().map_err(mapped)?.as_bool() {
+            let mut state = ElementState::default();
+            if !protected {
+                check()?;
+                if enabled && raw.CurrentIsKeyboardFocusable().map_err(mapped)?.as_bool() {
                     actions.push(Action::Focus);
                 }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
-                    .is_ok()
+                if enabled
+                    && raw
+                        .GetCurrentPatternAs::<IUIAutomationInvokePattern>(UIA_InvokePatternId)
+                        .is_ok()
                 {
                     actions.push(Action::Invoke);
                 }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
-                    .is_ok_and(|p| p.CurrentIsReadOnly().is_ok_and(|v| !v.as_bool()))
+                check()?;
+                if let Ok(pattern) =
+                    raw.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId)
                 {
-                    actions.push(Action::SetValue);
+                    let read_only = pattern.CurrentIsReadOnly().map_err(mapped)?.as_bool();
+                    state.read_only = Some(read_only);
+                    if enabled && !read_only {
+                        actions.push(Action::SetValue);
+                    }
+                    if options.include_values {
+                        check()?;
+                        // Recheck immediately before content access; applications may change protection.
+                        protected |= raw.CurrentIsPassword().map_err(mapped)?.as_bool();
+                        if !protected {
+                            state.value = Some(pattern.CurrentValue().map_err(mapped)?.to_string());
+                        }
+                    }
                 }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
-                    .is_ok()
-                {
-                    actions.push(Action::Toggle);
-                }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
-                        UIA_SelectionItemPatternId,
-                    )
-                    .is_ok()
-                {
-                    actions.push(Action::Select);
-                }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationExpandCollapsePattern>(
-                        UIA_ExpandCollapsePatternId,
-                    )
-                    .is_ok()
-                {
-                    actions.extend([Action::Expand, Action::Collapse]);
-                }
-                if raw
-                    .GetCurrentPatternAs::<IUIAutomationScrollItemPattern>(UIA_ScrollItemPatternId)
-                    .is_ok()
-                {
-                    actions.push(Action::ScrollIntoView);
+                check()?;
+                if !protected {
+                    if let Ok(pattern) =
+                        raw.GetCurrentPatternAs::<IUIAutomationTogglePattern>(UIA_TogglePatternId)
+                    {
+                        state.toggle_state =
+                            Some(match pattern.CurrentToggleState().map_err(mapped)? {
+                                state if state == ToggleState_On => crate::ToggleState::On,
+                                state if state == ToggleState_Off => crate::ToggleState::Off,
+                                _ => crate::ToggleState::Indeterminate,
+                            });
+                        if enabled {
+                            actions.push(Action::Toggle);
+                        }
+                    }
+                    check()?;
+                    if let Ok(pattern) = raw
+                        .GetCurrentPatternAs::<IUIAutomationSelectionItemPattern>(
+                            UIA_SelectionItemPatternId,
+                        )
+                    {
+                        state.selected =
+                            Some(pattern.CurrentIsSelected().map_err(mapped)?.as_bool());
+                        if enabled {
+                            actions.push(Action::Select);
+                        }
+                    }
+                    check()?;
+                    if let Ok(pattern) = raw
+                        .GetCurrentPatternAs::<IUIAutomationExpandCollapsePattern>(
+                            UIA_ExpandCollapsePatternId,
+                        )
+                    {
+                        let expanded = match pattern.CurrentExpandCollapseState().map_err(mapped)? {
+                            state if state == ExpandCollapseState_Collapsed => {
+                                crate::ExpandCollapseState::Collapsed
+                            }
+                            state if state == ExpandCollapseState_Expanded => {
+                                crate::ExpandCollapseState::Expanded
+                            }
+                            state if state == ExpandCollapseState_PartiallyExpanded => {
+                                crate::ExpandCollapseState::PartiallyExpanded
+                            }
+                            _ => crate::ExpandCollapseState::LeafNode,
+                        };
+                        state.expand_collapse_state = Some(expanded);
+                        if enabled && expanded != crate::ExpandCollapseState::LeafNode {
+                            actions.extend([Action::Expand, Action::Collapse]);
+                        }
+                    }
+                    check()?;
+                    if enabled
+                        && raw
+                            .GetCurrentPatternAs::<IUIAutomationScrollItemPattern>(
+                                UIA_ScrollItemPatternId,
+                            )
+                            .is_ok()
+                    {
+                        actions.push(Action::ScrollIntoView);
+                    }
+                    if options.include_values {
+                        check()?;
+                        protected |= raw.CurrentIsPassword().map_err(mapped)?.as_bool();
+                        if !protected {
+                            if let Ok(pattern) = raw
+                                .GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId)
+                            {
+                                let range = pattern.DocumentRange().map_err(mapped)?;
+                                check()?;
+                                protected |= raw.CurrentIsPassword().map_err(mapped)?.as_bool();
+                                if !protected {
+                                    // UIA providers may count UTF-16 code units. Reserve two units
+                                    // per Unicode scalar plus a sentinel before Unicode-safe truncation.
+                                    state.text = Some(
+                                        range
+                                            .GetText((options.max_text_length * 2 + 2) as i32)
+                                            .map_err(mapped)?
+                                            .to_string(),
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            check()?;
+            protected |= raw.CurrentIsPassword().map_err(mapped)?.as_bool();
             let rect = raw.CurrentBoundingRectangle().map_err(mapped)?;
-            Ok(ElementInfo {
+            let mut info = ElementInfo {
                 role: role(raw.CurrentControlType().map_err(mapped)?),
                 name: if protected {
                     String::new()
@@ -269,7 +347,11 @@ impl Backend for Windows {
                 offscreen: raw.CurrentIsOffscreen().map_err(mapped)?.as_bool(),
                 protected,
                 actions,
-            })
+                state,
+            };
+            info.sanitize(options);
+            check()?;
+            Ok(info)
         }
     }
     fn perform(

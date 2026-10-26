@@ -51,6 +51,8 @@ export interface AccessibilityNode {
   depth: number;
   role: AccessibilityRole;
   name: string;
+  /** True means name is only a prefix and cannot satisfy exact-name wait conditions. */
+  nameTruncated?: boolean;
   automationId: string;
   processId: number;
   /** Physical desktop pixels, potentially negative on secondary monitors. */
@@ -65,6 +67,19 @@ export interface AccessibilityNode {
   offscreen: boolean;
   protected: boolean;
   actions: AccessibilityAction[];
+  toggleState?: "on" | "off" | "indeterminate";
+  selected?: boolean;
+  expandCollapseState?:
+    | "collapsed"
+    | "expanded"
+    | "partiallyExpanded"
+    | "leafNode";
+  readOnly?: boolean;
+  /** Opt-in bounded content; never present for protected controls. */
+  value?: string;
+  text?: string;
+  valueTruncated?: boolean;
+  textTruncated?: boolean;
 }
 export interface AccessibilityCapabilities {
   supported: boolean;
@@ -74,6 +89,9 @@ export interface AccessibilityCapabilities {
   maxDepth?: number;
   referenceTtlMs?: number;
   coordinateSpace?: "desktopPhysicalPixels";
+  maxTextLength?: number;
+  supportsWait?: boolean;
+  supportsObservation?: boolean;
 }
 export interface AccessibilityWindows {
   coordinateSpace: "desktopPhysicalPixels";
@@ -89,6 +107,7 @@ export interface AccessibilitySnapshot {
 }
 export type AccessibilityActionRequest = {
   elementId: string;
+  observeAfter?: AccessibilityObservationOptions;
 } & (
   | { action: "setValue"; value: string }
   | {
@@ -98,5 +117,39 @@ export type AccessibilityActionRequest = {
 );
 export interface AccessibilityActionResult {
   applied: true;
-  refreshRequired: true;
+  /** Previous references always expire. False means observation supplies fresh references. */
+  refreshRequired: boolean;
+  observation?: AccessibilitySnapshot;
+  observationError?: { code: string; message: string };
+}
+
+export interface AccessibilityReadOptions {
+  includeValues?: boolean;
+  /** Unicode characters per value/text field; default 1024, maximum 4096. */
+  maxTextLength?: number;
+}
+export interface AccessibilityObservationOptions extends AccessibilityReadOptions {
+  /** Omit to observe the same native element as the action; resolved before acting. */
+  elementId?: string;
+  maxDepth?: number;
+  maxNodes?: number;
+}
+export interface AccessibilityWaitCondition {
+  enabled?: boolean;
+  focused?: boolean;
+  offscreen?: boolean;
+  selected?: boolean;
+  toggleState?: AccessibilityNode["toggleState"];
+  expandCollapseState?: AccessibilityNode["expandCollapseState"];
+  value?: string;
+  /** Searches at most the first 4096 Unicode characters. */
+  textContains?: string;
+  name?: string;
+}
+export interface AccessibilityWaitResult {
+  matched: boolean;
+  timedOut: boolean;
+  elapsedMs: number;
+  /** Fresh reference when matched; null on timeout, never a cached unvalidated node. */
+  node: AccessibilityNode | null;
 }

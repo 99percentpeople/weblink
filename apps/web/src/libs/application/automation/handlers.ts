@@ -22,10 +22,16 @@ import {
   getNativeCaptureStatus,
 } from "../native-screen-service";
 import type { AutomationDiagnostics } from "./diagnostics";
+import {
+  automationDeviceDiscovery,
+  localAutomationCapability,
+  type DeviceDiscoverySource,
+} from "./device-discovery";
 export function automationHandlers(
   state: AppStateContextProps,
   platform: PlatformRuntime,
   diagnostics: AutomationDiagnostics,
+  discovery?: DeviceDiscoverySource,
 ) {
   const screenSettings = createScreenSettings({
     platform,
@@ -80,19 +86,41 @@ export function automationHandlers(
       case "devices.list":
         return {
           devices: [
-            { id: "local", runtime: platform.kind },
+            {
+              id: "local",
+              ...automationDeviceDiscovery(
+                discovery?.local() ??
+                  localAutomationCapability(
+                    platform,
+                    undefined,
+                    false,
+                    true,
+                  ),
+                "local",
+              ),
+            },
             ...Object.values(sessionService.sessions).map(
-              (s) => ({
-                id: s.targetClientId,
-                name: sessionService.clientViewData[
-                  s.targetClientId
-                ]?.name,
-                automation:
-                  !!sessionService.capabilities.get(s)
-                    ?.automation,
-                connection:
-                  s.peerConnection?.connectionState,
-              }),
+              (s) => {
+                const capability =
+                  sessionService.capabilities.get(
+                    s,
+                  )?.automation;
+                return {
+                  id: s.targetClientId,
+                  name: sessionService.clientViewData[
+                    s.targetClientId
+                  ]?.name,
+                  automation: !!capability,
+                  connection:
+                    s.peerConnection?.connectionState,
+                  ...automationDeviceDiscovery(
+                    capability,
+                    discovery?.connection(
+                      s.targetClientId,
+                    ) ?? "unknown",
+                  ),
+                };
+              },
             ),
           ],
         };

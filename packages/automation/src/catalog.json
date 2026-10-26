@@ -1,7 +1,7 @@
 [
   {
     "name": "devices.list",
-    "description": "List this device and directly connected devices. Use target=\"local\".",
+    "description": "List this device and directly connected devices with runtime, version, implemented tools, automation switch and actual automation-channel state. Use target=\"local\". Discovery does not verify or grant permissions; missing legacy capabilities are null.",
     "scope": "diagnostics.read",
     "native": false,
     "readOnly": true,
@@ -18,7 +18,150 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "devices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "runtime": {
+                        "type": ["string", "null"],
+                        "enum": ["browser", "desktop", null]
+                      },
+                      "automation": {
+                        "type": "boolean"
+                      },
+                      "connection": {
+                        "type": "string"
+                      },
+                      "os": {
+                        "type": ["string", "null"]
+                      },
+                      "appVersion": {
+                        "type": ["string", "null"]
+                      },
+                      "automationEnabled": {
+                        "type": ["boolean", "null"]
+                      },
+                      "automationConnection": {
+                        "type": "string",
+                        "enum": [
+                          "local",
+                          "connected",
+                          "connecting",
+                          "disconnected",
+                          "unknown"
+                        ]
+                      },
+                      "supportedTools": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        },
+                        "uniqueItems": true,
+                        "description": "Implemented tool names, independent of the current automation switch and caller permissions. Null means unknown."
+                      },
+                      "disabledReason": {
+                        "type": ["string", "null"],
+                        "enum": [
+                          "browser_runtime",
+                          "automation_disabled",
+                          "capabilities_unavailable",
+                          null
+                        ]
+                      },
+                      "permissionsVerified": {
+                        "type": "boolean",
+                        "enum": [false]
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": ["devices"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -40,7 +183,166 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "localTracks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "state": {
+                        "type": "string"
+                      },
+                      "sourceId": {
+                        "type": "string"
+                      },
+                      "settings": {
+                        "type": "object",
+                        "properties": {
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "frameRate": {
+                            "type": ["number", "null"]
+                          },
+                          "aspectRatio": {
+                            "type": "number"
+                          },
+                          "deviceId": {
+                            "type": "string"
+                          },
+                          "resizeMode": {
+                            "type": "string"
+                          },
+                          "displaySurface": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": ["id", "state", "settings"],
+                    "additionalProperties": true
+                  }
+                },
+                "peers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "connection": {
+                        "type": "string"
+                      },
+                      "ice": {
+                        "type": "string"
+                      },
+                      "streams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "error": {
+                              "type": ["string", "null"]
+                            }
+                          },
+                          "required": ["id", "error"],
+                          "additionalProperties": true
+                        }
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": ["localTracks", "peers"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -62,7 +364,195 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": ["monitor", "window"]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "integer"
+                      },
+                      "height": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "name",
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "geometryRevision": {
+                  "type": "string"
+                },
+                "virtualBounds": {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "top",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": true
+                },
+                "displays": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sourceId": {
+                        "type": "string"
+                      },
+                      "bounds": {
+                        "type": "object",
+                        "properties": {
+                          "left": {
+                            "type": "integer"
+                          },
+                          "top": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "left",
+                          "top",
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "rotation": {
+                        "type": "number"
+                      },
+                      "scalePercent": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "sourceId",
+                      "bounds",
+                      "rotation",
+                      "scalePercent"
+                    ],
+                    "additionalProperties": true
+                  }
+                }
+              },
+              "required": ["sources"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -89,7 +579,90 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "trackId": {
+                  "type": "string"
+                },
+                "sourceId": {
+                  "type": "string"
+                }
+              },
+              "required": ["trackId", "sourceId"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -116,7 +689,88 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "stopped": {
+                  "type": "boolean",
+                  "enum": [true]
+                }
+              },
+              "required": ["stopped"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -170,7 +824,116 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "settings": {
+                  "type": "object",
+                  "properties": {
+                    "maxWidth": {
+                      "type": "number"
+                    },
+                    "maxHeight": {
+                      "type": "number"
+                    },
+                    "frameRate": {
+                      "type": "number"
+                    },
+                    "maxBitrate": {
+                      "type": "number"
+                    },
+                    "degradationPreference": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "maxWidth",
+                    "maxHeight",
+                    "frameRate",
+                    "maxBitrate",
+                    "degradationPreference"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": ["applied", "settings"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -191,7 +954,271 @@
       "required": ["target"],
       "additionalProperties": false
     },
-    "outputSchema": { "type": "object" }
+    "outputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "settings": {
+                  "type": "object",
+                  "properties": {
+                    "resolution": {
+                      "type": "string",
+                      "enum": [
+                        "480p",
+                        "720p",
+                        "1080p",
+                        "1440p",
+                        "2160p"
+                      ]
+                    },
+                    "frameRate": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "maxBitrate": {
+                      "type": "integer",
+                      "minimum": 131072,
+                      "maximum": 157286400,
+                      "description": "Bits per second."
+                    },
+                    "degradationPreference": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "maintain-framerate",
+                        "maintain-resolution"
+                      ]
+                    },
+                    "encoder": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "codec": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "video/h264",
+                        "video/h265",
+                        "video/vp8",
+                        "video/vp9",
+                        "video/av1"
+                      ]
+                    },
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "quality",
+                        "latency"
+                      ]
+                    },
+                    "readbackBuffers": {
+                      "type": "integer",
+                      "enum": [1, 2, 3]
+                    },
+                    "colorMatrix": {
+                      "type": "string",
+                      "enum": ["auto", "bt601", "bt709"]
+                    },
+                    "colorRange": {
+                      "type": "string",
+                      "enum": ["limited", "full"]
+                    },
+                    "screenCaptureBackend": {
+                      "type": "string",
+                      "enum": ["auto", "wgc", "dxgi"]
+                    },
+                    "windowCaptureBackend": {
+                      "type": "string",
+                      "enum": ["wgc", "dxgi"]
+                    }
+                  },
+                  "required": [
+                    "encoder",
+                    "codec",
+                    "preset",
+                    "frameRate",
+                    "maxBitrate"
+                  ],
+                  "additionalProperties": true
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "encoders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "hardware": {
+                            "type": "boolean"
+                          },
+                          "codecs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "presets": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "hardware",
+                          "codecs",
+                          "presets"
+                        ],
+                        "additionalProperties": true
+                      }
+                    },
+                    "autoPresets": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "captureBackends": {
+                      "type": "object",
+                      "properties": {
+                        "screen": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "window": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": ["screen", "window"],
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "encoders",
+                    "autoPresets",
+                    "captureBackends"
+                  ],
+                  "additionalProperties": true
+                },
+                "application": {
+                  "type": "object",
+                  "properties": {
+                    "liveUpdateRequested": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "nextShare": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "liveUpdateRequested",
+                    "nextShare"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "settings",
+                "capabilities",
+                "application"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
   },
   {
     "name": "screen.settings.update",
@@ -286,7 +1313,289 @@
       "required": ["target", "patch"],
       "additionalProperties": false
     },
-    "outputSchema": { "type": "object" }
+    "outputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "updated": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "previous": {
+                  "type": "object",
+                  "properties": {
+                    "resolution": {
+                      "type": "string",
+                      "enum": [
+                        "480p",
+                        "720p",
+                        "1080p",
+                        "1440p",
+                        "2160p"
+                      ]
+                    },
+                    "frameRate": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "maxBitrate": {
+                      "type": "integer",
+                      "minimum": 131072,
+                      "maximum": 157286400,
+                      "description": "Bits per second."
+                    },
+                    "degradationPreference": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "maintain-framerate",
+                        "maintain-resolution"
+                      ]
+                    },
+                    "encoder": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "codec": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "video/h264",
+                        "video/h265",
+                        "video/vp8",
+                        "video/vp9",
+                        "video/av1"
+                      ]
+                    },
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "quality",
+                        "latency"
+                      ]
+                    },
+                    "readbackBuffers": {
+                      "type": "integer",
+                      "enum": [1, 2, 3]
+                    },
+                    "colorMatrix": {
+                      "type": "string",
+                      "enum": ["auto", "bt601", "bt709"]
+                    },
+                    "colorRange": {
+                      "type": "string",
+                      "enum": ["limited", "full"]
+                    },
+                    "screenCaptureBackend": {
+                      "type": "string",
+                      "enum": ["auto", "wgc", "dxgi"]
+                    },
+                    "windowCaptureBackend": {
+                      "type": "string",
+                      "enum": ["wgc", "dxgi"]
+                    }
+                  },
+                  "required": [
+                    "encoder",
+                    "codec",
+                    "preset",
+                    "frameRate",
+                    "maxBitrate"
+                  ],
+                  "additionalProperties": true
+                },
+                "settings": {
+                  "type": "object",
+                  "properties": {
+                    "resolution": {
+                      "type": "string",
+                      "enum": [
+                        "480p",
+                        "720p",
+                        "1080p",
+                        "1440p",
+                        "2160p"
+                      ]
+                    },
+                    "frameRate": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "maxBitrate": {
+                      "type": "integer",
+                      "minimum": 131072,
+                      "maximum": 157286400,
+                      "description": "Bits per second."
+                    },
+                    "degradationPreference": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "maintain-framerate",
+                        "maintain-resolution"
+                      ]
+                    },
+                    "encoder": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "codec": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "video/h264",
+                        "video/h265",
+                        "video/vp8",
+                        "video/vp9",
+                        "video/av1"
+                      ]
+                    },
+                    "preset": {
+                      "type": "string",
+                      "enum": [
+                        "balanced",
+                        "quality",
+                        "latency"
+                      ]
+                    },
+                    "readbackBuffers": {
+                      "type": "integer",
+                      "enum": [1, 2, 3]
+                    },
+                    "colorMatrix": {
+                      "type": "string",
+                      "enum": ["auto", "bt601", "bt709"]
+                    },
+                    "colorRange": {
+                      "type": "string",
+                      "enum": ["limited", "full"]
+                    },
+                    "screenCaptureBackend": {
+                      "type": "string",
+                      "enum": ["auto", "wgc", "dxgi"]
+                    },
+                    "windowCaptureBackend": {
+                      "type": "string",
+                      "enum": ["wgc", "dxgi"]
+                    }
+                  },
+                  "required": [
+                    "encoder",
+                    "codec",
+                    "preset",
+                    "frameRate",
+                    "maxBitrate"
+                  ],
+                  "additionalProperties": true
+                },
+                "application": {
+                  "type": "object",
+                  "properties": {
+                    "liveUpdateRequested": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "nextShare": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "liveUpdateRequested",
+                    "nextShare"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "updated",
+                "previous",
+                "settings",
+                "application"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
   },
   {
     "name": "control.acquire",
@@ -312,7 +1621,156 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "sourceId": {
+                  "type": "string"
+                },
+                "geometryRevision": {
+                  "type": "string"
+                },
+                "bounds": {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "top",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": true
+                },
+                "virtualBounds": {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "top",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": true
+                },
+                "acquired": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "reused": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "coordinateSpace",
+                "sourceId",
+                "geometryRevision",
+                "bounds",
+                "acquired",
+                "reused"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -339,7 +1797,99 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "bound": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "windowId": {
+                  "type": "string"
+                },
+                "focusPolicy": {
+                  "type": "string",
+                  "enum": ["stopOnBlur"]
+                }
+              },
+              "required": [
+                "bound",
+                "windowId",
+                "focusPolicy"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -361,7 +1911,88 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "released": {
+                  "type": "boolean",
+                  "enum": [true]
+                }
+              },
+              "required": ["released"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -429,7 +2060,185 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "sourceId": {
+                  "type": "string"
+                },
+                "geometryRevision": {
+                  "type": "string"
+                },
+                "bounds": {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "top",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": true
+                },
+                "virtualBounds": {
+                  "type": "object",
+                  "properties": {
+                    "left": {
+                      "type": "integer"
+                    },
+                    "top": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer"
+                    },
+                    "height": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "left",
+                    "top",
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": true
+                },
+                "mimeType": {
+                  "type": "string",
+                  "enum": ["image/png"]
+                },
+                "imageWidth": {
+                  "type": "integer"
+                },
+                "imageHeight": {
+                  "type": "integer"
+                },
+                "imageToDesktop": {
+                  "type": "object",
+                  "properties": {
+                    "scaleX": {
+                      "type": "number"
+                    },
+                    "scaleY": {
+                      "type": "number"
+                    },
+                    "offsetX": {
+                      "type": "number"
+                    },
+                    "offsetY": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "scaleX",
+                    "scaleY",
+                    "offsetX",
+                    "offsetY"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "coordinateSpace",
+                "sourceId",
+                "geometryRevision",
+                "bounds",
+                "mimeType",
+                "imageWidth",
+                "imageHeight",
+                "imageToDesktop"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -919,7 +2728,94 @@
       ]
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "events": {
+                  "type": "integer"
+                },
+                "durationMs": {
+                  "type": "number"
+                }
+              },
+              "required": ["applied"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1592,7 +3488,94 @@
       ]
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "events": {
+                  "type": "integer"
+                },
+                "durationMs": {
+                  "type": "number"
+                }
+              },
+              "required": ["applied"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1624,12 +3607,99 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "events": {
+                  "type": "integer"
+                },
+                "durationMs": {
+                  "type": "number"
+                }
+              },
+              "required": ["applied"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
     "name": "accessibility.capabilities",
-    "description": "Read desktop accessibility backend availability, supported semantic actions and limits.",
+    "description": "Read desktop accessibility backend availability, supported semantic actions, bounded state/value inspection and limits. Capability discovery does not grant permission.",
     "scope": "diagnostics.read",
     "native": true,
     "readOnly": true,
@@ -1646,7 +3716,124 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "supported": {
+                  "type": "boolean"
+                },
+                "backend": {
+                  "type": ["string", "null"]
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "maxDepth": {
+                  "type": "integer"
+                },
+                "maxNodes": {
+                  "type": "integer"
+                },
+                "referenceTtlMs": {
+                  "type": "integer"
+                },
+                "maxTextLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "supportsWait": {
+                  "type": "boolean"
+                },
+                "supportsObservation": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "supported",
+                "backend",
+                "actions"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1673,12 +3860,233 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "windows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "elementId": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": ["string", "null"]
+                      },
+                      "depth": {
+                        "type": "integer"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "automationId": {
+                        "type": "string"
+                      },
+                      "processId": {
+                        "type": "integer"
+                      },
+                      "bounds": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "focused": {
+                        "type": "boolean"
+                      },
+                      "offscreen": {
+                        "type": "boolean"
+                      },
+                      "protected": {
+                        "type": "boolean"
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "toggleState": {
+                        "type": "string",
+                        "enum": [
+                          "on",
+                          "off",
+                          "indeterminate"
+                        ]
+                      },
+                      "selected": {
+                        "type": "boolean"
+                      },
+                      "expandCollapseState": {
+                        "type": "string",
+                        "enum": [
+                          "collapsed",
+                          "expanded",
+                          "partiallyExpanded",
+                          "leafNode"
+                        ]
+                      },
+                      "readOnly": {
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "valueTruncated": {
+                        "type": "boolean"
+                      },
+                      "textTruncated": {
+                        "type": "boolean"
+                      },
+                      "nameTruncated": {
+                        "type": "boolean",
+                        "description": "Present and true when name was truncated; truncated names never satisfy exact-name wait conditions."
+                      }
+                    },
+                    "required": [
+                      "elementId",
+                      "parentId",
+                      "depth",
+                      "role",
+                      "name",
+                      "automationId",
+                      "processId",
+                      "bounds",
+                      "enabled",
+                      "focused",
+                      "offscreen",
+                      "protected",
+                      "actions"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "maxItems": 128
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "referenceTtlMs": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "coordinateSpace",
+                "windows",
+                "truncated",
+                "referenceTtlMs"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
     "name": "accessibility.snapshot",
-    "description": "Read a bounded, flat accessibility subtree from an elementId. Names may contain sensitive UI text; password controls are redacted. truncated means more nodes exist.",
+    "description": "Read a bounded, flat accessibility subtree from an elementId, including supported toggle/selection/expansion states. includeValues=true opts into bounded Value/Text pattern content; maxTextLength defaults to 1024 and is capped at 4096 characters per value/text. Password controls remain redacted. truncated means more nodes exist.",
     "scope": "accessibility.read",
     "native": true,
     "readOnly": true,
@@ -1704,18 +4112,247 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 256
+        },
+        "includeValues": {
+          "type": "boolean"
+        },
+        "maxTextLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
         }
       },
       "required": ["target", "elementId"],
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "coordinateSpace": {
+                  "type": "string",
+                  "enum": ["desktopPhysicalPixels"]
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "elementId": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": ["string", "null"]
+                      },
+                      "depth": {
+                        "type": "integer"
+                      },
+                      "role": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "automationId": {
+                        "type": "string"
+                      },
+                      "processId": {
+                        "type": "integer"
+                      },
+                      "bounds": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer"
+                          },
+                          "height": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "focused": {
+                        "type": "boolean"
+                      },
+                      "offscreen": {
+                        "type": "boolean"
+                      },
+                      "protected": {
+                        "type": "boolean"
+                      },
+                      "actions": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "toggleState": {
+                        "type": "string",
+                        "enum": [
+                          "on",
+                          "off",
+                          "indeterminate"
+                        ]
+                      },
+                      "selected": {
+                        "type": "boolean"
+                      },
+                      "expandCollapseState": {
+                        "type": "string",
+                        "enum": [
+                          "collapsed",
+                          "expanded",
+                          "partiallyExpanded",
+                          "leafNode"
+                        ]
+                      },
+                      "readOnly": {
+                        "type": "boolean"
+                      },
+                      "value": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "text": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "valueTruncated": {
+                        "type": "boolean"
+                      },
+                      "textTruncated": {
+                        "type": "boolean"
+                      },
+                      "nameTruncated": {
+                        "type": "boolean",
+                        "description": "Present and true when name was truncated; truncated names never satisfy exact-name wait conditions."
+                      }
+                    },
+                    "required": [
+                      "elementId",
+                      "parentId",
+                      "depth",
+                      "role",
+                      "name",
+                      "automationId",
+                      "processId",
+                      "bounds",
+                      "enabled",
+                      "focused",
+                      "offscreen",
+                      "protected",
+                      "actions"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "maxItems": 256
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "referenceTtlMs": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "coordinateSpace",
+                "nodes",
+                "truncated",
+                "referenceTtlMs"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
     "name": "accessibility.action",
-    "description": "Perform a supported semantic action on an elementId. Requires control.acquire and its active exclusive input lease. setValue requires value (empty clears); other actions forbid value. This can operate any application and is not limited to the acquired monitor. All caller element references expire after an action attempt; refresh windows/snapshot before further actions. No keyboard fallback.",
+    "description": "Perform a supported semantic action on an elementId. Requires control.acquire and its active exclusive input lease. setValue requires value (empty clears); other actions forbid value. All prior caller references expire after dispatch. Optional observeAfter returns fresh references from its elementId (defaults to the acted element), using valid independent accessibility.read permission. A successful observation sets refreshRequired=false; otherwise refreshRequired=true. An applied action followed by a failed observation returns applied=true with observationError; do not repeat the action to recover an observation. No keyboard fallback.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -1748,13 +4385,620 @@
         "value": {
           "type": "string",
           "maxLength": 4096
+        },
+        "observeAfter": {
+          "type": "object",
+          "properties": {
+            "elementId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxDepth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "maxNodes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "includeValues": {
+              "type": "boolean"
+            },
+            "maxTextLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            }
+          },
+          "required": [],
+          "additionalProperties": false
         }
       },
       "required": ["target", "elementId", "action"],
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "refreshRequired": {
+                  "type": "boolean"
+                },
+                "observation": {
+                  "type": "object",
+                  "properties": {
+                    "coordinateSpace": {
+                      "type": "string",
+                      "enum": ["desktopPhysicalPixels"]
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "elementId": {
+                            "type": "string"
+                          },
+                          "parentId": {
+                            "type": ["string", "null"]
+                          },
+                          "depth": {
+                            "type": "integer"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "automationId": {
+                            "type": "string"
+                          },
+                          "processId": {
+                            "type": "integer"
+                          },
+                          "bounds": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "width": {
+                                "type": "integer"
+                              },
+                              "height": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "x",
+                              "y",
+                              "width",
+                              "height"
+                            ],
+                            "additionalProperties": true
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "focused": {
+                            "type": "boolean"
+                          },
+                          "offscreen": {
+                            "type": "boolean"
+                          },
+                          "protected": {
+                            "type": "boolean"
+                          },
+                          "actions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "toggleState": {
+                            "type": "string",
+                            "enum": [
+                              "on",
+                              "off",
+                              "indeterminate"
+                            ]
+                          },
+                          "selected": {
+                            "type": "boolean"
+                          },
+                          "expandCollapseState": {
+                            "type": "string",
+                            "enum": [
+                              "collapsed",
+                              "expanded",
+                              "partiallyExpanded",
+                              "leafNode"
+                            ]
+                          },
+                          "readOnly": {
+                            "type": "boolean"
+                          },
+                          "value": {
+                            "type": "string",
+                            "maxLength": 4096
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxLength": 4096
+                          },
+                          "valueTruncated": {
+                            "type": "boolean"
+                          },
+                          "textTruncated": {
+                            "type": "boolean"
+                          },
+                          "nameTruncated": {
+                            "type": "boolean",
+                            "description": "Present and true when name was truncated; truncated names never satisfy exact-name wait conditions."
+                          }
+                        },
+                        "required": [
+                          "elementId",
+                          "parentId",
+                          "depth",
+                          "role",
+                          "name",
+                          "automationId",
+                          "processId",
+                          "bounds",
+                          "enabled",
+                          "focused",
+                          "offscreen",
+                          "protected",
+                          "actions"
+                        ],
+                        "additionalProperties": true
+                      },
+                      "maxItems": 256
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "referenceTtlMs": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "coordinateSpace",
+                    "nodes",
+                    "truncated",
+                    "referenceTtlMs"
+                  ],
+                  "additionalProperties": true
+                },
+                "observationError": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "not_applied",
+                        "applied",
+                        "unknown"
+                      ]
+                    },
+                    "nextAction": {
+                      "type": "string",
+                      "enum": [
+                        "fix_arguments",
+                        "inspect_capabilities",
+                        "enable_automation",
+                        "request_permission",
+                        "wait_for_approval",
+                        "retry",
+                        "reconnect",
+                        "observe",
+                        "stop",
+                        "acquire_control",
+                        "start_capture",
+                        "reduce_result",
+                        "inspect_job"
+                      ]
+                    },
+                    "retryAfterMs": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["code", "message"],
+                  "additionalProperties": true
+                }
+              },
+              "required": ["applied", "refreshRequired"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  {
+    "name": "accessibility.wait",
+    "description": "Wait for AND-matched conditions on the same existing element identity without clicking or reselecting by label. Conditions inspect enabled/focused/offscreen/selection/toggle/expansion states, exact exposed name/value, or bounded textContains. Value/Text are read only when requested by a text condition; protected controls remain excluded. timeoutMs defaults to 5000 (maximum 30000); pollIntervalMs defaults to 100 (50-1000). Returns matched, timedOut, elapsedMs and a fresh node reference. A timeout is an observation result, not proof that a prior action failed. Stale references and lost permission require a new observation/authorization.",
+    "scope": "accessibility.read",
+    "native": true,
+    "readOnly": true,
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "elementId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "condition": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "focused": {
+              "type": "boolean"
+            },
+            "offscreen": {
+              "type": "boolean"
+            },
+            "selected": {
+              "type": "boolean"
+            },
+            "toggleState": {
+              "type": "string",
+              "enum": ["on", "off", "indeterminate"]
+            },
+            "expandCollapseState": {
+              "type": "string",
+              "enum": [
+                "collapsed",
+                "expanded",
+                "partiallyExpanded",
+                "leafNode"
+              ]
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 4096
+            },
+            "textContains": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "name": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "minProperties": 1
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "pollIntervalMs": {
+          "type": "integer",
+          "minimum": 50,
+          "maximum": 1000
+        }
+      },
+      "required": ["target", "elementId", "condition"],
+      "additionalProperties": false
+    },
+    "outputSchema": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "matched": {
+                  "type": "boolean"
+                },
+                "timedOut": {
+                  "type": "boolean"
+                },
+                "elapsedMs": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "node": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "elementId": {
+                      "type": "string"
+                    },
+                    "parentId": {
+                      "type": ["string", "null"]
+                    },
+                    "depth": {
+                      "type": "integer"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "automationId": {
+                      "type": "string"
+                    },
+                    "processId": {
+                      "type": "integer"
+                    },
+                    "bounds": {
+                      "type": "object",
+                      "properties": {
+                        "x": {
+                          "type": "integer"
+                        },
+                        "y": {
+                          "type": "integer"
+                        },
+                        "width": {
+                          "type": "integer"
+                        },
+                        "height": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "x",
+                        "y",
+                        "width",
+                        "height"
+                      ],
+                      "additionalProperties": true
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "focused": {
+                      "type": "boolean"
+                    },
+                    "offscreen": {
+                      "type": "boolean"
+                    },
+                    "protected": {
+                      "type": "boolean"
+                    },
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "toggleState": {
+                      "type": "string",
+                      "enum": ["on", "off", "indeterminate"]
+                    },
+                    "selected": {
+                      "type": "boolean"
+                    },
+                    "expandCollapseState": {
+                      "type": "string",
+                      "enum": [
+                        "collapsed",
+                        "expanded",
+                        "partiallyExpanded",
+                        "leafNode"
+                      ]
+                    },
+                    "readOnly": {
+                      "type": "boolean"
+                    },
+                    "value": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "valueTruncated": {
+                      "type": "boolean"
+                    },
+                    "textTruncated": {
+                      "type": "boolean"
+                    },
+                    "nameTruncated": {
+                      "type": "boolean",
+                      "description": "True when the full name was truncated; it cannot satisfy an exact-name condition."
+                    }
+                  },
+                  "required": [
+                    "elementId",
+                    "parentId",
+                    "depth",
+                    "role",
+                    "name",
+                    "automationId",
+                    "processId",
+                    "bounds",
+                    "enabled",
+                    "focused",
+                    "offscreen",
+                    "protected",
+                    "actions"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "matched",
+                "timedOut",
+                "elapsedMs",
+                "node"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1866,10 +5110,43 @@
                 },
                 "message": {
                   "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
                 }
               },
               "required": ["code", "message"],
-              "additionalProperties": false
+              "additionalProperties": true
             }
           },
           "required": ["ok", "error"],
@@ -1917,7 +5194,182 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "completed",
+                    "cancelled",
+                    "timed_out"
+                  ]
+                },
+                "exitCode": {
+                  "type": ["integer", "null"]
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "retainedBytes": {
+                  "type": "integer"
+                },
+                "earliestCursor": {
+                  "type": "integer"
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "outputIncomplete": {
+                  "type": "boolean"
+                },
+                "stdinStatus": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closing",
+                    "closed",
+                    "failed"
+                  ]
+                },
+                "chunks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stream": {
+                        "type": "string",
+                        "enum": ["stdout", "stderr"]
+                      },
+                      "data": {
+                        "type": "string"
+                      },
+                      "dataBase64": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "stream",
+                      "data",
+                      "dataBase64"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "startCursor": {
+                  "type": "integer"
+                },
+                "nextCursor": {
+                  "type": "integer"
+                },
+                "hasMore": {
+                  "type": "boolean"
+                },
+                "cursorExpired": {
+                  "type": "boolean"
+                },
+                "tailLimited": {
+                  "type": "boolean"
+                },
+                "jobId": {
+                  "type": "string"
+                },
+                "background": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "status",
+                "exitCode",
+                "bytes",
+                "retainedBytes",
+                "earliestCursor",
+                "truncated",
+                "outputIncomplete",
+                "stdinStatus",
+                "chunks",
+                "startCursor",
+                "nextCursor",
+                "hasMore",
+                "cursorExpired",
+                "tailLimited",
+                "jobId",
+                "background"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1954,7 +5406,87 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "jobId": {
+                  "type": "string"
+                }
+              },
+              "required": ["jobId"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -1981,7 +5513,129 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "completed",
+                    "cancelled",
+                    "timed_out"
+                  ]
+                },
+                "exitCode": {
+                  "type": ["integer", "null"]
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "retainedBytes": {
+                  "type": "integer"
+                },
+                "earliestCursor": {
+                  "type": "integer"
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "outputIncomplete": {
+                  "type": "boolean"
+                },
+                "stdinStatus": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closing",
+                    "closed",
+                    "failed"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "exitCode",
+                "bytes",
+                "retainedBytes",
+                "earliestCursor",
+                "truncated",
+                "outputIncomplete",
+                "stdinStatus"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2085,7 +5739,174 @@
       ]
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "running",
+                    "completed",
+                    "cancelled",
+                    "timed_out"
+                  ]
+                },
+                "exitCode": {
+                  "type": ["integer", "null"]
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "retainedBytes": {
+                  "type": "integer"
+                },
+                "earliestCursor": {
+                  "type": "integer"
+                },
+                "truncated": {
+                  "type": "boolean"
+                },
+                "outputIncomplete": {
+                  "type": "boolean"
+                },
+                "stdinStatus": {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closing",
+                    "closed",
+                    "failed"
+                  ]
+                },
+                "chunks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "stream": {
+                        "type": "string",
+                        "enum": ["stdout", "stderr"]
+                      },
+                      "data": {
+                        "type": "string"
+                      },
+                      "dataBase64": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "stream",
+                      "data",
+                      "dataBase64"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "startCursor": {
+                  "type": "integer"
+                },
+                "nextCursor": {
+                  "type": "integer"
+                },
+                "hasMore": {
+                  "type": "boolean"
+                },
+                "cursorExpired": {
+                  "type": "boolean"
+                },
+                "tailLimited": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "status",
+                "exitCode",
+                "bytes",
+                "retainedBytes",
+                "earliestCursor",
+                "truncated",
+                "outputIncomplete",
+                "stdinStatus",
+                "chunks",
+                "startCursor",
+                "nextCursor",
+                "hasMore",
+                "cursorExpired",
+                "tailLimited"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2178,7 +5999,98 @@
       ]
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "queued": {
+                  "type": "boolean",
+                  "enum": [true]
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "eof": {
+                  "type": "boolean"
+                },
+                "signal": {
+                  "type": "string",
+                  "enum": ["SIGINT", "SIGTERM", "SIGKILL"]
+                }
+              },
+              "required": ["queued"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2200,7 +6112,166 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "latest": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "sequence": {
+                      "type": "integer"
+                    },
+                    "at": {
+                      "type": "number"
+                    },
+                    "gapMs": {
+                      "type": "number"
+                    },
+                    "streams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trackId": {
+                            "type": "string"
+                          },
+                          "direction": {
+                            "type": "string"
+                          },
+                          "preview": {
+                            "type": "boolean"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "fps": {
+                            "type": "number"
+                          },
+                          "bitrate": {
+                            "type": "number"
+                          },
+                          "codec": {
+                            "type": "string"
+                          },
+                          "implementation": {
+                            "type": "string"
+                          },
+                          "unavailable": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["trackId"],
+                        "additionalProperties": true
+                      }
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "sequence",
+                    "at",
+                    "gapMs",
+                    "streams",
+                    "errors"
+                  ],
+                  "additionalProperties": true
+                },
+                "stale": {
+                  "type": "boolean"
+                },
+                "detailUntil": {
+                  "type": "number"
+                },
+                "sampledAt": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "latest",
+                "stale",
+                "detailUntil",
+                "sampledAt"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2227,7 +6298,170 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "samples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sequence": {
+                        "type": "integer"
+                      },
+                      "at": {
+                        "type": "number"
+                      },
+                      "gapMs": {
+                        "type": "number"
+                      },
+                      "streams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "trackId": {
+                              "type": "string"
+                            },
+                            "direction": {
+                              "type": "string"
+                            },
+                            "preview": {
+                              "type": "boolean"
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "height": {
+                              "type": "number"
+                            },
+                            "fps": {
+                              "type": "number"
+                            },
+                            "bitrate": {
+                              "type": "number"
+                            },
+                            "codec": {
+                              "type": "string"
+                            },
+                            "implementation": {
+                              "type": "string"
+                            },
+                            "unavailable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["trackId"],
+                          "additionalProperties": true
+                        }
+                      },
+                      "errors": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "sequence",
+                      "at",
+                      "gapMs",
+                      "streams",
+                      "errors"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "maxItems": 30
+                },
+                "nextCursor": {
+                  "type": "integer"
+                },
+                "lost": {
+                  "type": "boolean"
+                },
+                "hasMore": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "samples",
+                "nextCursor",
+                "lost",
+                "hasMore"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2254,7 +6488,87 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "detailUntil": {
+                  "type": "number"
+                }
+              },
+              "required": ["detailUntil"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2276,7 +6590,87 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "detailUntil": {
+                  "type": "number"
+                }
+              },
+              "required": ["detailUntil"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   {
@@ -2303,7 +6697,186 @@
       "additionalProperties": false
     },
     "outputSchema": {
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [true]
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "enum": ["weblink-diagnostics/1"]
+                },
+                "generatedAt": {
+                  "type": "number"
+                },
+                "runtime": {
+                  "type": "object",
+                  "properties": {},
+                  "required": [],
+                  "additionalProperties": true
+                },
+                "samples": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sequence": {
+                        "type": "integer"
+                      },
+                      "at": {
+                        "type": "number"
+                      },
+                      "gapMs": {
+                        "type": "number"
+                      },
+                      "streams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "trackId": {
+                              "type": "string"
+                            },
+                            "direction": {
+                              "type": "string"
+                            },
+                            "preview": {
+                              "type": "boolean"
+                            },
+                            "width": {
+                              "type": "number"
+                            },
+                            "height": {
+                              "type": "number"
+                            },
+                            "fps": {
+                              "type": "number"
+                            },
+                            "bitrate": {
+                              "type": "number"
+                            },
+                            "codec": {
+                              "type": "string"
+                            },
+                            "implementation": {
+                              "type": "string"
+                            },
+                            "unavailable": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": ["trackId"],
+                          "additionalProperties": true
+                        }
+                      },
+                      "errors": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "sequence",
+                      "at",
+                      "gapMs",
+                      "streams",
+                      "errors"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "maxItems": 30
+                },
+                "nextCursor": {
+                  "type": "integer"
+                },
+                "lost": {
+                  "type": "boolean"
+                },
+                "hasMore": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "format",
+                "generatedAt",
+                "runtime",
+                "samples",
+                "nextCursor",
+                "lost",
+                "hasMore"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "data"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "enum": [false]
+            },
+            "error": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "not_applied",
+                    "applied",
+                    "unknown"
+                  ]
+                },
+                "nextAction": {
+                  "type": "string",
+                  "enum": [
+                    "fix_arguments",
+                    "inspect_capabilities",
+                    "enable_automation",
+                    "request_permission",
+                    "wait_for_approval",
+                    "retry",
+                    "reconnect",
+                    "observe",
+                    "stop",
+                    "acquire_control",
+                    "start_capture",
+                    "reduce_result",
+                    "inspect_job"
+                  ]
+                },
+                "retryAfterMs": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["code", "message"],
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "error"],
+          "additionalProperties": false
+        }
+      ]
     }
   }
 ]

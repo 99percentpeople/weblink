@@ -20,6 +20,7 @@ import { createStore, reconcile } from "solid-js/store";
 import {
   AutomationError,
   failure,
+  withRecovery,
   parseCall,
   isDiagnosticTool,
   tools,
@@ -41,12 +42,14 @@ import type {
   NativeAutomationRequest,
   McpTokenSummary,
   McpServerConfig,
+  RuntimeCapabilities,
 } from "@weblink/platform";
 import type { PeerSession } from "@/libs/domain/session";
 import { sessionService } from "@/libs/application/session-service";
 import { AutomationAudit } from "@/libs/application/automation/audit";
 import { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { DiagnosticPeerPermissions } from "@/libs/application/automation/diagnostic-permissions";
+import { localAutomationCapability } from "@/libs/application/automation/device-discovery";
 import {
   automationHandlers,
   diagnosticSources,
@@ -108,6 +111,14 @@ export function createAutomation(
     updateNativeState(reconcile(snapshot, { key: "id" }));
   const [error, setError] = createSignal("");
   const [ready, setReady] = createSignal(false);
+  const [runtimeCapabilities, setRuntimeCapabilities] =
+    createSignal<RuntimeCapabilities>();
+  const localDiscovery = () =>
+    localAutomationCapability(
+      platform,
+      runtimeCapabilities(),
+      enabled(),
+    );
   const changed = () => setRevision((v) => v + 1);
   const audit = new AutomationAudit(changed);
   const diagnosticPermissions =
@@ -124,6 +135,27 @@ export function createAutomation(
     state,
     platform,
     diagnostics,
+    {
+      local: () =>
+        localAutomationCapability(
+          platform,
+          runtimeCapabilities(),
+          enabled(),
+          true,
+        ),
+      connection: (id) => {
+        const session = sessionService.sessions[id];
+        if (!session) return "disconnected";
+        const link = links.get(session);
+        if (link && !link.lifetime.signal.aborted)
+          return link.connected
+            ? "connected"
+            : "connecting";
+        return bindings.get(session)?.opening
+          ? "connecting"
+          : "disconnected";
+      },
+    },
   );
   const life = new AbortController();
   const webPrincipal: Principal = {
@@ -349,6 +381,10 @@ export function createAutomation(
         throw new AutomationError(
           result.error.code,
           result.error.message,
+          {
+            outcome: result.error.outcome,
+            retryable: result.error.retryable,
+          },
         );
       return result.data;
     }
@@ -379,6 +415,10 @@ export function createAutomation(
       life.signal,
     ]);
     const cleanups = [operation.dispose];
+    const readOnly =
+      tools.find((tool) => tool.name === call.name)
+        ?.readOnly ?? false;
+    let dispatched = false;
     const deadline = new AbortController();
     const timeout = setTimeout(
       () => deadline.abort(new AutomationError("TIMEOUT")),
@@ -414,12 +454,16 @@ export function createAutomation(
           once: true,
         });
         try {
-          return (await native.call(
-            epoch,
-            { id: p.id, generation: p.generation },
-            id,
-            call,
-          )) as ToolResult;
+          dispatched = true;
+          return withRecovery(
+            (await native.call(
+              epoch,
+              { id: p.id, generation: p.generation },
+              id,
+              call,
+            )) as ToolResult,
+            { readOnly },
+          );
         } finally {
           signal.removeEventListener("abort", cancel);
         }
@@ -436,6 +480,7 @@ export function createAutomation(
       )
         throw new AutomationError("UNSUPPORTED");
       signal.throwIfAborted();
+      dispatched = true;
       const data = await route(call, signal);
       signal.throwIfAborted();
       audit.record(p, call, "ok");
@@ -446,7 +491,7 @@ export function createAutomation(
         call,
         e instanceof AutomationError ? e.code : "error",
       );
-      return failure(e);
+      return failure(e, { readOnly, dispatched });
     } finally {
       clearTimeout(timeout);
       cleanups.forEach((dispose) => dispose());
@@ -471,16 +516,31 @@ export function createAutomation(
       150000,
     );
     let result: ToolResult;
+    let dispatched = false;
+    let applied = false;
+    const readOnly =
+      tools.find((tool) => tool.name === request.call.name)
+        ?.readOnly ?? false;
     try {
       // Native tickets are authoritative, including cancellation during a toggle.
       parseCall(request.call);
-      result = {
-        ok: true,
-        data: await route(request.call, signal, request.id),
-      };
+      dispatched = true;
+      const data = await route(
+        request.call,
+        signal,
+        request.id,
+      );
+      applied =
+        request.call.name === "accessibility.action" &&
+        data.applied === true;
+      result = { ok: true, data };
       signal.throwIfAborted();
     } catch (e) {
-      result = failure(e);
+      result = failure(e, {
+        readOnly,
+        dispatched,
+        ...(applied ? { outcome: "applied" } : {}),
+      });
     }
     clearTimeout(timeout);
     combined.dispose();
@@ -541,6 +601,8 @@ export function createAutomation(
           return failure(
             new AutomationError(
               native ? "DISABLED" : "UNSUPPORTED",
+              undefined,
+              { dispatched: false },
             ),
           );
         if (
@@ -872,9 +934,22 @@ export function createAutomation(
     ready();
     untrack(sync);
     // Subscribe to incoming channels before peers can discover this capability.
-    sessionService.setDiagnosticsReady(ready());
+    sessionService.setDiagnosticsReady(
+      ready(),
+      localDiscovery(),
+    );
   });
   onMount(() => {
+    // Read once without delaying native authority or peer diagnostic readiness.
+    void Promise.resolve()
+      .then(() => platform.getCapabilities())
+      .then((capabilities) => {
+        if (!life.signal.aborted)
+          setRuntimeCapabilities(capabilities);
+      })
+      .catch(() => {
+        // Unknown support remains unknown; discovery must not guess or grant it.
+      });
     diagnostics.start();
     void (async () => {
       if (native)

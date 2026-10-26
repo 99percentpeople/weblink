@@ -197,6 +197,85 @@ mod tests {
         }
     }
     #[test]
+    fn accessibility_values_observation_and_wait_remain_bounded_and_read_authorized() {
+        use serde_json::json;
+        assert!(validate(
+            "accessibility.snapshot",
+            &json!({
+                "target":"local","elementId":"ref","includeValues":true,"maxTextLength":4096
+            })
+        )
+        .is_ok());
+        assert!(validate(
+            "accessibility.action",
+            &json!({
+                "target":"local","elementId":"ref","action":"invoke",
+                "observeAfter":{"elementId":"window","maxNodes":64,"includeValues":true}
+            })
+        )
+        .is_ok());
+        let wait = validate(
+            "accessibility.wait",
+            &json!({
+                "target":"local","elementId":"ref","condition":{"enabled":true,"value":""},
+                "timeoutMs":30000,"pollIntervalMs":100
+            }),
+        )
+        .unwrap();
+        assert_eq!(wait["scope"], "accessibility.read");
+        assert_eq!(wait["readOnly"], true);
+        for condition in [
+            json!({}),
+            json!({"checked":true}),
+            json!({"enabled":"true"}),
+            json!({"textContains":""}),
+        ] {
+            assert!(validate(
+                "accessibility.wait",
+                &json!({
+                    "target":"local","elementId":"ref","condition":condition
+                })
+            )
+            .is_err());
+        }
+        for (field, value) in [("timeoutMs", 30001), ("pollIntervalMs", 49)] {
+            let mut args = json!({"target":"local","elementId":"ref","condition":{"enabled":true}});
+            args[field] = json!(value);
+            assert!(validate("accessibility.wait", &args).is_err());
+        }
+        assert!(validate(
+            "accessibility.snapshot",
+            &json!({
+                "target":"local","elementId":"ref","maxTextLength":4097
+            })
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn every_published_output_schema_validates_recovery_and_rejects_missing_results() {
+        use serde_json::json;
+        for tool in tools() {
+            let schema = &tool["outputSchema"];
+            assert!(
+                jsonschema::is_valid(schema, &super::super::errors::failure("PERMISSION_DENIED")),
+                "{}",
+                tool["name"]
+            );
+            assert!(
+                !jsonschema::is_valid(schema, &json!({})),
+                "{}",
+                tool["name"]
+            );
+            assert!(
+                !jsonschema::is_valid(schema, &json!({"ok":true})),
+                "{}",
+                tool["name"]
+            );
+        }
+    }
+
+    #[test]
     fn rejects_unbounded_and_unknown_arguments() {
         assert!(validate(
             "commands.start",

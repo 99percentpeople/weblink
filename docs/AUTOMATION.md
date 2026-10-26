@@ -167,7 +167,7 @@ requests are not enabled.
 The server uses the official Rust `rmcp` SDK for protocol negotiation and
 transport handling, including legacy negotiation supported by that SDK. Tool
 results are structured objects with a JSON text representation; native screenshots
-also produce MCP image content. No MCP credentials are sent to peers. HTTP authorization is tied to the client
+return their PNG only as MCP image content, with image metadata in the JSON results. No MCP credentials are sent to peers. HTTP authorization is tied to the client
 credential and grant lifetime, not individual TCP connections: modern MCP HTTP
 is stateless. Cancelling an HTTP call cancels that invocation.
 
@@ -372,8 +372,67 @@ contracts belong to `packages/platform`; Tauri imports remain in `apps/desktop`.
 - `diagnostics.snapshot`, `diagnostics.history`, `diagnostics.start`,
   `diagnostics.stop`, `diagnostics.export`: redacted statistics and reports.
 - `accessibility.capabilities`, `accessibility.windows`,
-  `accessibility.snapshot`, `accessibility.action`: desktop accessibility
+  `accessibility.snapshot`, `accessibility.wait`, `accessibility.action`: desktop accessibility
   discovery, bounded element trees, and semantic control.
+
+## Device capability discovery
+
+Start with `devices.list` using `target:"local"`. Every entry keeps its existing
+identity fields and adds discovery metadata:
+
+| Field                  | Meaning                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `runtime`              | `browser`, `desktop`, or `null` for an older peer without metadata.                               |
+| `os`, `appVersion`     | Published runtime metadata, or `null` when unknown.                                               |
+| `supportedTools`       | Implemented tool names, independent of enabled state and caller permission; `null` means unknown. |
+| `automationEnabled`    | Actual OS automation switch, independent of the MCP controller switch.                            |
+| `automationConnection` | `local`, `connected`, `connecting`, `disconnected`, or `unknown` for the automation channel.      |
+| `disabledReason`       | `browser_runtime`, `automation_disabled`, `capabilities_unavailable`, or `null`.                  |
+| `permissionsVerified`  | Always `false`: discovery neither verifies a grant nor requests permission.                       |
+
+The existing `connection` describes WebRTC and `automation` only indicates an
+automation capability announcement. Neither proves desktop control or shell
+support. A browser peer advertises diagnostics only. A desktop with automation
+disabled retains its implemented tool list while reporting the disabled switch.
+Calls still pass the destination's current permission and runtime checks.
+
+These fields are optional additions to `automation/1`; old peers stay compatible.
+Missing descriptors remain unknown instead of being inferred from an open
+channel. `accessibility.capabilities` and `commands.capabilities` provide the
+more detailed, tool-specific limits after choosing a compatible target.
+
+## Results and recovery
+
+Every tool publishes a structured success/error output schema. Success remains
+`{ok:true,data:{...}}`; failure retains `error.code` and `error.message`.
+Additional result fields are forward-compatible. Older peers may omit recovery
+fields; adapters enrich their errors before returning them to the client.
+
+MCP screenshots contain the PNG once, in an image content block. Their JSON text
+and `structuredContent` contain only metadata: source, physical bounds, actual
+image dimensions, geometry revision and image-to-desktop mapping. Internal peer
+transport and browser WebMCP retain their existing image payload representation.
+
+Errors provide the following recovery information:
+
+- `outcome: "not_applied"` means a read-only call or a failure known to precede
+  execution. `"unknown"` means a state-changing operation may have taken effect;
+  cancellation, revocation, disconnection and deadlines do not undo OS effects.
+  `"applied"` is reserved for an explicitly confirmed side effect.
+- `retryable` is true only for a transient failure whose outcome is known not
+  to have applied a change. Explicit cancellation is never automatically retried.
+  Restore any required connection or permission before retrying.
+- `nextAction` suggests an action such as `observe`, `reconnect`,
+  `request_permission`, `inspect_capabilities` or `fix_arguments`.
+  These are guidance, never authorization or a promise that a retry will succeed.
+- `retryAfterMs`, when present, is a suggested delay for a retryable failure.
+
+After an uncertain click, toggle, text input or Shell start, observe the target
+before repeating the operation. A confirmed action followed by an observation
+failure must retain its applied result instead of presenting the action as
+unexecuted. Peer request deadlines report `TIMEOUT`; explicit aborts report
+`CANCELLED`. Existing per-connection duplicate detection is not a durable
+idempotency ledger across fresh calls or reconnects.
 
 ## Video preferences
 
@@ -724,9 +783,9 @@ pointer actions, including protection against old cleanup affecting a new lease.
 ## Desktop accessibility
 
 Windows uses UI Automation. macOS and Linux currently report `supported: false`;
-other accessibility operations return `UNSUPPORTED`. Browser-local capability
-queries also report unsupported, while the same WebMCP tools can target a
-connected Windows desktop through the existing authorized peer route.
+other accessibility operations return `UNSUPPORTED`. Browser-local UIA calls
+return `UNSUPPORTED`; WebMCP can target a connected Windows desktop through the
+existing authorized peer route.
 
 The portable Rust `Backend` trait in `crates/desktop-accessibility` owns OS
 discovery, inspection and actions. `packages/platform/src/accessibility.ts`
@@ -735,41 +794,149 @@ implement this backend without changing the tool names, consent flow or transpor
 Roles and actions are platform-neutral; a node advertises only its available
 actions. Native pointers, HWNDs and COM interfaces never leave the backend.
 
+### Reading state and content
+
 Use `accessibility.windows` to obtain caller-bound `elementId` references, then
 `accessibility.snapshot` to read a selected subtree. The result is a flat `nodes`
-array with `parentId`, `depth`, role, name, automation ID, process ID, state,
-physical desktop bounds and supported actions. Reading requires the separate
-`accessibility.read` scope within the reading group. Names can contain private application text; these
-results are excluded from diagnostic reports and audit payloads. Password names
-and identifiers are blank, their children are not traversed, and they cannot be
-acted on. No Value/Text pattern contents are exported. Weblink's own window and
-its hosted WebView controls are excluded to protect the consent UI.
+array with `parentId`, `depth`, role, name, automation ID, process ID, physical
+desktop bounds and supported actions. Where the provider implements them, nodes
+also include `toggleState`, `selected`, `expandCollapseState` and `readOnly`.
+Missing optional states mean unavailable, not false.
+
+Value/Text pattern contents are opt-in. Set `includeValues:true` on a snapshot
+or follow-up observation to obtain `value` and/or `text`. `maxTextLength`
+defaults to 1,024 Unicode characters and accepts 1–4,096; `valueTruncated` and
+`textTruncated` report omitted content. Names are bounded to 512 characters and
+carry `nameTruncated:true` when shortened. Default snapshots do not query
+Value/Text content. Applicable semantic states are available independently.
+
+Reading requires the separate `accessibility.read` scope within the reading
+group. Names and values can contain private application text; these results are
+excluded from diagnostic reports and audit payloads. Password names and
+identifiers are blank, contents are never queried, children are not traversed,
+and protected elements cannot be acted on. Weblink's own window and its hosted
+WebView controls are excluded to protect the consent UI.
+
+```json
+{
+  "name": "accessibility.snapshot",
+  "arguments": {
+    "target": "<device ID>",
+    "elementId": "<window reference>",
+    "includeValues": true,
+    "maxTextLength": 1024,
+    "maxDepth": 4,
+    "maxNodes": 128
+  }
+}
+```
+
+### Actions and follow-up observations
 
 `accessibility.action` supports `focus`, `invoke`, `setValue`, `toggle`, `select`,
 `expand`, `collapse`, and `scrollIntoView`. `setValue` requires `value` (an empty
 string clears the field); other actions reject a value. Unsupported patterns
 return `UNSUPPORTED_ACTION`; there is no silent keyboard or coordinate fallback.
 Actions require `input.control` permission **and an active `control.acquire`
-lease on a live native monitor stream**, so they share exclusivity and emergency
-release with existing remote input. The monitor is the control lease's anchor;
-semantic actions can target other windows across the desktop. This is full
-desktop control, not application/monitor sandboxing. Pending local permission
-reviews block all automated input, including UIA actions.
+lease on a live native monitor stream**, plus the original read grant for their
+element references. They share exclusivity and emergency release with existing
+remote input. The monitor is the control lease's anchor; semantic actions can
+target other windows across the desktop. Pending local permission reviews block
+all automated input, including UIA actions.
+
+Optional `observeAfter` requests a fresh subtree after an applied action.
+Its `elementId` defaults to the acted-on element and is resolved before old
+references are invalidated; it never selects a replacement by name. Observation
+defaults to two levels/64 nodes, with the same eight-level/256-node hard limits
+and opt-in content options as snapshots.
+
+```json
+{
+  "name": "accessibility.action",
+  "arguments": {
+    "target": "<device ID>",
+    "elementId": "<field reference>",
+    "action": "setValue",
+    "value": "ready",
+    "observeAfter": {
+      "elementId": "<window reference>",
+      "includeValues": true,
+      "maxDepth": 2,
+      "maxNodes": 64
+    }
+  }
+}
+```
+
+A successful observation returns `applied:true`, `refreshRequired:false` and
+`observation`, whose fresh references may be used for the next call. If the
+action completes but the optional observation fails, the result retains
+`applied:true`, sets `refreshRequired:true`, and includes
+`observationError:{code,message}`. A failed observation is not a reason to replay
+the action. Without `observeAfter`, the original
+`applied:true,refreshRequired:true` result is unchanged.
+
+The final authority check still discards UI data after revocation. When that
+boundary already knows the action was applied, its failure preserves
+`error.outcome:"applied"` without returning the revoked observation. A response
+lost before acknowledgement may still have an unknown outcome.
+
+### Waiting for a condition
+
+`accessibility.wait` reads the same referenced element until every supplied
+condition holds. It requires `accessibility.read`, not an input lease. Conditions
+may include `enabled`, `focused`, `offscreen`, `selected`, `toggleState`,
+`expandCollapseState`, exact `name`, exact `value`, and `textContains`.
+The condition object must be nonempty. Exact comparisons never match a truncated
+name or value; text search checks only the first 4,096 returned characters.
+Value/Text patterns are queried only when the condition needs them.
+
+```json
+{
+  "name": "accessibility.wait",
+  "arguments": {
+    "target": "<device ID>",
+    "elementId": "<checkbox reference>",
+    "condition": { "enabled": true, "toggleState": "on" },
+    "timeoutMs": 10000,
+    "pollIntervalMs": 100
+  }
+}
+```
+
+The default timeout is 5,000 ms, bounded to 1–30,000 ms. Polling defaults to
+100 ms and accepts 50–1,000 ms. Matching returns
+`{matched:true,timedOut:false,elapsedMs,node}` with a fresh caller-bound reference.
+Expiry of the condition deadline returns
+`{matched:false,timedOut:true,elapsedMs,node:null}`. A stale element, revoked
+grant or provider failure remains a tool error rather than a condition timeout.
+Polling does not extend the original reference's lifetime or allocate throwaway
+references on each failed check.
+
+### References and execution bounds
 
 References expire after 60 seconds, when the original read grant ends, or after
-an action reaches dispatch. Refresh windows and the subtree after an action,
-including a provider error/timeout; old references return `STALE_ELEMENT`.
-References cannot be used by another caller or reconnected session. A changed or
-reparented UI element is never reselected by a potentially ambiguous label.
+an action reaches dispatch. An action invalidates every old reference belonging
+to that caller, including after a provider error/timeout; refresh the UI or use
+the new references returned by a successful observation. References cannot be
+used by another caller or reconnected session. A changed or reparented UI element
+is never reselected by a potentially ambiguous label.
+
 Snapshots default to 128 nodes/four levels, with hard limits of 256 nodes/eight
 levels. `truncated` indicates omitted children; expand a returned child reference
 to inspect deeper. Window lists are bounded to 128 entries. The native cache
-holds at most 2,048 references, so eviction can invalidate references earlier.
+holds at most 2,048 references, so other discovery operations can evict references
+earlier.
 
 UIA runs on a single dedicated COM MTA thread, with four queued requests, an
-eight-second request deadline and 500 ms provider connection/transaction
-timeouts. Authority is rechecked between traversal steps, just before a native
-action and before returning data. Native provider calls hold no application
+eight-second deadline per worker request and 500 ms provider connection/
+transaction timeouts. Wait polling and sleeps occur outside that worker; each
+inspection is also bounded by the condition's remaining deadline. Action and
+follow-up observation are separate worker requests, so a blocked observation
+does not erase the action acknowledgement.
+
+Authority is rechecked between traversal/polling steps, just before a native
+action and before returning UI data. Native provider calls hold no application
 permission lock. Cancellation/revocation prevents queued work; a side effect
 already dispatched to another process cannot be undone or forcibly interrupted.
 An unresponsive provider may keep the single worker busy until its call returns;

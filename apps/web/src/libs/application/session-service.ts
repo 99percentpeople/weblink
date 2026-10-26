@@ -11,6 +11,7 @@ import {
 import { platform } from "@/libs/platform/runtime";
 import { RemoteControlHost } from "./remote-control-host";
 import { PeerCapabilitiesService } from "./peer-capabilities";
+import type { AutomationCapability } from "../domain/protocol/capabilities";
 import { requiredMessageFeatures } from "../domain/protocol/protocol-versions";
 import { browserDecodeCapabilities } from "../domain/media-codecs";
 import {
@@ -99,13 +100,21 @@ export class SessionService {
   private readonly speedBusy = createSignal(false);
   private readonly automationEnabled = createSignal(false);
   private readonly diagnosticsReady = createSignal(false);
+  private readonly automationDiscovery =
+    createSignal<AutomationCapability>();
   private readonly automationController =
     createSignal<NativeAutomationPeer | null>(null);
   setAutomationEnabled(enabled: boolean): void {
     this.automationEnabled[1](enabled);
     if (!enabled) this.automationController[1](null);
   }
-  setDiagnosticsReady(ready: boolean): void {
+  setDiagnosticsReady(
+    ready: boolean,
+    discovery?: AutomationCapability,
+  ): void {
+    this.automationDiscovery[1](
+      ready ? discovery : undefined,
+    );
     this.diagnosticsReady[1](ready);
   }
   setAutomationController(
@@ -136,6 +145,7 @@ export class SessionService {
       ...(this.diagnosticsReady[0]()
         ? {
             automation: {
+              ...this.automationDiscovery[0](),
               diagnostics: true,
               controlActive:
                 this.automationEnabled[0]() &&

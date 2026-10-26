@@ -99,6 +99,49 @@ const pair = (
   links.push(l, r);
   return { l, r, a, b };
 };
+it("settles malformed remote results instead of losing the pending call", async () => {
+  const { l, r, a, b } = pair(
+    async () => new Promise(() => {}),
+  );
+  await Promise.all([l.ready, r.ready]);
+  const pending = l.call(
+    {
+      name: "commands.start",
+      arguments: { target: "local", script: "ignored" },
+    },
+    new AbortController().signal,
+  );
+  await vi.waitFor(() => expect(a.sent).toHaveLength(1));
+  const request = JSON.parse(
+    atob(JSON.parse(a.sent[0]).data),
+  );
+  b.send(
+    JSON.stringify({
+      kind: "chunk",
+      id: "malformed-response",
+      index: 0,
+      count: 1,
+      data: btoa(
+        JSON.stringify({
+          sequence: 1,
+          kind: "result",
+          id: request.id,
+          result: { ok: false },
+        }),
+      ),
+    }),
+  );
+  await expect(pending).resolves.toMatchObject({
+    ok: false,
+    error: {
+      code: "INVALID_RESULT",
+      outcome: "unknown",
+      retryable: false,
+    },
+  });
+  expect(l.lifetime.signal.aborted).toBe(false);
+});
+
 it("opens without an extra handshake and transports large structured results", async () => {
   const { l, r, a, b } = pair(async () => ({
     ok: true,
@@ -264,6 +307,53 @@ it("waits only for DataChannel open and sends no identity exchange", async () =>
   expect(a.sent).toEqual([]);
   expect(b.sent).toEqual([]);
 });
+
+it.each([
+  {
+    call: {
+      name: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    },
+    outcome: "not_applied",
+    retryable: true,
+  },
+  {
+    call: {
+      name: "commands.start",
+      arguments: { target: "local", script: "echo test" },
+    },
+    outcome: "unknown",
+    retryable: false,
+  },
+])(
+  "reports a deadline as TIMEOUT and preserves the outcome of $call.name",
+  async ({ call, outcome, retryable }) => {
+    vi.useFakeTimers();
+    let targetSignal: AbortSignal | undefined;
+    const { l, r } = pair(async (_, signal) => {
+      targetSignal = signal;
+      await new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), {
+          once: true,
+        }),
+      );
+      return { ok: true, data: {} };
+    });
+    await Promise.all([l.ready, r.ready]);
+    const pending = l.call(
+      call,
+      new AbortController().signal,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(targetSignal).toBeDefined();
+    await vi.advanceTimersByTimeAsync(270001);
+    expect(await pending).toMatchObject({
+      ok: false,
+      error: { code: "TIMEOUT", outcome, retryable },
+    });
+    expect(targetSignal!.aborted).toBe(true);
+  },
+);
 
 it("closes a stalled opening channel without leaving an unresolved readiness wait", async () => {
   vi.useFakeTimers();

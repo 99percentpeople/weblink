@@ -110,8 +110,7 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
         .unwrap()
         .unwrap();
     assert_eq!(event["principal"]["id"], p.id);
-    let payload =
-        json!({"ok":true,"data":{"mimeType":"image/png","data":"aW1hZ2U=","width":1,"height":1}});
+    let payload = json!({"ok":true,"data":{"mimeType":"image/png","data":"aW1hZ2U=","sourceId":"screen","imageWidth":1,"imageHeight":1,"coordinateSpace":"desktopPhysicalPixels","bounds":{"left":0,"top":0,"width":1,"height":1},"geometryRevision":"g1","imageToDesktop":{"scaleX":1,"scaleY":1,"offsetX":0,"offsetY":0}}});
     service
         .state
         .lock()
@@ -123,9 +122,25 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
         .send(payload.clone())
         .unwrap();
     let result: Value = response.await.unwrap().unwrap().json().await.unwrap();
-    assert_eq!(result["result"]["structuredContent"], payload);
-    assert_eq!(result["result"]["content"][0]["type"], "text");
+    let mut metadata = payload.clone();
+    metadata["data"].as_object_mut().unwrap().remove("data");
+    assert_eq!(result["result"]["structuredContent"], metadata);
+    let text: Value =
+        serde_json::from_str(result["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(text, metadata);
     assert_eq!(result["result"]["content"][1]["type"], "image");
+    assert_eq!(
+        result["result"]["content"][1]["data"],
+        payload["data"]["data"]
+    );
+    assert_eq!(result.to_string().matches("aW1hZ2U=").count(), 1);
+    let screenshot = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "control.screenshot")
+        .unwrap();
+    assert!(jsonschema::is_valid(&screenshot["outputSchema"], &metadata));
     let disconnected = tokio::spawn(
         client
             .post(&url)

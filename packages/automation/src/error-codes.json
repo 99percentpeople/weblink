@@ -1,0 +1,149 @@
+{
+  "INVALID_ARGUMENTS": {
+    "message": "Arguments do not match the tool schema.",
+    "nextAction": "fix_arguments"
+  },
+  "INVALID_TARGET": {
+    "message": "The selected target or source is not valid for this operation.",
+    "nextAction": "inspect_capabilities"
+  },
+  "UNSUPPORTED": {
+    "message": "This target does not support the requested operation.",
+    "nextAction": "inspect_capabilities"
+  },
+  "UNSUPPORTED_ACTION": {
+    "message": "The element does not support this semantic action.",
+    "nextAction": "observe"
+  },
+  "UNSUPPORTED_SIGNAL": {
+    "message": "This target does not support the requested process signal.",
+    "nextAction": "inspect_capabilities"
+  },
+  "DISABLED": {
+    "message": "Automation is disabled or paused on the target.",
+    "nextAction": "enable_automation"
+  },
+  "PERMISSION_DENIED": {
+    "message": "The target has not authorized this operation.",
+    "nextAction": "request_permission"
+  },
+  "GRANT_EXPIRED": {
+    "message": "The original authorization is no longer valid.",
+    "nextAction": "request_permission"
+  },
+  "APPROVAL_PENDING": {
+    "message": "A permission request is awaiting the target user's decision.",
+    "nextAction": "wait_for_approval"
+  },
+  "BUSY": {
+    "message": "The target has reached an operation or queue limit.",
+    "nextAction": "retry",
+    "transient": true,
+    "retryAfterMs": 250
+  },
+  "APP_NOT_READY": {
+    "message": "The target application is not ready to handle this operation.",
+    "nextAction": "retry",
+    "transient": true,
+    "retryAfterMs": 500
+  },
+  "TARGET_DISCONNECTED": {
+    "message": "The target disconnected before a result was received.",
+    "nextAction": "reconnect",
+    "transient": true
+  },
+  "CHANNEL_NOT_OPEN": {
+    "message": "The automation channel is not open.",
+    "nextAction": "reconnect",
+    "transient": true
+  },
+  "OPEN_TIMEOUT": {
+    "message": "The automation channel did not open before its deadline.",
+    "nextAction": "reconnect",
+    "transient": true
+  },
+  "ASSEMBLY_TIMEOUT": {
+    "message": "A complete response was not received before its deadline.",
+    "nextAction": "reconnect",
+    "transient": true
+  },
+  "SESSION_CLOSED": {
+    "message": "The original automation session has ended.",
+    "nextAction": "reconnect",
+    "transient": true
+  },
+  "TIMEOUT": {
+    "message": "The operation did not return a result before its deadline.",
+    "nextAction": "retry",
+    "transient": true,
+    "retryAfterMs": 250
+  },
+  "STALE_ELEMENT": {
+    "message": "The element reference expired or was invalidated; obtain a fresh observation.",
+    "nextAction": "observe"
+  },
+  "ELEMENT_NOT_FOUND": {
+    "message": "The referenced element is no longer available.",
+    "nextAction": "observe"
+  },
+  "ELEMENT_DISABLED": {
+    "message": "The selected element is currently disabled.",
+    "nextAction": "observe"
+  },
+  "PROTECTED_ELEMENT": {
+    "message": "Protected controls cannot be inspected or operated.",
+    "nextAction": "stop"
+  },
+  "WINDOW_FOCUS_LOST": {
+    "message": "The bound window lost focus; the input may already have taken effect.",
+    "nextAction": "observe"
+  },
+  "WINDOW_NOT_FOUND": {
+    "message": "The selected window is no longer available.",
+    "nextAction": "observe"
+  },
+  "GEOMETRY_CHANGED": {
+    "message": "Display or window geometry changed; refresh coordinates before continuing.",
+    "nextAction": "observe"
+  },
+  "INPUT_INTERRUPTED": {
+    "message": "The input operation was interrupted and may be partially applied.",
+    "nextAction": "observe"
+  },
+  "INPUT_TIMEOUT": {
+    "message": "Input execution exceeded its deadline and may be partially applied.",
+    "nextAction": "observe"
+  },
+  "CONTROL_REQUIRED": {
+    "message": "An active exclusive control lease is required.",
+    "nextAction": "acquire_control"
+  },
+  "CAPTURE_REQUIRED": {
+    "message": "A live native monitor capture is required for desktop input.",
+    "nextAction": "start_capture"
+  },
+  "RESULT_TOO_LARGE": {
+    "message": "The result exceeds the transport limit; request a smaller region or page.",
+    "nextAction": "reduce_result"
+  },
+  "JOB_NOT_FOUND": {
+    "message": "The job is unavailable to this caller and its original authorization.",
+    "nextAction": "inspect_job"
+  },
+  "STDIN_CLOSED": {
+    "message": "The job's standard input has already closed.",
+    "nextAction": "inspect_job"
+  },
+  "CANCELLED": {
+    "message": "The operation was cancelled; cancellation does not undo effects already applied.",
+    "nextAction": "stop"
+  },
+  "DUPLICATE_REQUEST": {
+    "message": "A request with this identifier is already being handled.",
+    "nextAction": "observe"
+  },
+  "EXECUTION_FAILED": {
+    "message": "The operation failed; inspect the target before repeating a state-changing action.",
+    "nextAction": "observe"
+  }
+}

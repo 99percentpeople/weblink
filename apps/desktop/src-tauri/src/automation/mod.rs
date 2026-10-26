@@ -7,6 +7,7 @@ mod commands;
 mod configuration;
 pub(crate) mod coordinates;
 mod emergency;
+mod errors;
 mod http;
 mod input_action;
 mod input_holds;
@@ -169,7 +170,7 @@ fn now() -> u64 {
         .as_millis() as u64
 }
 fn error(code: &str) -> Value {
-    json!({"ok":false,"error":{"code":code,"message":code}})
+    errors::failure(code)
 }
 impl Service {
     fn check(s: &State, epoch: &str) -> Result<(), String> {
@@ -284,16 +285,16 @@ impl Service {
         let cleanup = {
             let mut s = self.state.lock().unwrap();
             if id.is_empty() || id.len() > 128 {
-                return error("INVALID_ARGUMENTS");
+                return errors::before_dispatch("INVALID_ARGUMENTS");
             }
             if s.requests.contains_key(&id)
                 || s.pending.contains_key(&id)
                 || s.tickets.contains_key(&id)
             {
-                return error("DUPLICATE_REQUEST");
+                return errors::before_dispatch("DUPLICATE_REQUEST");
             }
             if s.requests.len() >= 16 {
-                return error("BUSY");
+                return errors::before_dispatch("BUSY");
             }
             let generation = uuid::Uuid::new_v4().to_string();
             s.requests.insert(
@@ -319,7 +320,17 @@ impl Service {
                 call.clone(),
             )
             .await
-            .unwrap_or_else(|e| error(&e));
+            .unwrap_or_else(|e| {
+                if catalog::validate(&call.name, &call.arguments).is_err() {
+                    errors::before_dispatch(&e)
+                } else {
+                    error(&e)
+                }
+            });
+        let result = errors::enrich(
+            result,
+            catalog::find(&call.name).is_ok_and(|tool| tool["readOnly"] == true),
+        );
         let mut s = self.state.lock().unwrap();
         s.audit.push(json!({"id":id,"at":now(),"principal":principal.label,"tool":call.name,"target":call.arguments["target"],"status":if result["ok"]==true {"ok"}else{result["error"]["code"].as_str().unwrap_or("error")}}));
         if s.audit.len() > 1000 {

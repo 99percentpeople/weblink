@@ -50,7 +50,7 @@ impl ServerHandler for Handler {
             .and_then(|p| p.extensions.get::<Principal>())
             .cloned();
         let Some(principal) = principal else {
-            return Ok(CallToolResult::error(vec![ContentBlock::text("PERMISSION_DENIED")]).into());
+            return Ok(tool_result(errors::before_dispatch("PERMISSION_DENIED")).into());
         };
         let id = uuid::Uuid::new_v4().to_string();
         let call = Call {
@@ -60,25 +60,40 @@ impl ServerHandler for Handler {
         };
         let future = self.0.clone().invoke(principal, id.clone(), call);
         let result = tokio::select! { result=future=>result,_=context.ct.cancelled()=>{let mut s=self.0.state.lock().unwrap();Service::cancel_request(&mut s,&id);error("CANCELLED")} };
-        let failed = result["ok"] != true;
-        let mut output = if failed {
-            CallToolResult::error(vec![ContentBlock::text(result.to_string())])
-        } else {
-            CallToolResult::success(vec![ContentBlock::text(result.to_string())])
-        };
-        if !failed {
-            if let (Some(data), Some(mime)) = (
-                result["data"]["data"].as_str(),
-                result["data"]["mimeType"].as_str(),
-            ) {
-                if mime == "image/png" {
-                    output.content.push(ContentBlock::image(data, mime));
-                }
-            }
-        }
-        output.structured_content = Some(result);
-        Ok(output.into())
+        Ok(tool_result(result).into())
     }
+}
+/// Keep binary image data in MCP image content, with the same metadata in both JSON views.
+/// This is a transport projection: peer and WebMCP results retain their original payload.
+fn tool_result(mut result: Value) -> CallToolResult {
+    let failed = result["ok"] != true;
+    let image = if failed {
+        None
+    } else {
+        result
+            .get_mut("data")
+            .and_then(Value::as_object_mut)
+            .and_then(|payload| {
+                if payload.get("mimeType").and_then(Value::as_str) != Some("image/png")
+                    || !payload.get("data").is_some_and(Value::is_string)
+                {
+                    return None;
+                }
+                let Some(Value::String(data)) = payload.remove("data") else {
+                    unreachable!("the PNG payload was checked before removal");
+                };
+                Some(ContentBlock::image(data, "image/png"))
+            })
+    };
+    let mut content = vec![ContentBlock::text(result.to_string())];
+    content.extend(image);
+    let mut output = if failed {
+        CallToolResult::error(content)
+    } else {
+        CallToolResult::success(content)
+    };
+    output.structured_content = Some(result);
+    output
 }
 #[derive(Clone)]
 struct Auth {
@@ -200,6 +215,107 @@ pub async fn start(service: Shared, epoch: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jmQAAAABJRU5ErkJggg==";
+
+    fn wire_result(result: Value) -> Value {
+        serde_json::to_value(tool_result(result)).unwrap()
+    }
+
+    fn assert_json_views(wire: &Value, expected: &Value) {
+        assert_eq!(&wire["structuredContent"], expected);
+        assert_eq!(wire["content"][0]["type"], "text");
+        let text: Value =
+            serde_json::from_str(wire["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(&text, expected);
+    }
+
+    #[test]
+    fn screenshot_has_one_image_and_preserves_all_coordinate_metadata() {
+        let internal = json!({"ok":true,"data":{
+            "data":PNG,"mimeType":"image/png","sourceId":"monitor-left",
+            "imageWidth":1,"imageHeight":1,
+            "coordinateSpace":"desktopPhysicalPixels",
+            "bounds":{"left":-1920,"top":100,"width":600,"height":400},
+            "geometryRevision":"geometry-1",
+            "imageToDesktop":{"scaleX":600,"scaleY":400,"offsetX":-1920,"offsetY":100},
+            "futureMetadata":{"captureId":"capture-1"}
+        }});
+        let wire = wire_result(internal.clone());
+        let mut metadata = internal.clone();
+        metadata["data"].as_object_mut().unwrap().remove("data");
+        assert_json_views(&wire, &metadata);
+        assert_ne!(wire["isError"], true);
+        assert_eq!(wire["content"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            wire["content"][1],
+            json!({
+                "type":"image","data":PNG,"mimeType":"image/png"
+            })
+        );
+        assert_eq!(wire.to_string().matches(PNG).count(), 1);
+        assert_eq!(internal["data"]["data"], PNG);
+    }
+
+    #[test]
+    fn ordinary_success_keeps_its_complete_structured_and_text_results() {
+        let result = json!({"ok":true,"data":{
+            "status":"completed","exitCode":0,
+            "chunks":[{"stream":"stdout","data":"中文 output"}],
+            "nextCursor":13
+        }});
+        let wire = wire_result(result.clone());
+        assert_json_views(&wire, &result);
+        assert_ne!(wire["isError"], true);
+        assert_eq!(wire["content"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn failures_keep_recovery_details_and_never_promote_payloads_to_images() {
+        let failure = json!({"ok":false,"error":{
+            "code":"WINDOW_FOCUS_LOST","message":"The window lost focus",
+            "retryable":false,"outcome":"unknown","nextAction":"observe"
+        }});
+        for result in [
+            failure.clone(),
+            json!({"ok":false,"error":failure["error"],
+                "data":{"mimeType":"image/png","data":PNG}}),
+        ] {
+            let wire = wire_result(result.clone());
+            assert_json_views(&wire, &result);
+            assert_eq!(wire["isError"], true);
+            assert_eq!(wire["content"].as_array().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn incomplete_png_payloads_remain_json_without_data_loss() {
+        for result in [
+            json!({"ok":true}),
+            json!({"ok":true,"data":null}),
+            json!({"ok":true,"data":{"mimeType":"image/png","imageWidth":1}}),
+            json!({"ok":true,"data":{"data":PNG}}),
+            json!({"ok":true,"data":{"mimeType":null,"data":PNG}}),
+            json!({"ok":true,"data":{"mimeType":"image/png","data":null}}),
+            json!({"ok":true,"data":{"mimeType":"image/png","data":42}}),
+        ] {
+            let wire = wire_result(result.clone());
+            assert_json_views(&wire, &result);
+            assert_ne!(wire["isError"], true);
+            assert_eq!(wire["content"].as_array().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn other_mime_types_are_not_treated_as_png_screenshots() {
+        for mime in ["image/jpeg", "image/webp", "text/plain"] {
+            let result = json!({"ok":true,"data":{"mimeType":mime,"data":"original payload"}});
+            let wire = wire_result(result.clone());
+            assert_json_views(&wire, &result);
+            assert_ne!(wire["isError"], true);
+            assert_eq!(wire["content"].as_array().unwrap().len(), 1);
+        }
+    }
+
     #[test]
     fn origin_is_exact() {
         assert!(valid_origin(None, "127.0.0.1:123"));

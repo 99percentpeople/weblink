@@ -1,7 +1,7 @@
 //! Adapt authenticated native tickets to the platform-neutral accessibility API.
 use super::*;
 use tauri::Manager;
-use weblink_desktop_accessibility::{Access, Check, Error, Request};
+use weblink_desktop_accessibility::{Access, Check, Error, ReadOptions, Request, WaitRequest};
 
 fn request(call: &Call) -> Result<Request, String> {
     let args = &call.arguments;
@@ -15,7 +15,18 @@ fn request(call: &Call) -> Result<Request, String> {
             element_id: element_id(),
             max_depth: args["maxDepth"].as_u64().unwrap_or(4) as usize,
             max_nodes: args["maxNodes"].as_u64().unwrap_or(128) as usize,
+            options: ReadOptions {
+                include_values: args["includeValues"].as_bool().unwrap_or(false),
+                max_text_length: args["maxTextLength"].as_u64().unwrap_or(1024) as usize,
+            },
         }),
+        "accessibility.wait" => Ok(Request::Wait(WaitRequest {
+            element_id: element_id(),
+            condition: serde_json::from_value(args["condition"].clone())
+                .map_err(|_| "INVALID_ARGUMENTS")?,
+            timeout_ms: args["timeoutMs"].as_u64().unwrap_or(5000),
+            poll_interval_ms: args["pollIntervalMs"].as_u64().unwrap_or(100),
+        })),
         "accessibility.action" => Ok(Request::Action {
             element_id: element_id(),
             action: serde_json::from_value(args["action"].clone())
@@ -23,6 +34,10 @@ fn request(call: &Call) -> Result<Request, String> {
             value: args
                 .get("value")
                 .map(|v| v.as_str().unwrap_or_default().into()),
+            observe_after: args
+                .get("observeAfter")
+                .map(|v| serde_json::from_value(v.clone()).map_err(|_| "INVALID_ARGUMENTS"))
+                .transpose()?,
         }),
         _ => Err("UNSUPPORTED".into()),
     }
@@ -36,7 +51,10 @@ fn lease(service: &Shared, epoch: String, principal: String, grant: String) -> C
             || !s.enabled
             || !Service::current(&s)
             || !s.grants.get(&grant).is_some_and(|g| {
-                Service::grant_live(&s, g) && g.principal.id == principal && g.target == "local"
+                Service::grant_live(&s, g)
+                    && g.principal.id == principal
+                    && g.target == "local"
+                    && g.scopes.iter().any(|scope| scope == "accessibility.read")
             })
         {
             return Err(Error::PermissionDenied);
@@ -174,6 +192,49 @@ pub async fn action(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn request_adapter_preserves_content_wait_and_follow_up_options() {
+        let call = |name: &str, arguments: Value| Call {
+            source: None,
+            name: name.into(),
+            arguments,
+        };
+        let Request::Snapshot { options, .. } = request(&call(
+            "accessibility.snapshot",
+            json!({
+                "elementId":"root","includeValues":true,"maxTextLength":123,
+            }),
+        ))
+        .unwrap() else {
+            panic!()
+        };
+        assert!(options.include_values);
+        assert_eq!(options.max_text_length, 123);
+        let Request::Wait(wait) = request(&call(
+            "accessibility.wait",
+            json!({
+                "elementId":"root","condition":{"toggleState":"on","enabled":true},
+                "timeoutMs":15000,"pollIntervalMs":250,
+            }),
+        ))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(wait.timeout_ms, 15000);
+        assert_eq!(wait.poll_interval_ms, 250);
+        wait.validate().unwrap();
+        let Request::Action { observe_after, .. } = request(&call("accessibility.action", json!({
+            "elementId":"button","action":"invoke","observeAfter":{"elementId":"root","includeValues":true},
+        }))).unwrap() else { panic!() };
+        let observation = observe_after.unwrap();
+        assert_eq!(observation.element_id.as_deref(), Some("root"));
+        assert!(observation.include_values);
+        assert!(request(&call(
+            "accessibility.wait",
+            json!({"condition":{"unexpected":true}})
+        ))
+        .is_err());
+    }
     #[test]
     fn native_ticket_checks_scope_target_revocation_and_pending_review() {
         let principal = Principal {

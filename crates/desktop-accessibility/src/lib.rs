@@ -1,8 +1,10 @@
 //! Portable accessibility contract. OS objects stay on one worker thread;
 //! transports receive only bounded snapshots and caller-bound opaque references.
 mod model;
+mod observation;
 #[cfg(any(windows, test))]
 mod session;
+mod wait;
 #[cfg(windows)]
 mod windows;
 mod worker;
@@ -38,7 +40,12 @@ pub trait Backend {
         limit: usize,
         check: &Check,
     ) -> Result<(Vec<Self::Element>, bool)>;
-    fn inspect(&mut self, element: &Self::Element, check: &Check) -> Result<ElementInfo>;
+    fn inspect(
+        &mut self,
+        element: &Self::Element,
+        options: &ReadOptions,
+        check: &Check,
+    ) -> Result<ElementInfo>;
     fn perform(
         &mut self,
         element: &Self::Element,

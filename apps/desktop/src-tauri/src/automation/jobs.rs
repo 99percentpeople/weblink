@@ -704,11 +704,27 @@ exit 7;
             } else {
                 jobs.cancel_grant("grant");
             }
-            assert_ne!(ended(&jobs, &id).await["status"], "running");
+            let status = ended(&jobs, &id).await;
+            assert_ne!(status["status"], "running");
+            if cfg!(unix) && signal == Some("SIGTERM") {
+                // TERM can close the child's pipe before exit handling cancels the
+                // writer. A real pipe failure is preserved rather than overwritten.
+                assert!(
+                    matches!(status["stdinStatus"].as_str(), Some("closed" | "failed")),
+                    "Unexpected terminal stdin status after SIGTERM: {status}"
+                );
+            } else {
+                assert_eq!(status["stdinStatus"], "closed");
+            }
             assert_eq!(
-                jobs.access("owner", "grant", "commands.status", &json!({"jobId":id}))
-                    .unwrap()["stdinStatus"],
-                "closed"
+                jobs.access(
+                    "owner",
+                    "grant",
+                    "commands.send",
+                    &json!({"jobId":id,"input":"late"}),
+                )
+                .unwrap_err(),
+                "JOB_NOT_RUNNING"
             );
         }
     }
