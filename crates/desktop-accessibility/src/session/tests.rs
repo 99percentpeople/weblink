@@ -6,9 +6,35 @@ struct Fake {
     cancel_before_effect: Option<Arc<AtomicBool>>,
     revoke_after_effect: Option<Arc<AtomicBool>>,
     value_reads: AtomicUsize,
+    subscriptions: Arc<AtomicUsize>,
+}
+struct TestSubscription(Arc<AtomicUsize>);
+impl EventSubscription for TestSubscription {}
+impl Drop for TestSubscription {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 impl Backend for Fake {
     type Element = usize;
+    fn subscribe(
+        &mut self,
+        e: &usize,
+        _: &WaitCondition,
+        _: Arc<WaitSignal>,
+        check: &Check,
+    ) -> Result<Box<dyn EventSubscription>> {
+        check()?;
+        if *e == 2 {
+            return Err(Error::ProtectedElement);
+        }
+        self.subscriptions.fetch_add(1, Ordering::SeqCst);
+        let guard = TestSubscription(self.subscriptions.clone());
+        if let Some(flag) = &self.cancel_before_effect {
+            flag.store(false, Ordering::SeqCst);
+        }
+        Ok(Box::new(guard))
+    }
     fn bind_window(&mut self, element: &usize, check: &Check) -> Result<BoundWindow> {
         if *element != 0 {
             return Err(Error::InvalidArguments);
@@ -162,6 +188,7 @@ fn fixture() -> (Session<Fake>, Access, Arc<AtomicBool>, Arc<AtomicUsize>) {
             cancel_before_effect: None,
             revoke_after_effect: None,
             value_reads: AtomicUsize::new(0),
+            subscriptions: Arc::new(AtomicUsize::new(0)),
         }),
         access("alice", &flag),
         flag,
@@ -487,4 +514,81 @@ fn truncated_names_cannot_satisfy_exact_name_conditions_or_leak_password_length(
     info.sanitize(&ReadOptions::default());
     assert_eq!(info.name, "");
     assert!(info.state.name_truncated.is_none());
+}
+
+#[test]
+fn event_subscription_is_bound_to_the_original_read_grant_and_not_the_registration_deadline() {
+    let (mut session, original, read_live, _) = fixture();
+    let id = root(&mut session, &original);
+    let current = access("alice", &Arc::new(AtomicBool::new(true)));
+    let registration_live = Arc::new(AtomicBool::new(true));
+    let registration = access("registration", &registration_live).check;
+    let signal = Arc::new(WaitSignal::default());
+    let condition = WaitCondition {
+        selected: Some(true),
+        ..Default::default()
+    };
+    let prepared = session
+        .subscribe(&id, &condition, signal.clone(), current, registration)
+        .unwrap();
+    registration_live.store(false, Ordering::SeqCst);
+    assert!((prepared.check)().is_ok());
+    read_live.store(false, Ordering::SeqCst);
+    signal.notify();
+    assert_eq!((prepared.check)(), Err(Error::PermissionDenied));
+    signal.cancel();
+    session.purge();
+    assert_eq!(session.backend.subscriptions.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn event_subscriptions_are_bounded_and_released_on_cancellation_or_registration_revocation() {
+    let (mut session, access, flag, _) = fixture();
+    let id = root(&mut session, &access);
+    let condition = WaitCondition {
+        enabled: Some(true),
+        ..Default::default()
+    };
+    let mut signals = Vec::new();
+    for _ in 0..MAX_SUBSCRIPTIONS {
+        let signal = Arc::new(WaitSignal::default());
+        session
+            .subscribe(
+                &id,
+                &condition,
+                signal.clone(),
+                access.clone(),
+                access.check.clone(),
+            )
+            .unwrap();
+        signals.push(signal);
+    }
+    assert!(matches!(
+        session.subscribe(
+            &id,
+            &condition,
+            Arc::new(WaitSignal::default()),
+            access.clone(),
+            access.check.clone()
+        ),
+        Err(Error::Busy)
+    ));
+    for signal in signals {
+        signal.cancel();
+    }
+    session.purge();
+    assert_eq!(session.backend.subscriptions.load(Ordering::SeqCst), 0);
+    session.backend.cancel_before_effect = Some(flag);
+    assert!(matches!(
+        session.subscribe(
+            &id,
+            &condition,
+            Arc::new(WaitSignal::default()),
+            access.clone(),
+            access.check.clone()
+        ),
+        Err(Error::PermissionDenied)
+    ));
+    assert!(session.subscriptions.is_empty());
+    assert_eq!(session.backend.subscriptions.load(Ordering::SeqCst), 0);
 }

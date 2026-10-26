@@ -146,8 +146,16 @@ export interface AccessibilityWaitCondition {
   textContains?: string;
   name?: string;
 }
+/** Read once, then re-read the same element only when a UIA event arrives. */
+export interface AccessibilityWaitRequest {
+  elementId: string;
+  condition: AccessibilityWaitCondition;
+  /** Overall deadline in milliseconds; default 5000, range 1–30000. No polling. */
+  timeoutMs?: number;
+}
 export interface AccessibilityWaitResult {
   matched: boolean;
+  /** No match was observed by the deadline; no final scan is performed. */
   timedOut: boolean;
   elapsedMs: number;
   /** Fresh reference when matched; null on timeout, never a cached unvalidated node. */

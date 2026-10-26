@@ -341,7 +341,6 @@ pub struct WaitRequest {
     pub element_id: String,
     pub condition: WaitCondition,
     pub timeout_ms: u64,
-    pub poll_interval_ms: u64,
 }
 impl WaitRequest {
     pub fn validate(&self) -> Result<()> {
@@ -349,7 +348,6 @@ impl WaitRequest {
         if !self.element_id.is_empty()
             && self.element_id.len() <= 128
             && (1..=30000).contains(&self.timeout_ms)
-            && (50..=1000).contains(&self.poll_interval_ms)
         {
             Ok(())
         } else {
@@ -385,7 +383,7 @@ pub enum Request {
         element_id: String,
         options: ReadOptions,
         /// Create a fresh reference only when this predicate matches this same inspection.
-        /// Unmatched polling (or None) does not allocate references or refresh their TTL.
+        /// Unmatched event observations (or None) do not allocate references or refresh their TTL.
         refresh_when: Option<WaitCondition>,
     },
     Wait(WaitRequest),

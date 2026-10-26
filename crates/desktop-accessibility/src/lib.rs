@@ -10,6 +10,7 @@ mod windows;
 mod worker;
 pub use model::*;
 use std::sync::Arc;
+pub use wait::WaitSignal;
 pub use weblink_desktop_input::window::BoundWindow;
 pub use worker::Client;
 
@@ -24,11 +25,23 @@ pub struct Access {
     pub lease: Check,
 }
 
+/// Owned and dropped on the backend thread. Dropping removes exactly this subscription.
+pub trait EventSubscription {}
+
 /// Implement on a dedicated native thread. No Tauri, MCP or UIA types cross this API.
 /// Backends must exclude the application's own UI, fail closed on protected content,
 /// and call `check` after resolving a pattern and immediately before its side effect.
 pub trait Backend {
     type Element: Clone;
+    fn subscribe(
+        &mut self,
+        _element: &Self::Element,
+        _condition: &WaitCondition,
+        _signal: Arc<WaitSignal>,
+        _check: &Check,
+    ) -> Result<Box<dyn EventSubscription>> {
+        Err(Error::Unsupported)
+    }
     fn bind_window(&mut self, _element: &Self::Element, _check: &Check) -> Result<BoundWindow> {
         Err(Error::Unsupported)
     }

@@ -883,9 +883,11 @@ lost before acknowledgement may still have an unknown outcome.
 
 ### Waiting for a condition
 
-`accessibility.wait` reads the same referenced element until every supplied
-condition holds. It requires `accessibility.read`, not an input lease. Conditions
-may include `enabled`, `focused`, `offscreen`, `selected`, `toggleState`,
+`accessibility.wait` uses Windows UIA events to wait for every supplied condition
+on the same referenced element. It reads the current state once, then re-reads
+only after an event notification. There is no periodic polling, polling fallback,
+or final scan when the deadline expires. It requires `accessibility.read`, not an
+input lease. Conditions may include `enabled`, `focused`, `offscreen`, `selected`, `toggleState`,
 `expandCollapseState`, exact `name`, exact `value`, and `textContains`.
 The condition object must be nonempty. Exact comparisons never match a truncated
 name or value; text search checks only the first 4,096 returned characters.
@@ -898,20 +900,27 @@ Value/Text patterns are queried only when the condition needs them.
     "target": "<device ID>",
     "elementId": "<checkbox reference>",
     "condition": { "enabled": true, "toggleState": "on" },
-    "timeoutMs": 10000,
-    "pollIntervalMs": 100
+    "timeoutMs": 10000
   }
 }
 ```
 
-The default timeout is 5,000 ms, bounded to 1–30,000 ms. Polling defaults to
-100 ms and accepts 50–1,000 ms. Matching returns
+The only timing option is the overall `timeoutMs`: it defaults to 5,000 ms and
+accepts integers from 1 to 30,000 ms. Matching returns
 `{matched:true,timedOut:false,elapsedMs,node}` with a fresh caller-bound reference.
 Expiry of the condition deadline returns
 `{matched:false,timedOut:true,elapsedMs,node:null}`. A stale element, revoked
 grant or provider failure remains a tool error rather than a condition timeout.
-Polling does not extend the original reference's lifetime or allocate throwaway
-references on each failed check.
+Failed condition checks do not extend the original reference's lifetime or
+allocate throwaway references.
+
+UIA providers can omit events. If no relevant notification arrives after the
+initial read, the wait naturally times out even if the state has changed. A
+timeout means no match was observed; it does not prove the condition is currently
+false or that an earlier action failed. Callers may explicitly run
+`accessibility.snapshot` to investigate a timeout. The wait implementation does
+not take that snapshot automatically, and a timeout is not a reason to replay an
+action.
 
 ### References and execution bounds
 
@@ -930,13 +939,14 @@ earlier.
 
 UIA runs on a single dedicated COM MTA thread, with four queued requests, an
 eight-second deadline per worker request and 500 ms provider connection/
-transaction timeouts. Wait polling and sleeps occur outside that worker; each
-inspection is also bounded by the condition's remaining deadline. Action and
+transaction timeouts. Waiting for an event occurs outside that worker; UIA
+subscriptions and reads run on it. Each inspection is also bounded by the
+condition's remaining deadline. Action and
 follow-up observation are separate worker requests, so a blocked observation
 does not erase the action acknowledgement.
 
-Authority is rechecked between traversal/polling steps, just before a native
-action and before returning UI data. Native provider calls hold no application
+Authority is rechecked between traversal steps, before event-triggered reads,
+just before a native action and before returning UI data. Native provider calls hold no application
 permission lock. Cancellation/revocation prevents queued work; a side effect
 already dispatched to another process cannot be undone or forcibly interrupted.
 An unresponsive provider may keep the single worker busy until its call returns;

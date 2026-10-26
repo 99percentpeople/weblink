@@ -1,7 +1,9 @@
 //! Adapt authenticated native tickets to the platform-neutral accessibility API.
 use super::*;
 use tauri::Manager;
-use weblink_desktop_accessibility::{Access, Check, Error, ReadOptions, Request, WaitRequest};
+use weblink_desktop_accessibility::{
+    Access, Check, Error, ReadOptions, Request, WaitRequest, WaitSignal,
+};
 
 fn request(call: &Call) -> Result<Request, String> {
     let args = &call.arguments;
@@ -25,7 +27,6 @@ fn request(call: &Call) -> Result<Request, String> {
             condition: serde_json::from_value(args["condition"].clone())
                 .map_err(|_| "INVALID_ARGUMENTS")?,
             timeout_ms: args["timeoutMs"].as_u64().unwrap_or(5000),
-            poll_interval_ms: args["pollIntervalMs"].as_u64().unwrap_or(100),
         })),
         "accessibility.action" => Ok(Request::Action {
             element_id: element_id(),
@@ -90,6 +91,26 @@ fn check_ticket(s: &State, epoch: &str, id: &str) -> Result<(), Error> {
     }
     Ok(())
 }
+struct ActiveWait {
+    service: std::sync::Weak<Service>,
+    id: String,
+    signal: Arc<WaitSignal>,
+}
+impl Drop for ActiveWait {
+    fn drop(&mut self) {
+        self.signal.cancel();
+        if let Some(service) = self.service.upgrade() {
+            let mut state = service.state.lock().unwrap();
+            if state
+                .accessibility_waits
+                .get(&self.id)
+                .is_some_and(|signal| Arc::ptr_eq(signal, &self.signal))
+            {
+                state.accessibility_waits.remove(&self.id);
+            }
+        }
+    }
+}
 pub async fn action(
     app: tauri::AppHandle,
     service: Shared,
@@ -100,7 +121,7 @@ pub async fn action(
     tauri::async_runtime::spawn_blocking(move || {
         let _turn = turn;
         let expected_lease = _turn.as_ref().and_then(|t| t.lease.clone());
-        let (call, principal, grant) = {
+        let (call, principal, grant, wait_signal) = {
             let mut s = service.state.lock().unwrap();
             check_ticket(&s, &epoch, &id).map_err(|e| e.code())?;
             let ticket = s.tickets.get_mut(&id).ok_or("CANCELLED")?;
@@ -112,12 +133,25 @@ pub async fn action(
                 return Err("CANCELLED".into());
             }
             ticket.used = true;
-            (
+            let (call, principal, grant) = (
                 ticket.call.clone(),
                 ticket.principal.id.clone(),
                 ticket.grant.clone(),
-            )
+            );
+            let signal = if call.name == "accessibility.wait" {
+                let signal = Arc::new(WaitSignal::default());
+                s.accessibility_waits.insert(id.clone(), signal.clone());
+                Some(signal)
+            } else {
+                None
+            };
+            (call, principal, grant, signal)
         };
+        let _active_wait = wait_signal.as_ref().map(|signal| ActiveWait {
+            service: Arc::downgrade(&service),
+            id: id.clone(),
+            signal: signal.clone(),
+        });
         let window_id = if call.name == "control.bindWindow" {
             Some(
                 call.arguments["windowId"]
@@ -179,10 +213,16 @@ pub async fn action(
                 .automation_bind_window(&bind_principal, &lease, window)?;
             Ok(json!({"bound":true,"windowId":window_id,"focusPolicy":"stopOnBlur"}))
         } else {
-            service
-                .accessibility
-                .call(request.ok_or("INVALID_ARGUMENTS")?, access)
-                .map_err(|e| e.code().to_string())
+            let request = request.ok_or("INVALID_ARGUMENTS")?;
+            let result = match request {
+                Request::Wait(wait) => {
+                    service
+                        .accessibility
+                        .wait(wait, access, wait_signal.ok_or("CANCELLED")?)
+                }
+                request => service.accessibility.call(request, access),
+            };
+            result.map_err(|e| e.code().to_string())
         }
     })
     .await
@@ -192,6 +232,44 @@ pub async fn action(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancellation_closes_silent_waits_and_stale_cleanup_preserves_a_reused_id() {
+        let service = Arc::new(Service::default());
+        let old_signal = Arc::new(WaitSignal::default());
+        let replacement = Arc::new(WaitSignal::default());
+        let old = ActiveWait {
+            service: Arc::downgrade(&service),
+            id: "wait".into(),
+            signal: old_signal.clone(),
+        };
+        service
+            .state
+            .lock()
+            .unwrap()
+            .accessibility_waits
+            .insert("wait".into(), replacement.clone());
+        drop(old);
+        assert!(old_signal.is_cancelled());
+        assert!(!replacement.is_cancelled());
+        {
+            let mut state = service.state.lock().unwrap();
+            assert!(Arc::ptr_eq(
+                &state.accessibility_waits["wait"],
+                &replacement
+            ));
+            Service::cancel_request(&mut state, "wait");
+            assert!(state.accessibility_waits.is_empty());
+        }
+        assert!(replacement.is_cancelled());
+        let orphan = Arc::new(WaitSignal::default());
+        let mut state = service.state.lock().unwrap();
+        state
+            .accessibility_waits
+            .insert("orphan".into(), orphan.clone());
+        Service::cancel_all(&mut state);
+        assert!(orphan.is_cancelled());
+        assert!(state.accessibility_waits.is_empty());
+    }
     #[test]
     fn request_adapter_preserves_content_wait_and_follow_up_options() {
         let call = |name: &str, arguments: Value| Call {
@@ -214,14 +292,13 @@ mod tests {
             "accessibility.wait",
             json!({
                 "elementId":"root","condition":{"toggleState":"on","enabled":true},
-                "timeoutMs":15000,"pollIntervalMs":250,
+                "timeoutMs":15000,
             }),
         ))
         .unwrap() else {
             panic!()
         };
         assert_eq!(wait.timeout_ms, 15000);
-        assert_eq!(wait.poll_interval_ms, 250);
         wait.validate().unwrap();
         let Request::Action { observe_after, .. } = request(&call("accessibility.action", json!({
             "elementId":"button","action":"invoke","observeAfter":{"elementId":"root","includeValues":true},

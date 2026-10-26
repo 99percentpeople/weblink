@@ -4707,7 +4707,7 @@
   },
   {
     "name": "accessibility.wait",
-    "description": "Wait for AND-matched conditions on the same existing element identity without clicking or reselecting by label. Conditions inspect enabled/focused/offscreen/selection/toggle/expansion states, exact exposed name/value, or bounded textContains. Value/Text are read only when requested by a text condition; protected controls remain excluded. timeoutMs defaults to 5000 (maximum 30000); pollIntervalMs defaults to 100 (50-1000). Returns matched, timedOut, elapsedMs and a fresh node reference. A timeout is an observation result, not proof that a prior action failed. Stale references and lost permission require a new observation/authorization.",
+    "description": "Wait for AND-matched conditions on the same existing element identity using UIA events, without clicking or reselecting by label. Read the current state once, then re-read only after an event notification; there is no periodic polling or final scan at the deadline. Conditions inspect enabled/focused/offscreen/selection/toggle/expansion states, exact exposed name/value, or bounded textContains. Value/Text are read only when requested by a text condition; protected controls remain excluded. The only timing option is timeoutMs: an overall timeout of 5000 by default, range 1-30000. Returns matched, timedOut, elapsedMs and a fresh node reference on a match, or node:null on timeout. Missing provider events can cause a timeout even if the condition changed; callers may explicitly take a new snapshot to investigate. A timeout does not prove a prior action failed. Stale references and lost permission require a new observation/authorization.",
     "scope": "accessibility.read",
     "native": true,
     "readOnly": true,
@@ -4773,12 +4773,8 @@
         "timeoutMs": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 30000
-        },
-        "pollIntervalMs": {
-          "type": "integer",
-          "minimum": 50,
-          "maximum": 1000
+          "maximum": 30000,
+          "default": 5000
         }
       },
       "required": ["target", "elementId", "condition"],

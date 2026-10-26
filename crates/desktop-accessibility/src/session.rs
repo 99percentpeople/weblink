@@ -7,6 +7,12 @@ use std::{
 
 const TTL: Duration = Duration::from_secs(60);
 const MAX_REFERENCES: usize = 2048;
+const MAX_SUBSCRIPTIONS: usize = 4;
+struct Subscription {
+    _guard: Box<dyn EventSubscription>,
+    signal: Arc<WaitSignal>,
+    owner: String,
+}
 struct Reference<E> {
     element: E,
     owner: String,
@@ -14,19 +20,58 @@ struct Reference<E> {
     lease: Check,
 }
 pub(crate) struct Session<B: Backend> {
-    backend: B,
+    // Drop event handlers and native references before the backend's COM apartment.
+    subscriptions: Vec<Subscription>,
     references: HashMap<String, Reference<B::Element>>,
+    backend: B,
 }
 impl<B: Backend> Session<B> {
     pub fn new(backend: B) -> Self {
         Self {
+            subscriptions: Vec::new(),
             backend,
             references: HashMap::new(),
         }
     }
     pub fn purge(&mut self) {
+        self.subscriptions.retain(|s| !s.signal.is_cancelled());
         self.references
             .retain(|_, r| r.expires > Instant::now() && (r.lease)().is_ok());
+    }
+    pub fn subscribe(
+        &mut self,
+        element_id: &str,
+        condition: &WaitCondition,
+        signal: Arc<WaitSignal>,
+        mut access: Access,
+        registration_check: Check,
+    ) -> Result<Access> {
+        condition.validate()?;
+        (access.check)()?;
+        self.purge();
+        if self.subscriptions.len() >= MAX_SUBSCRIPTIONS {
+            return Err(Error::Busy);
+        }
+        let element = self.resolve(element_id, &mut access)?;
+        let original_check = access.check.clone();
+        let bounded: Check = Arc::new(move || {
+            registration_check()?;
+            original_check()
+        });
+        let guard = self
+            .backend
+            .subscribe(&element, condition, signal.clone(), &bounded)?;
+        bounded()?;
+        if signal.is_cancelled() {
+            return Err(Error::Cancelled);
+        }
+        self.subscriptions.push(Subscription {
+            _guard: guard,
+            signal,
+            owner: access.owner.clone(),
+        });
+        // The waiting thread must also enforce the original reference's read grant/TTL.
+        Ok(access)
     }
     fn resolve(&self, id: &str, access: &mut Access) -> Result<B::Element> {
         let r = self.references.get(id).ok_or(Error::StaleElement)?;
@@ -159,7 +204,7 @@ impl<B: Backend> Session<B> {
                     depth: 0,
                     info
                 });
-                // Never churn the bounded reference cache while polling. In particular, a full
+                // Never churn the bounded reference cache while observing events. A full
                 // cache must not evict this wait's oldest target before its condition can match.
                 // Evaluate and refresh from one observation, not a second provider request.
                 if refresh_when
@@ -170,7 +215,7 @@ impl<B: Backend> Session<B> {
                 }
                 node
             }
-            // Client implements waits between short worker requests, never on this thread.
+            // Client waits on events between worker requests, never on this thread.
             Request::Wait(_) => return Err(Error::InvalidArguments),
             Request::Action {
                 element_id,
@@ -205,6 +250,11 @@ impl<B: Backend> Session<B> {
                     .transpose()?;
                 // Actions can replace controls, including on an error/timeout. Never reuse these references.
                 self.references.retain(|_, r| r.owner != access.owner);
+                for subscription in &self.subscriptions {
+                    if subscription.owner == access.owner {
+                        subscription.signal.notify();
+                    }
+                }
                 (access.check)()?;
                 self.backend
                     .perform(&element, action, value.as_deref(), &access.check)?;

@@ -3,6 +3,9 @@ use super::*;
 
 impl Service {
     pub(super) fn cancel_request(s: &mut State, id: &str) {
+        if let Some(signal) = s.accessibility_waits.remove(id) {
+            signal.cancel();
+        }
         s.pending.remove(id);
         s.requests.remove(id);
         if s.tickets.remove(id).is_some() {
@@ -12,6 +15,9 @@ impl Service {
         }
     }
     pub(super) fn cancel_all(s: &mut State) {
+        for (_, signal) in s.accessibility_waits.drain() {
+            signal.cancel();
+        }
         let ids: Vec<_> = s.tickets.keys().cloned().collect();
         for id in ids {
             Self::cancel_request(s, &id);

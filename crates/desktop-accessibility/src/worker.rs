@@ -22,16 +22,45 @@ struct Work {
 enum Operation {
     Call(Request),
     BindWindow(String),
+    Subscribe {
+        request: WaitRequest,
+        signal: Arc<WaitSignal>,
+        access: Access,
+    },
+    Cleanup,
 }
 #[cfg(windows)]
 enum Response {
     Value(Value),
     Window(BoundWindow),
+    Subscribed(Access),
 }
 #[derive(Default)]
 pub struct Client {
     #[cfg(windows)]
     worker: OnceLock<mpsc::SyncSender<Work>>,
+}
+#[cfg(windows)]
+struct WaitCleanup<'a> {
+    client: &'a Client,
+    signal: Arc<WaitSignal>,
+    access: Access,
+}
+#[cfg(windows)]
+impl Drop for WaitCleanup<'_> {
+    fn drop(&mut self) {
+        self.signal.cancel();
+        if let Some(sender) = self.client.worker.get() {
+            // Never block a completed/expired call on a hung provider. If the queue is
+            // full, an already queued request will purge the cancelled subscription.
+            let (answer, _) = mpsc::channel();
+            let _ = sender.try_send(Work {
+                operation: Operation::Cleanup,
+                access: self.access.clone(),
+                answer,
+            });
+        }
+    }
 }
 impl Client {
     /// Call from a blocking task. Timeouts cancel queued work; no unbounded thread creation.
@@ -42,22 +71,62 @@ impl Client {
             return Err(Error::Unsupported);
         }
         if let Request::Wait(wait) = request {
-            return crate::wait::run(&wait, &access, |remaining| {
-                self.call_bounded(
-                    Request::Inspect {
-                        element_id: wait.element_id.clone(),
-                        options: wait.condition.read_options(),
-                        refresh_when: Some(wait.condition.clone()),
-                    },
-                    access.clone(),
-                    remaining,
-                )
-            });
+            return self.wait(wait, access, Arc::new(WaitSignal::default()));
         }
         let result = self.call_bounded(request, access.clone(), Duration::from_secs(8))?;
         Ok(crate::observation::complete(result, |request| {
             self.call_bounded(request, access, Duration::from_secs(8))
         }))
+    }
+    /// Subscribe before the first observation. Only UIA/authority events wake another read.
+    pub fn wait(
+        &self,
+        request: WaitRequest,
+        access: Access,
+        signal: Arc<WaitSignal>,
+    ) -> Result<Value> {
+        request.validate()?;
+        (access.check)()?;
+        #[cfg(not(windows))]
+        {
+            let _ = signal;
+            Err(Error::Unsupported)
+        }
+        #[cfg(windows)]
+        {
+            let start = Instant::now();
+            let _cleanup = WaitCleanup {
+                client: self,
+                signal: signal.clone(),
+                access: access.clone(),
+            };
+            if signal.is_cancelled() {
+                return Err(Error::Cancelled);
+            }
+            let response = self.submit(
+                Operation::Subscribe {
+                    request: request.clone(),
+                    signal: signal.clone(),
+                    access: access.clone(),
+                },
+                access,
+                Duration::from_millis(request.timeout_ms),
+            )?;
+            let Response::Subscribed(access) = response else {
+                return Err(Error::ProviderUnavailable);
+            };
+            crate::wait::run(&request, &access, &signal, start, |remaining| {
+                self.call_bounded(
+                    Request::Inspect {
+                        element_id: request.element_id.clone(),
+                        options: request.condition.read_options(),
+                        refresh_when: Some(request.condition.clone()),
+                    },
+                    access.clone(),
+                    remaining,
+                )
+            })
+        }
     }
     fn call_bounded(&self, request: Request, access: Access, timeout: Duration) -> Result<Value> {
         request.validate()?;
@@ -112,11 +181,18 @@ impl Client {
             std::thread::Builder::new()
                 .name("accessibility".into())
                 .spawn(move || {
-                    let mut session = None;
+                    let mut session: Option<crate::session::Session<crate::windows::Windows>> =
+                        None;
                     loop {
                         match rx.recv_timeout(Duration::from_secs(5)) {
                             Ok(work) => {
+                                if let Some(s) = &mut session {
+                                    s.purge();
+                                }
                                 let result = (|| {
+                                    if matches!(&work.operation, Operation::Cleanup) {
+                                        return Ok(Response::Value(Value::Null));
+                                    }
                                     (work.access.check)()?;
                                     if session.is_none() {
                                         session = Some(crate::session::Session::new(
@@ -131,9 +207,26 @@ impl Client {
                                         Operation::BindWindow(id) => session
                                             .bind_window(&id, work.access)
                                             .map(Response::Window),
+                                        Operation::Subscribe {
+                                            request,
+                                            signal,
+                                            access,
+                                        } => session
+                                            .subscribe(
+                                                &request.element_id,
+                                                &request.condition,
+                                                signal,
+                                                access,
+                                                work.access.check,
+                                            )
+                                            .map(Response::Subscribed),
+                                        Operation::Cleanup => unreachable!(),
                                     }
                                 })();
                                 let _ = work.answer.send(result);
+                                if let Some(s) = &mut session {
+                                    s.purge();
+                                }
                             }
                             Err(mpsc::RecvTimeoutError::Timeout) => {
                                 if let Some(s) = &mut session {

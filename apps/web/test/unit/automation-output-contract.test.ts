@@ -18,7 +18,7 @@ const accepts = (
   );
 
 describe("published automation output contracts", () => {
-  it("validates bounded UIA value reads, post-action observation and conditional waits", () => {
+  it("validates bounded UIA value reads, post-action observation and event-driven waits", () => {
     const parse = (
       name: string,
       args: Record<string, unknown>,
@@ -48,21 +48,28 @@ describe("published automation output contracts", () => {
         },
       }),
     ).not.toThrow();
-    expect(() =>
-      parse("accessibility.wait", {
+    for (const args of [
+      { condition: { enabled: true } },
+      { condition: { enabled: true }, timeoutMs: 1 },
+      {
         condition: { enabled: true, value: "" },
         timeoutMs: 30000,
-        pollIntervalMs: 100,
-      }),
-    ).not.toThrow();
+      },
+    ])
+      expect(() =>
+        parse("accessibility.wait", args),
+      ).not.toThrow();
     for (const args of [
       { condition: {} },
       { condition: { checked: true } },
       { condition: { constructor: true } },
       { condition: JSON.parse('{"__proto__": true}') },
       { condition: { enabled: "true" } },
+      { condition: { enabled: true }, timeoutMs: 0 },
       { condition: { enabled: true }, timeoutMs: 30001 },
-      { condition: { enabled: true }, pollIntervalMs: 49 },
+      { condition: { enabled: true }, timeoutMs: 1.5 },
+      { condition: { enabled: true }, timeoutMs: null },
+      { condition: { enabled: true }, pollIntervalMs: 100 },
       { condition: { textContains: "" } },
     ])
       expect(() =>
@@ -79,15 +86,28 @@ describe("published automation output contracts", () => {
         observeAfter: { maxNodes: 257 },
       }),
     ).toThrow();
-    expect(
-      tools.find(
-        (tool) => tool.name === "accessibility.wait",
-      ),
-    ).toMatchObject({
+    const wait = tools.find(
+      (tool) => tool.name === "accessibility.wait",
+    )!;
+    expect(wait).toMatchObject({
       native: true,
       readOnly: true,
       scope: "accessibility.read",
+      inputSchema: {
+        additionalProperties: false,
+        properties: {
+          timeoutMs: {
+            type: "integer",
+            minimum: 1,
+            maximum: 30000,
+            default: 5000,
+          },
+        },
+      },
     });
+    expect(wait.inputSchema.properties).not.toHaveProperty(
+      "pollIntervalMs",
+    );
   });
 
   it("distinguishes discovery metadata from authorization and describes bounded wait outcomes", () => {

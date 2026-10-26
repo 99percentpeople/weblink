@@ -197,7 +197,7 @@ mod tests {
         }
     }
     #[test]
-    fn accessibility_values_observation_and_wait_remain_bounded_and_read_authorized() {
+    fn accessibility_values_observation_and_event_wait_remain_bounded_and_read_authorized() {
         use serde_json::json;
         assert!(validate(
             "accessibility.snapshot",
@@ -218,12 +218,23 @@ mod tests {
             "accessibility.wait",
             &json!({
                 "target":"local","elementId":"ref","condition":{"enabled":true,"value":""},
-                "timeoutMs":30000,"pollIntervalMs":100
+                "timeoutMs":30000
             }),
         )
         .unwrap();
         assert_eq!(wait["scope"], "accessibility.read");
         assert_eq!(wait["readOnly"], true);
+        let input = &wait["inputSchema"];
+        assert_eq!(input["additionalProperties"], false);
+        assert!(input["properties"].get("pollIntervalMs").is_none());
+        assert_eq!(input["properties"]["timeoutMs"]["default"], 5000);
+        for timeout in [None, Some(1), Some(30000)] {
+            let mut args = json!({"target":"local","elementId":"ref","condition":{"enabled":true}});
+            if let Some(timeout) = timeout {
+                args["timeoutMs"] = json!(timeout);
+            }
+            assert!(validate("accessibility.wait", &args).is_ok(), "{args}");
+        }
         for condition in [
             json!({}),
             json!({"checked":true}),
@@ -238,10 +249,18 @@ mod tests {
             )
             .is_err());
         }
-        for (field, value) in [("timeoutMs", 30001), ("pollIntervalMs", 49)] {
+        for invalid in [
+            json!({"timeoutMs":0}),
+            json!({"timeoutMs":30001}),
+            json!({"timeoutMs":1.5}),
+            json!({"timeoutMs":null}),
+            json!({"pollIntervalMs":100}),
+        ] {
             let mut args = json!({"target":"local","elementId":"ref","condition":{"enabled":true}});
-            args[field] = json!(value);
-            assert!(validate("accessibility.wait", &args).is_err());
+            args.as_object_mut()
+                .unwrap()
+                .extend(invalid.as_object().unwrap().clone());
+            assert!(validate("accessibility.wait", &args).is_err(), "{args}");
         }
         assert!(validate(
             "accessibility.snapshot",

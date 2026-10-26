@@ -113,6 +113,7 @@ struct State {
     grants: HashMap<String, Grant>,
     pending: HashMap<String, Pending>,
     tickets: HashMap<String, Ticket>,
+    accessibility_waits: HashMap<String, Arc<weblink_desktop_accessibility::WaitSignal>>,
     requests: HashMap<String, Invocation>,
     audit: Vec<Value>,
     listener: Option<CancellationToken>,
@@ -211,6 +212,11 @@ impl Service {
     }
     fn revoke_locked(&self, s: &mut State, id: &str) {
         s.grants.remove(id);
+        // A wait may still use an element reference from a different, older read grant.
+        // Authority changes wake it directly; no UI polling is needed to detect revocation.
+        for signal in s.accessibility_waits.values() {
+            signal.notify();
+        }
         self.jobs.cancel_grant(id);
         let calls: Vec<_> = s
             .tickets

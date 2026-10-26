@@ -1,4 +1,5 @@
 //! UIA COM objects are created, used and released on the dedicated MTA worker.
+mod events;
 use crate::*;
 use ::windows::{
     core::{Interface, BSTR},
@@ -146,6 +147,26 @@ impl Windows {
 }
 impl Backend for Windows {
     type Element = Element;
+    fn subscribe(
+        &mut self,
+        element: &Element,
+        condition: &WaitCondition,
+        signal: Arc<WaitSignal>,
+        check: &Check,
+    ) -> Result<Box<dyn EventSubscription>> {
+        self.allowed(element, check)?;
+        if unsafe { element.raw.CurrentIsPassword().map_err(mapped)?.as_bool() } {
+            return Err(Error::ProtectedElement);
+        }
+        let subscription = events::subscribe(&self.automation, element, condition, signal, check)?;
+        // The provider and permission state can change during registration.
+        self.allowed(element, check)?;
+        if unsafe { element.raw.CurrentIsPassword().map_err(mapped)?.as_bool() } {
+            return Err(Error::ProtectedElement);
+        }
+        check()?;
+        Ok(subscription)
+    }
     fn bind_window(&mut self, element: &Element, check: &Check) -> Result<BoundWindow> {
         self.allowed(element, check)?;
         unsafe {
