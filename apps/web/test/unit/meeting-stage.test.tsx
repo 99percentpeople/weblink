@@ -125,6 +125,15 @@ beforeEach(() => {
     addEventListener() {},
     removeEventListener() {},
   }));
+  // Full tile actions observe their bounds; jsdom has no ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 afterEach(() => {
   cleanup();

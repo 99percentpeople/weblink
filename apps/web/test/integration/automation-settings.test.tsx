@@ -403,9 +403,10 @@ it("automatically edits and revokes tokens while automation is off", async () =>
       null,
     ),
   );
+  // Choose the text action; the icon button shares its localized label.
   await userEvent.click(
-    screen.getByRole("button", {
-      name: "common.action.close",
+    screen.getByText("common.action.close", {
+      selector: "button",
     }),
   );
   await waitFor(() =>
@@ -690,8 +691,8 @@ it("preserves the exact expiration timestamp when only renaming a token", async 
   );
   // Closing also flushes the focused field, with no Save action.
   await userEvent.click(
-    screen.getByRole("button", {
-      name: "common.action.close",
+    screen.getByText("common.action.close", {
+      selector: "button",
     }),
   );
   await waitFor(() =>
@@ -724,8 +725,8 @@ it("keeps the edit dialog open after a failed automatic write", async () => {
     { target: { value: "New name" } },
   );
   fireEvent.click(
-    screen.getByRole("button", {
-      name: "common.action.close",
+    screen.getByText("common.action.close", {
+      selector: "button",
     }),
   );
   expect(

@@ -265,8 +265,8 @@ describe("room settings autosave", () => {
       await screen.findByLabelText("common.join_form.name"),
     ).toBeVisible();
     fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.close",
+      screen.getByText("common.action.close", {
+        selector: "button",
       }),
     );
     await waitFor(() =>
@@ -540,8 +540,8 @@ describe("room settings autosave", () => {
     );
     expect(completed).not.toHaveBeenCalled();
     fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.close",
+      screen.getByText("common.action.close", {
+        selector: "button",
       }),
     );
     await waitFor(() =>
@@ -686,8 +686,8 @@ describe("room settings autosave", () => {
     });
     expect(appState.profile.roomId).toBe("saved-room");
     fireEvent.click(
-      screen.getByRole("button", {
-        name: "common.action.close",
+      screen.getByText("common.action.close", {
+        selector: "button",
       }),
     );
     await waitFor(() =>
