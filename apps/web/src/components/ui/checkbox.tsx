@@ -65,6 +65,7 @@ export const CheckboxControl = <
             transition-none"
         >
           <svg
+            aria-hidden="true"
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
           >
@@ -80,7 +81,6 @@ export const CheckboxControl = <
                   : "m5 12l4 4 8-8"
               }
             />
-            <title>Checkbox</title>
           </svg>
         </CheckboxPrimitive.Indicator>
       </CheckboxPrimitive.Control>

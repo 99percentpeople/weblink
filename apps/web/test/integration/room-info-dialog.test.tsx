@@ -1050,7 +1050,9 @@ describe("room dialog and shared meeting device ownership", () => {
     );
     expect(getUserMedia).not.toHaveBeenCalled();
     await userEvent.click(
-      screen.getByRole("button", { name: "Dismiss" }),
+      screen.getByRole("button", {
+        name: "common.action.close",
+      }),
     );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).toBeNull(),

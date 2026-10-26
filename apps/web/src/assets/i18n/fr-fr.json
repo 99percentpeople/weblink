@@ -480,7 +480,7 @@
       "remove_title": "Supprimer l'historique des autorisations ?",
       "remove_description": "Supprimer les autorisations enregistrées pour « {{name}} » et supprimer cette entrée ? L'historique des discussions sera conservé.",
       "delete_requires_disconnect": "Déconnectez-vous de ce client avant de supprimer son historique d'autorisations.",
-      "allow_permanently": "Always allow",
+      "allow_permanently": "Toujours autoriser",
       "groups": {
         "identity": "Vérification et appairage",
         "content": "Contenu et fichiers",
@@ -680,6 +680,9 @@
     "version": "Version"
   },
   "common": {
+    "loading": "Chargement...",
+    "no_results_found": "Aucun résultat trouvé",
+    "resize_panel": "Redimensionner le panneau",
     "theme_toggle": {
       "light": "Mode clair",
       "dark": "Mode sombre",
@@ -875,6 +878,7 @@
       "approval_failed": "Impossible de traiter la demande d’autorisation. Veuillez réessayer."
     },
     "forward_dialog": {
+      "select_client": "Sélectionner {{name}}",
       "title": "Transférer des éléments",
       "placeholder": "Rechercher des clients destinataires…",
       "no_results_found": "Aucun résultat trouvé"
@@ -1216,7 +1220,7 @@
     "settings_permissions": "Clients et salles",
     "settings_application": "Application",
     "settings_notifications": "Notifications",
-    "settings_automation": "Automation"
+    "settings_automation": "Automatisation"
   },
   "file_library": {
     "search": "Rechercher des fichiers…",

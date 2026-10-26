@@ -610,7 +610,9 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select system audio source"
+                      aria-label={t(
+                        "common.media_selection_dialog.select_system_audio_source",
+                      )}
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -681,7 +683,9 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select microphone"
+                      aria-label={t(
+                        "common.media_selection_dialog.select_microphone",
+                      )}
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -847,7 +851,9 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select camera"
+                      aria-label={t(
+                        "common.media_selection_dialog.select_camera",
+                      )}
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -919,7 +925,9 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select microphone"
+                      aria-label={t(
+                        "common.media_selection_dialog.select_microphone",
+                      )}
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>
@@ -1011,7 +1019,9 @@ export const createMediaSelectionDialog = () => {
                     )}
                   >
                     <SelectTrigger
-                      aria-label="Select program audio"
+                      aria-label={t(
+                        "common.media_selection_dialog.select_program_audio",
+                      )}
                       class="hover:bg-muted/80 border-none transition-colors"
                     >
                       <SelectValue<MediaDeviceInfoType>>

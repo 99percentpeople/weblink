@@ -278,6 +278,7 @@ export const DropdownMenuSubTrigger = <
     >
       {local.children}
       <svg
+        aria-hidden="true"
         xmlns="http://www.w3.org/2000/svg"
         width="1em"
         height="1em"
@@ -292,7 +293,6 @@ export const DropdownMenuSubTrigger = <
           stroke-width="2"
           d="m9 6l6 6l-6 6"
         />
-        <title>Arrow</title>
       </svg>
     </DropdownMenuPrimitive.SubTrigger>
   );
@@ -373,6 +373,7 @@ export const DropdownMenuCheckboxItem = <
           justify-center"
       >
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           class="h-4 w-4"
@@ -385,7 +386,6 @@ export const DropdownMenuCheckboxItem = <
             stroke-width="2"
             d="m5 12l5 5L20 7"
           />
-          <title>Checkbox</title>
         </svg>
       </DropdownMenuPrimitive.ItemIndicator>
       {props.children}
@@ -428,6 +428,7 @@ export const DropdownMenuRadioItem = <
           justify-center"
       >
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           class="h-2 w-2"
@@ -444,7 +445,6 @@ export const DropdownMenuRadioItem = <
               d="M7 3.34a10 10 0 1 1-4.995 8.984L2 12l.005-.324A10 10 0 0 1 7 3.34"
             />
           </g>
-          <title>Radio</title>
         </svg>
       </DropdownMenuPrimitive.ItemIndicator>
       {props.children}

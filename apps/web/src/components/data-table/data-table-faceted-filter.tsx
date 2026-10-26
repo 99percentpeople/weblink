@@ -113,7 +113,9 @@ export function DataTableFacetedFilter<TData, TValue>(
         <Command>
           <CommandInput placeholder={props.title} />
           <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandEmpty>
+              {t("common.no_results_found")}
+            </CommandEmpty>
             <CommandGroup>
               <For each={props.options}>
                 {(option) => {

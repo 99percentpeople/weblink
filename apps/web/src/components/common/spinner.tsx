@@ -1,4 +1,5 @@
 import { cn } from "@/libs/cn";
+import { t } from "@/i18n";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 import type { Component, ComponentProps } from "solid-js";
@@ -29,7 +30,8 @@ const spinnerVariants = cva(
 );
 
 export interface SpinnerProps
-  extends ComponentProps<"div">,
+  extends
+    ComponentProps<"div">,
     Omit<VariantProps<typeof spinnerVariants>, "size"> {
   className?: string;
   size?:
@@ -49,7 +51,7 @@ const Spinner: Component<SpinnerProps> = (props) => {
   return (
     <div
       role="status"
-      aria-label="Loading"
+      aria-label={t("common.loading")}
       class={cn(
         typeof local.size === "string"
           ? spinnerVariants({
@@ -74,7 +76,7 @@ const Spinner: Component<SpinnerProps> = (props) => {
       <For each={Array.from({ length: leafNumber })}>
         {(_, i) => (
           <div
-            class="animate-spinner absolute top-[4.4%] left-[46.5%] h-[24%]
+            class="animate-spinner absolute left-[46.5%] top-[4.4%] h-[24%]
               w-[7%] origin-[center_190%] rounded-full opacity-[0.1]
               will-change-transform"
             style={{
@@ -85,7 +87,7 @@ const Spinner: Component<SpinnerProps> = (props) => {
           />
         )}
       </For>
-      <span class="sr-only">Loading...</span>
+      <span class="sr-only">{t("common.loading")}</span>
     </div>
   );
 };

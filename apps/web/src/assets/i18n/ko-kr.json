@@ -480,7 +480,7 @@
       "remove_title": "권한 기록을 삭제하시겠습니까?",
       "remove_description": "“{{name}}”에 대해 저장된 권한을 삭제하고 이 항목을 제거하시겠습니까? 채팅 기록이 유지됩니다.",
       "delete_requires_disconnect": "권한 기록을 삭제하기 전에 이 클라이언트와의 연결을 끊으세요.",
-      "allow_permanently": "Always allow",
+      "allow_permanently": "항상 허용",
       "groups": {
         "identity": "기기 확인 및 페어링",
         "content": "콘텐츠 및 파일",
@@ -680,6 +680,9 @@
     "version": "버전"
   },
   "common": {
+    "loading": "로드 중...",
+    "no_results_found": "검색결과가 없습니다",
+    "resize_panel": "패널 크기 조절",
     "theme_toggle": {
       "light": "라이트 모드",
       "dark": "다크 모드",
@@ -875,6 +878,7 @@
       "approval_failed": "권한 요청을 처리하지 못했습니다. 다시 시도해 주세요."
     },
     "forward_dialog": {
+      "select_client": "{{name}} 선택",
       "title": "항목 전달",
       "placeholder": "전달할 클라이언트 검색…",
       "no_results_found": "검색결과가 없습니다"
@@ -1216,7 +1220,7 @@
     "settings_permissions": "클라이언트 및 채팅방",
     "settings_application": "애플리케이션",
     "settings_notifications": "알림",
-    "settings_automation": "Automation"
+    "settings_automation": "자동화"
   },
   "file_library": {
     "search": "파일 검색…",

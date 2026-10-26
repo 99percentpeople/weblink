@@ -480,7 +480,7 @@
       "remove_title": "Berechtigungsverlauf löschen?",
       "remove_description": "Die gespeicherten Berechtigungen für „{{name}}“ löschen und diesen Eintrag entfernen? Der Chatverlauf wird gespeichert.",
       "delete_requires_disconnect": "Trennen Sie die Verbindung zu diesem Client, bevor Sie seinen Berechtigungsverlauf löschen.",
-      "allow_permanently": "Always allow",
+      "allow_permanently": "Immer erlauben",
       "groups": {
         "identity": "Geräteprüfung und Kopplung",
         "content": "Inhalte und Dateien",
@@ -680,6 +680,9 @@
     "version": "Version"
   },
   "common": {
+    "loading": "Laden...",
+    "no_results_found": "Keine Ergebnisse gefunden",
+    "resize_panel": "Panelgröße ändern",
     "theme_toggle": {
       "light": "Heller Modus",
       "dark": "Dunkler Modus",
@@ -875,6 +878,7 @@
       "approval_failed": "Die Berechtigungsanfrage konnte nicht verarbeitet werden. Bitte erneut versuchen."
     },
     "forward_dialog": {
+      "select_client": "{{name}} auswählen",
       "title": "Artikel weiterleiten",
       "placeholder": "Clients zum Weiterleiten suchen…",
       "no_results_found": "Keine Ergebnisse gefunden"
@@ -1216,7 +1220,7 @@
     "settings_permissions": "Clients und Räume",
     "settings_application": "Anwendung",
     "settings_notifications": "Benachrichtigungen",
-    "settings_automation": "Automation"
+    "settings_automation": "Automatisierung"
   },
   "file_library": {
     "search": "Dateien durchsuchen…",

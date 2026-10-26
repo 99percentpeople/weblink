@@ -62,6 +62,7 @@ export const ContextMenuSubTrigger = <
     >
       {local.children}
       <svg
+        aria-hidden="true"
         xmlns="http://www.w3.org/2000/svg"
         class="ml-auto h-4 w-4"
         viewBox="0 0 24 24"
@@ -74,7 +75,6 @@ export const ContextMenuSubTrigger = <
           stroke-width="2"
           d="m9 6l6 6l-6 6"
         />
-        <title>Arrow</title>
       </svg>
     </ContextMenuPrimitive.SubTrigger>
   );
@@ -231,6 +231,7 @@ export const ContextMenuCheckboxItem = <
           justify-center"
       >
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           class="h-4 w-4"
@@ -243,7 +244,6 @@ export const ContextMenuCheckboxItem = <
             stroke-width="2"
             d="m5 12l5 5L20 7"
           />
-          <title>Checkbox</title>
         </svg>
       </ContextMenuPrimitive.ItemIndicator>
       {local.children}
@@ -283,6 +283,7 @@ export const ContextMenuRadioItem = <
     >
       <ContextMenuPrimitive.ItemIndicator class="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           class="h-2 w-2"
@@ -299,7 +300,6 @@ export const ContextMenuRadioItem = <
               d="M7 3.34a10 10 0 1 1-4.995 8.984L2 12l.005-.324A10 10 0 0 1 7 3.34"
             />
           </g>
-          <title>Radio</title>
         </svg>
       </ContextMenuPrimitive.ItemIndicator>
       {local.children}

@@ -38,6 +38,66 @@ const placeholders = (value: string) =>
     .map((match) => match[1])
     .sort();
 
+// Reviewed shared spellings and technical terms. New English copies in a
+// non-English catalog need an explicit review instead of passing key parity.
+const sharedTerms = ["RTT", "{{page}} / {{count}}"];
+const unchangedTerms: Record<string, readonly string[]> = {
+  "de-de": [
+    "Pause",
+    "Status",
+    "Hardware",
+    "Software",
+    "Mono",
+    "Trackpad",
+    "Touch",
+    "Gamepad",
+    "Touchscreen",
+    "Clients",
+    "Chat",
+    "Browser",
+    "Version",
+    "System",
+    "Name",
+    "Avatar",
+    "Online",
+    "Offline",
+    "Layout",
+    "Info",
+    "Videos",
+    "Audio",
+    "Details",
+    "Port",
+  ],
+  "es-es": [
+    "Diagonal",
+    "Hardware",
+    "Software",
+    "Mono",
+    "Chat",
+    "Avatar",
+    "Audio",
+  ],
+  "fr-fr": [
+    "Pause",
+    "Maintenance",
+    "Mono",
+    "Clients",
+    "Version",
+    "Avatar",
+    "Session",
+    "Client {{name}}",
+    "Conversations",
+    "Microphone",
+    "Microphone {{count}}",
+    "Application",
+    "Notifications",
+    "Images",
+    "Audio",
+    "Documents",
+    "Port",
+  ],
+};
+
 describe("translation catalogs", () => {
   it("registers every language catalog", () => {
     expect(
@@ -57,6 +117,50 @@ describe("translation catalogs", () => {
         expect(placeholders(catalog[key]), key).toEqual(
           placeholders(catalogs["en-us"][key]),
         );
+      }
+    },
+  );
+  it.each(
+    Object.entries(catalogs).filter(
+      ([locale]) => locale !== "en-us",
+    ),
+  )(
+    "does not leave unreviewed English text in %s",
+    (locale, catalog) => {
+      const allowed = new Set([
+        ...sharedTerms,
+        ...(unchangedTerms[locale] ?? []),
+      ]);
+      const untranslated = Object.entries(catalog)
+        .filter(
+          ([key, value]) =>
+            value === catalogs["en-us"][key] &&
+            /[a-z]/i.test(value) &&
+            !allowed.has(value),
+        )
+        .map(([key]) => key);
+      expect(untranslated).toEqual([]);
+    },
+  );
+  it.each(Object.entries(catalogs))(
+    "keeps shared labels consistent across surfaces in %s",
+    (_locale, catalog) => {
+      for (const [alias, common] of [
+        [
+          "setting.permissions.allow_permanently",
+          "common.action.always_allow",
+        ],
+        [
+          "app_menu.settings_automation",
+          "automation.title",
+        ],
+        ["video.loading_state.loading", "common.loading"],
+        [
+          "common.forward_dialog.no_results_found",
+          "common.no_results_found",
+        ],
+      ]) {
+        expect(catalog[alias], alias).toBe(catalog[common]);
       }
     },
   );

@@ -8,6 +8,7 @@ import { getInitials } from "@/libs/utils/name";
 import { RouteSectionProps } from "@solidjs/router";
 import { createMemo, For } from "solid-js";
 import { appState } from "@/libs/state/app-state";
+import { t } from "@/i18n";
 
 const ShareClientItem = (props: { client: ClientInfo }) => {
   return (
@@ -34,7 +35,7 @@ const Share = (props: RouteSectionProps) => {
 
   return (
     <div class="container flex flex-col gap-2">
-      <h2 class="h2">Share</h2>
+      <h2 class="h2">{t("common.action.share")}</h2>
       <ul>
         <For each={availableClients()}>
           {(item) => <ShareClientItem client={item} />}

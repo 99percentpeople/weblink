@@ -475,7 +475,7 @@
       "remove_title": "刪除權限記錄？",
       "remove_description": "刪除「{{name}}」儲存的權限並從清單移除？聊天記錄會保留。",
       "delete_requires_disconnect": "請先中斷與此用戶端的連線，再刪除權限記錄。",
-      "allow_permanently": "Always allow",
+      "allow_permanently": "永久允許",
       "groups": {
         "identity": "裝置驗證與配對",
         "content": "內容與檔案",
@@ -680,6 +680,9 @@
     "version": "版本"
   },
   "common": {
+    "loading": "載入中...",
+    "no_results_found": "沒有找到結果",
+    "resize_panel": "調整面板大小",
     "scan_qrcode_dialog": {
       "description": "掃描二維碼或分享連結，邀請朋友加入房間。",
       "link": "邀請連結",
@@ -861,6 +864,7 @@
       "title": "剪貼簿歷史"
     },
     "forward_dialog": {
+      "select_client": "選擇 {{name}}",
       "title": "轉發項目",
       "placeholder": "查找客戶端以轉發...",
       "no_results_found": "沒有找到結果"
@@ -1216,7 +1220,7 @@
     "settings_permissions": "用戶端與房間",
     "settings_application": "應用",
     "settings_notifications": "通知",
-    "settings_automation": "Automation"
+    "settings_automation": "自動化"
   },
   "file_library": {
     "search": "搜尋檔案…",

@@ -709,6 +709,9 @@
     "version": "版本"
   },
   "common": {
+    "loading": "加载中...",
+    "no_results_found": "没有找到结果",
+    "resize_panel": "调整面板大小",
     "scan_qrcode_dialog": {
       "description": "扫描二维码或分享链接，邀请朋友加入房间。",
       "link": "邀请链接",
@@ -890,6 +893,7 @@
       "title": "剪贴板历史"
     },
     "forward_dialog": {
+      "select_client": "选择 {{name}}",
       "title": "转发项目",
       "placeholder": "查找客户端以转发...",
       "no_results_found": "没有找到结果"

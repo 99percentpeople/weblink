@@ -334,7 +334,9 @@ it("edits client and room permissions through selects and preserves the other en
     appState.options.clientConfigs.alice?.remoteControl,
   ).toBe("allow");
   fireEvent.click(
-    screen.getByRole("button", { name: "Dismiss" }),
+    screen.getByRole("button", {
+      name: "common.action.close",
+    }),
   );
   fireEvent.click(
     screen.getByRole("button", {
@@ -363,7 +365,9 @@ it("edits client and room permissions through selects and preserves the other en
       ?.autoDownloadFiles,
   ).toBe(false);
   fireEvent.click(
-    screen.getByRole("button", { name: "Dismiss" }),
+    screen.getByRole("button", {
+      name: "common.action.close",
+    }),
   );
   fireEvent.click(
     screen.getByRole("button", {
@@ -448,7 +452,9 @@ it.each(["room-current", "room-offline"])(
       autoDownloadFiles: false,
     });
     fireEvent.click(
-      screen.getByRole("button", { name: "Dismiss" }),
+      screen.getByRole("button", {
+        name: "common.action.close",
+      }),
     );
     expect(
       screen.getByRole("button", {

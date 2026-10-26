@@ -64,7 +64,12 @@ const ForwardClientItem = (props: {
         <Checkbox
           role="checkbox"
           checked={props.checked}
-          aria-label="Select client"
+          aria-label={t(
+            "common.forward_dialog.select_client",
+            {
+              name: props.client.name,
+            },
+          )}
         >
           <CheckboxControl />
         </Checkbox>

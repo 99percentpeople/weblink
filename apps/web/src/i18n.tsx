@@ -1,7 +1,6 @@
 import {
   flatten,
   resolveTemplate,
-  translator,
 } from "@solid-primitives/i18n";
 import { createMemo, createResource } from "solid-js";
 import {
@@ -58,22 +57,37 @@ export const isDictLoaded = createMemo(() => {
 
 // Reading the latest dictionary keeps text mounted while the next chunk loads.
 // A direct resource read would suspend the entire settings dialog.
-const translate = translator(
-  () => dict.latest,
-  resolveTemplate,
-);
-
-const fallback = translator(
-  () => englishDictionary,
-  resolveTemplate,
-);
-
-const t = (path: string, ...args: any[]): string =>
-  // @ts-ignore
-  translate(path, ...args) ??
-  // @ts-ignore
-  fallback(path, ...args) ??
-  path;
+const t = (
+  path: string,
+  args?: Record<
+    string,
+    string | number | boolean | null | undefined
+  >,
+): string => {
+  const dictionary: Record<string, unknown> = dict.latest;
+  const fallback: Record<string, unknown> =
+    englishDictionary;
+  const translated = dictionary[path];
+  const original = fallback[path];
+  // Empty translations must fall back too; otherwise a present key can
+  // leave a label blank even though English has usable text.
+  const template =
+    typeof translated === "string" && translated.trim()
+      ? translated
+      : typeof original === "string" && original.trim()
+        ? original
+        : path;
+  return resolveTemplate(
+    template,
+    args &&
+      Object.fromEntries(
+        Object.entries(args).map(([key, value]) => [
+          key,
+          value ?? "",
+        ]),
+      ),
+  );
+};
 
 export const localeLabel = (locale: Locale): string =>
   locale === "system"

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { cn } from "@/libs/cn";
 import type {
   DynamicProps,
@@ -78,19 +79,20 @@ export const ResizableHandle = <
 
   return (
     <ResizablePrimitive.Handle
+      aria-label={t("common.resize_panel")}
       class={cn(
         `focus-visible:ring-ring [&:not([data-active])]:bg-border
         [&[data-active]_#resizable-handle]:bg-muted-foreground/50
         [&[data-dragging]_#resizable-handle]:bg-muted-foreground/80
         relative flex w-px items-center justify-center
         overflow-visible transition-shadow
-        focus-visible:ring-[1.5px] focus-visible:ring-offset-1
-        focus-visible:outline-none data-[orientation=vertical]:h-px
+        focus-visible:outline-none focus-visible:ring-[1.5px]
+        focus-visible:ring-offset-1 data-[orientation=vertical]:h-px
         data-[orientation=vertical]:w-full
-        [&[data-orientation=horizontal]_#resizable-handle]:h-full
         [&[data-orientation=horizontal][data-active]_#resizable-handle]:w-2
-        [&[data-orientation=vertical]_#resizable-handle]:w-full
-        [&[data-orientation=vertical][data-active]_#resizable-handle]:h-2`,
+        [&[data-orientation=horizontal]_#resizable-handle]:h-full
+        [&[data-orientation=vertical][data-active]_#resizable-handle]:h-2
+        [&[data-orientation=vertical]_#resizable-handle]:w-full`,
         local.class,
       )}
       {...rest}
@@ -105,6 +107,7 @@ export const ResizableHandle = <
             justify-center rounded-sm border"
         >
           <svg
+            aria-hidden="true"
             xmlns="http://www.w3.org/2000/svg"
             class="h-2.5 w-2.5"
             viewBox="0 0 15 15"
@@ -115,7 +118,6 @@ export const ResizableHandle = <
               d="M5.5 4.625a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25m4 0a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25M10.625 7.5a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0M5.5 8.625a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25m5.125 2.875a1.125 1.125 0 1 1-2.25 0a1.125 1.125 0 0 1 2.25 0M5.5 12.625a1.125 1.125 0 1 0 0-2.25a1.125 1.125 0 0 0 0 2.25"
               clip-rule="evenodd"
             />
-            <title>Resizable handle</title>
           </svg>
         </div>
       </Show>

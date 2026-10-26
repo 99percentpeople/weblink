@@ -709,6 +709,9 @@
     "version": "Version"
   },
   "common": {
+    "loading": "Loading...",
+    "no_results_found": "No results found",
+    "resize_panel": "Resize panel",
     "theme_toggle": {
       "light": "Light Mode",
       "dark": "Dark Mode",
@@ -904,6 +907,7 @@
       "approval_failed": "Could not respond to the authorization request. Please retry."
     },
     "forward_dialog": {
+      "select_client": "Select {{name}}",
       "title": "Forward items",
       "placeholder": "Search for clients to forward...",
       "no_results_found": "No results found"

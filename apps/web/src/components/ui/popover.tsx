@@ -1,4 +1,5 @@
 import { cn } from "@/libs/cn";
+import { t } from "@/i18n";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 import type {
   PopoverContentProps,
@@ -81,6 +82,7 @@ export const PopoverCloseButton = <
   );
   return (
     <PopoverPrimitive.CloseButton
+      aria-label={t("common.action.close")}
       class={cn(
         `ring-offset-background focus:ring-ring absolute right-4
         top-4 rounded-sm opacity-70 transition-[opacity,box-shadow]
@@ -103,7 +105,7 @@ export const PopoverCloseButton = <
           stroke-width="2"
           d="M18 6L6 18M6 6l12 12"
         />
-        <title>Close</title>
+        <title>{t("common.action.close")}</title>
       </svg>
     </PopoverPrimitive.CloseButton>
   );

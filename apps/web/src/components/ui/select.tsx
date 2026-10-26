@@ -158,6 +158,7 @@ export const SelectItem = <T extends ValidComponent = "li">(
           justify-center"
       >
         <svg
+          aria-hidden="true"
           xmlns="http://www.w3.org/2000/svg"
           class="h-4 w-4"
           viewBox="0 0 24 24"
@@ -170,7 +171,6 @@ export const SelectItem = <T extends ValidComponent = "li">(
             stroke-width="2"
             d="m5 12l5 5L20 7"
           />
-          <title>Checked</title>
         </svg>
       </SelectPrimitive.ItemIndicator>
       <SelectPrimitive.ItemLabel class="min-w-0 whitespace-normal [overflow-wrap:anywhere]">

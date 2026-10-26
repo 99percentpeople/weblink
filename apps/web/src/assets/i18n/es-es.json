@@ -480,7 +480,7 @@
       "remove_title": "¿Eliminar historial de permisos?",
       "remove_description": "¿Eliminar los permisos guardados de «{{name}}» y esta entrada? Se conservará el historial de chat.",
       "delete_requires_disconnect": "Desconecta de este cliente antes de eliminar su historial de permisos.",
-      "allow_permanently": "Always allow",
+      "allow_permanently": "Permitir siempre",
       "groups": {
         "identity": "Verificación y emparejamiento",
         "content": "Contenido y archivos",
@@ -680,6 +680,9 @@
     "version": "Versión"
   },
   "common": {
+    "loading": "Cargando...",
+    "no_results_found": "No se encontraron resultados",
+    "resize_panel": "Cambiar el tamaño del panel",
     "theme_toggle": {
       "light": "Modo claro",
       "dark": "Modo oscuro",
@@ -875,6 +878,7 @@
       "approval_failed": "No se pudo procesar la solicitud de autorización. Inténtalo de nuevo."
     },
     "forward_dialog": {
+      "select_client": "Seleccionar a {{name}}",
       "title": "Artículos reenviados",
       "placeholder": "Buscar clientes a los que reenviar…",
       "no_results_found": "No se encontraron resultados"
@@ -1216,7 +1220,7 @@
     "settings_permissions": "Clientes y salas",
     "settings_application": "Aplicación",
     "settings_notifications": "Notificaciones",
-    "settings_automation": "Automation"
+    "settings_automation": "Automatización"
   },
   "file_library": {
     "search": "Buscar archivos…",

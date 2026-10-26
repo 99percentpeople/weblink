@@ -10,6 +10,7 @@ import * as DialogPrimitive from "@kobalte/core/dialog";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 
 import { cn } from "@/libs/cn";
+import { t } from "@/i18n";
 import {
   getDialogBodyClassName,
   getDialogContentClassName,
@@ -84,6 +85,7 @@ const DialogContent = <T extends ValidComponent = "div">(
       >
         {props.children}
         <DialogPrimitive.CloseButton
+          aria-label={t("common.action.close")}
           class="ring-offset-background focus:ring-ring
             data-[expanded]:bg-accent
             data-[expanded]:text-muted-foreground rounded-xs
@@ -106,7 +108,9 @@ const DialogContent = <T extends ValidComponent = "div">(
             <path d="M18 6l-12 12" />
             <path d="M6 6l12 12" />
           </svg>
-          <span class="sr-only">Close</span>
+          <span class="sr-only">
+            {t("common.action.close")}
+          </span>
         </DialogPrimitive.CloseButton>
       </DialogPrimitive.Content>
     </DialogPortal>
