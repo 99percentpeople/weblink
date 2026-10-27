@@ -116,8 +116,6 @@ export function RemoteControlOverlay(props: {
     keyboardOptions().enabled &&
     keyboardOptions().systemKeys &&
     control()?.supportsKeyboard();
-  const [nativeCapturing, setNativeCapturing] =
-    createSignal(false);
   const clearTouches = () => {
     keyboardTap = undefined;
     threeFingerTap.cancel();
@@ -322,7 +320,6 @@ export function RemoteControlOverlay(props: {
         {
           capturing: (active) => {
             if (active) keyboard?.release();
-            setNativeCapturing(active);
           },
           current: () =>
             keyboardActive() &&
@@ -391,9 +388,9 @@ export function RemoteControlOverlay(props: {
       "keydown",
       (e) => {
         if (!accepts(e)) return;
-        const native = nativeCapturing();
+        // The Windows hook suppresses every event it forwards. Events reaching
+        // the DOM were passed through (e.g. injected input) and still need forwarding.
         if (
-          !native &&
           props
             .keyboard?.()
             ?.clipboardEnabled?.(
@@ -411,8 +408,7 @@ export function RemoteControlOverlay(props: {
           }
           return;
         }
-        if (native) keyboard?.exit(e);
-        if (native || keyboard?.down(e)) {
+        if (keyboard?.down(e)) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -422,10 +418,7 @@ export function RemoteControlOverlay(props: {
     view.addEventListener(
       "keyup",
       (e) => {
-        if (
-          accepts(e) &&
-          (nativeCapturing() || keyboard?.up(e))
-        ) {
+        if (accepts(e) && keyboard?.up(e)) {
           e.preventDefault();
           e.stopPropagation();
         }

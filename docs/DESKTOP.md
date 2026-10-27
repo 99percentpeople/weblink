@@ -1577,8 +1577,8 @@ The host shortcut uses a passive low-level keyboard observer while the room inpu
 worker is alive, including in the background, and only acts on a current native
 control grant. Every event, including a matching chord, continues through the OS
 hook chain. It does not reserve a global hotkey; multiple processes can observe
-the same combination and other apps may respond to it. This also avoids replacing
-Tauri's process-wide Raw Input registration. The observer ignores injected events,
+the same combination and other apps may respond to it. The observer does not
+register a process-wide Raw Input receiver. It ignores injected events,
 tracks physical left/right modifiers, and fires once per main-key press.
 Emergency notifications carry the grant generation so delayed input cannot revoke
 its replacement. Teardown removes the observer. Configuration updates change its
@@ -1619,9 +1619,10 @@ enabled by default. It uses a controller-side native keyboard hook only while th
 selected remote surface has active control, no local editor owns input, and the
 shared keyboard toggle is on. The
 foreground native window must also match. In that interval, supported scan codes,
-including Alt/Win combinations, come from the native channel; DOM handlers stop
-forwarding only after native startup confirms that preexisting keys have been
-released, so they do not send a second copy. Startup reconciles those keys outside
+including Alt/Win combinations, come from the native channel and are suppressed
+before reaching the local OS or DOM. DOM forwarding stays available for events
+the hook passes through and while startup waits for preexisting keys to be
+released. Startup reconciles those keys outside
 the hook callback, including releases missed while the hook was being installed.
 Local editors, dialogs and the soft-keyboard editor use their
 usual paths. Turning off system shortcuts restores browser key handling.
@@ -1632,6 +1633,12 @@ runs separately. Injected events are ignored to prevent input feedback. Keys hel
 before capture remain local until released. Frontend consumption acknowledgements
 renew a 750 ms native lease every 200 ms, with at most 64 unacknowledged events;
 events older than 100 ms or a sequence gap stop forwarding and reset the input epoch.
+The Windows Tauri builder uses `DeviceEventFilter::Always` to disable Tao's unused
+Raw Input device stream. Its default foreground Raw Input registration can prevent
+this process's low-level keyboard hooks from receiving events while the WebView is
+focused ([wry#1761](https://github.com/tauri-apps/wry/issues/1761)). DOM input and the
+application's native input hooks own keyboard/mouse handling; do not enable Tao
+device events without rechecking focused-window shortcut interception.
 Late startup or delivery cannot attach to a different focused screen. Focus loss,
 window teardown and page navigation stop capture independently of the renderer.
 After stopping, the hook can drain only previously captured key releases for up

@@ -67,7 +67,13 @@ fn media_permission(
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // We use DOM input and our own low-level hooks, not Tao's DeviceEvent stream.
+    // Tao's default Raw Input registration can hide keyboard events from hooks
+    // in this process while a WebView window is focused (wry#1761).
+    #[cfg(windows)]
+    let builder = builder.device_event_filter(tauri::DeviceEventFilter::Always);
+    builder
         .plugin(application::single_instance::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(file_save::Service::default())

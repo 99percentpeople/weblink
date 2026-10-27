@@ -1379,8 +1379,11 @@ it.each(["local", "capture"] as const)(
     expect(surface()).not.toHaveFocus();
     expect(supported).not.toHaveBeenCalled();
     fixture.control.input.mockClear();
+    // A key which reaches the DOM was not consumed by the native hook.
     key();
-    expect(fixture.control.input).not.toHaveBeenCalled();
+    fireEvent.keyUp(window, { code: "KeyA" });
+    expect(fixture.control.input).toHaveBeenCalledTimes(2);
+    fixture.control.input.mockClear();
     receive({
       type: "key",
       sequence: 1,
@@ -1401,7 +1404,7 @@ it.each(["local", "capture"] as const)(
     });
   },
 );
-it("keeps keyboard input on the DOM path until native capture is ready", async () => {
+it("forwards DOM keys both before capture is ready and when the hook passes them through", async () => {
   let receive!: (event: NativeKeyboardEvent) => void;
   let ready!: () => void;
   const close = vi.fn(async () => {});
@@ -1440,7 +1443,10 @@ it("keeps keyboard input on the DOM path until native capture is ready", async (
   await Promise.resolve();
   fixture.control.input.mockClear();
   key();
-  expect(fixture.control.input).not.toHaveBeenCalled();
+  fireEvent.keyUp(window, { code: "KeyA" });
+  expect(fixture.control.input).toHaveBeenCalledTimes(2);
+  fixture.control.input.mockClear();
+  // Consumed physical keys arrive only through the native channel.
   receive({
     type: "key",
     sequence: 1,
@@ -1450,6 +1456,15 @@ it("keeps keyboard input on the DOM path until native capture is ready", async (
     down: true,
   });
   expect(fixture.control.input).toHaveBeenCalledOnce();
+  receive({
+    type: "key",
+    sequence: 2,
+    timestamp: Date.now(),
+    scanCode: 0x1e,
+    extended: false,
+    down: false,
+  });
+  expect(fixture.control.input).toHaveBeenCalledTimes(2);
 });
 
 it.each(["startup", "expired"] as const)(
@@ -1607,7 +1622,10 @@ it.each([
     );
     if (reason !== "startup") {
       key();
-      expect(fixture.control.input).not.toHaveBeenCalled();
+      fireEvent.keyUp(window, { code: "KeyA" });
+      expect(fixture.control.input).toHaveBeenCalledTimes(
+        2,
+      );
       receive({
         type: "key",
         sequence: 1,
@@ -1662,7 +1680,11 @@ it.each([
       );
       fixture.control.input.mockClear();
       key();
-      expect(fixture.control.input).not.toHaveBeenCalled();
+      fireEvent.keyUp(window, { code: "KeyA" });
+      expect(fixture.control.input).toHaveBeenCalledTimes(
+        2,
+      );
+      fixture.control.input.mockClear();
       receive({
         type: "key",
         sequence: 1,
