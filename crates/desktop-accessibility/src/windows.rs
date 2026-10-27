@@ -55,6 +55,12 @@ fn optional(
     }
 }
 impl Windows {
+    pub const CAPABILITIES: Capabilities = Capabilities {
+        supported: true,
+        backend: Some("windows-uia"),
+        actions: &ACTIONS,
+        features: Some(Features::new(true, true, true)),
+    };
     pub fn new() -> Result<Self> {
         unsafe {
             CoInitializeEx(None, COINIT_MULTITHREADED)
@@ -191,8 +197,8 @@ impl Backend for Windows {
             Ok(guard)
         }
     }
-    fn name(&self) -> &'static str {
-        "windows-uia"
+    fn capabilities(&self) -> Capabilities {
+        Self::CAPABILITIES
     }
     fn roots(&mut self, limit: usize, check: &Check) -> Result<(Vec<Element>, bool)> {
         let root = unsafe { self.automation.GetRootElement().map_err(mapped)? };

@@ -2,6 +2,7 @@ use super::*;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 struct Fake {
+    capabilities: Capabilities,
     actions: Arc<AtomicUsize>,
     cancel_before_effect: Option<Arc<AtomicBool>>,
     revoke_after_effect: Option<Arc<AtomicBool>>,
@@ -45,8 +46,8 @@ impl Backend for Fake {
         check()?;
         Ok(Arc::new(TestWindow))
     }
-    fn name(&self) -> &'static str {
-        "test"
+    fn capabilities(&self) -> Capabilities {
+        self.capabilities
     }
     fn roots(&mut self, _: usize, _: &Check) -> Result<(Vec<usize>, bool)> {
         Ok((vec![0], false))
@@ -184,6 +185,12 @@ fn fixture() -> (Session<Fake>, Access, Arc<AtomicBool>, Arc<AtomicUsize>) {
     let count = Arc::new(AtomicUsize::new(0));
     (
         Session::new(Fake {
+            capabilities: Capabilities {
+                supported: true,
+                backend: Some("test"),
+                actions: &ACTIONS,
+                features: Some(Features::new(true, true, true)),
+            },
             actions: count.clone(),
             cancel_before_effect: None,
             revoke_after_effect: None,
@@ -591,4 +598,74 @@ fn event_subscriptions_are_bounded_and_released_on_cancellation_or_registration_
     ));
     assert!(session.subscriptions.is_empty());
     assert_eq!(session.backend.subscriptions.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn partial_backend_reports_and_enforces_its_own_features_before_side_effects() {
+    let (mut s, a, _, count) = fixture();
+    s.backend.capabilities.actions = &[Action::Invoke];
+    s.backend.capabilities.features = Some(Features::new(false, false, false));
+    let report = s.execute(Request::Capabilities, a.clone()).unwrap();
+    assert_eq!(report["actions"], json!(["invoke"]));
+    assert_eq!(report["supportsWait"], false);
+    assert_eq!(report["supportsObservation"], false);
+    assert_eq!(report["supportsWindowBinding"], false);
+    let id = root(&mut s, &a);
+    assert!(matches!(
+        s.bind_window(&id, a.clone()),
+        Err(Error::Unsupported)
+    ));
+    assert!(matches!(
+        s.subscribe(
+            &id,
+            &WaitCondition {
+                enabled: Some(true),
+                ..Default::default()
+            },
+            Arc::new(WaitSignal::default()),
+            a.clone(),
+            a.check.clone(),
+        ),
+        Err(Error::Unsupported)
+    ));
+    for (action, value, observe_after, expected) in [
+        (
+            Action::SetValue,
+            Some("x".into()),
+            None,
+            Error::UnsupportedAction,
+        ),
+        (
+            Action::Invoke,
+            None,
+            Some(Observation::default()),
+            Error::Unsupported,
+        ),
+    ] {
+        assert_eq!(
+            s.execute(
+                Request::Action {
+                    element_id: id.clone(),
+                    action,
+                    value,
+                    observe_after,
+                },
+                a.clone()
+            ),
+            Err(expected)
+        );
+    }
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    // Rejecting an unsupported feature must not invalidate an otherwise valid reference.
+    s.execute(
+        Request::Action {
+            element_id: id,
+            action: Action::Invoke,
+            value: None,
+            observe_after: None,
+        },
+        a,
+    )
+    .unwrap();
+    assert_eq!(count.load(Ordering::SeqCst), 1);
 }

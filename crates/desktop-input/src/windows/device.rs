@@ -7,14 +7,36 @@ pub(super) struct WindowsDevice(
     pub super::touch::TouchDevice,
     pub super::pan::PanDevice,
     pub super::gamepad::GamepadDevice,
+    pub super::encoding::TextState,
 );
 impl Device for WindowsDevice {
-    fn insert_text(
+    fn submit_text(
         &mut self,
         text: &str,
         window: Option<&crate::window::BoundWindow>,
-    ) -> Result<bool, Error> {
-        super::text::insert(text, window, || self.available())
+        deadline: std::time::Instant,
+    ) -> Result<(), Error> {
+        if super::text::insert(text, window, || self.available())? {
+            return Ok(());
+        }
+        let safety = &self.0;
+        self.4.insert(
+            text,
+            || {
+                if std::time::Instant::now() > deadline {
+                    return Err(Error::Stale);
+                }
+                if let Some(window) = window {
+                    window.check(None)?;
+                }
+                Ok(())
+            },
+            |strokes| submit_unicode(safety, strokes),
+        )
+    }
+    fn cancel_text(&mut self) -> Result<(), Error> {
+        let safety = &self.0;
+        self.4.cancel(|strokes| submit_unicode(safety, strokes))
     }
     fn reset_gamepad_feedback(&mut self, slot: u8) {
         self.3.reset_feedback(slot);
@@ -84,7 +106,7 @@ impl Device for WindowsDevice {
         self.1.cancel()
     }
     fn available(&self) -> bool {
-        !self.0.observations.pending() && environment::desktop_available() && self.0.guard_current()
+        available(&self.0)
     }
     fn geometry_current(&self, g: Geometry) -> bool {
         self.0.geometry_current(g)
@@ -93,9 +115,7 @@ impl Device for WindowsDevice {
         let only_release = actions.iter().all(|a| {
             matches!(
                 a,
-                Action::Key { down: false, .. }
-                    | Action::Button { down: false, .. }
-                    | Action::Unicode { down: false, .. }
+                Action::Key { down: false, .. } | Action::Button { down: false, .. }
             )
         });
         if !environment::desktop_available() || (!only_release && !self.available()) {
@@ -104,21 +124,14 @@ impl Device for WindowsDevice {
         let mut inputs = Vec::with_capacity(actions.len());
         for action in actions {
             if let Action::Move { x, y } = *action {
+                let (x, y) = super::encoding::absolute(self.0.desktop(), x, y);
                 if !self.0.pointer_in_guard(x, y) {
                     return Err(Error::Unavailable);
                 }
             }
-            inputs.push(to_input(*action, self.0.marker));
+            inputs.push(to_input(*action, self.0.marker, self.0.desktop()));
         }
-        if inputs.is_empty() {
-            return Ok(());
-        }
-        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
-        if sent as usize == inputs.len() {
-            Ok(())
-        } else {
-            Err(Error::Injection)
-        }
+        submit_inputs(&inputs)
     }
 }
 pub(super) fn capabilities(
@@ -135,8 +148,8 @@ pub(super) fn capabilities(
         gamepad,
     ]
 }
-fn to_input(action: Action, marker: usize) -> INPUT {
-    let keyboard = |scan: u16, flags: KEYBD_EVENT_FLAGS| INPUT {
+fn keyboard(scan: u16, flags: KEYBD_EVENT_FLAGS, marker: usize) -> INPUT {
+    INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
             ki: KEYBDINPUT {
@@ -146,7 +159,9 @@ fn to_input(action: Action, marker: usize) -> INPUT {
                 ..Default::default()
             },
         },
-    };
+    }
+}
+fn to_input(action: Action, marker: usize, desktop: Rect) -> INPUT {
     match action {
         Action::Key { key, down } => keyboard(
             key.code(),
@@ -161,24 +176,19 @@ fn to_input(action: Action, marker: usize) -> INPUT {
                 } else {
                     KEYEVENTF_KEYUP
                 },
-        ),
-        Action::Unicode { unit, down } => keyboard(
-            unit,
-            KEYEVENTF_UNICODE
-                | if down {
-                    KEYBD_EVENT_FLAGS(0)
-                } else {
-                    KEYEVENTF_KEYUP
-                },
+            marker,
         ),
         _ => {
             let (dx, dy, data, flags) = match action {
-                Action::Move { x, y } => (
-                    x,
-                    y,
-                    0,
-                    MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
-                ),
+                Action::Move { x, y } => {
+                    let (x, y) = super::encoding::absolute(desktop, x, y);
+                    (
+                        x,
+                        y,
+                        0,
+                        MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+                    )
+                }
                 Action::Wheel { horizontal, delta } => (
                     0,
                     0,
@@ -217,9 +227,53 @@ fn to_input(action: Action, marker: usize) -> INPUT {
         }
     }
 }
+fn available(safety: &Safety) -> bool {
+    !safety.observations.pending() && environment::desktop_available() && safety.guard_current()
+}
+fn submit_inputs(inputs: &[INPUT]) -> Result<(), Error> {
+    if inputs.is_empty() {
+        return Ok(());
+    }
+    let sent = unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent as usize == inputs.len() {
+        Ok(())
+    } else {
+        Err(Error::Injection)
+    }
+}
+fn unicode_input(stroke: super::encoding::Unicode, marker: usize) -> INPUT {
+    keyboard(
+        stroke.unit,
+        KEYEVENTF_UNICODE
+            | if stroke.down {
+                KEYBD_EVENT_FLAGS(0)
+            } else {
+                KEYEVENTF_KEYUP
+            },
+        marker,
+    )
+}
+fn submit_unicode(safety: &Safety, strokes: &[super::encoding::Unicode]) -> Result<(), Error> {
+    if !environment::desktop_available() || (strokes.iter().any(|s| s.down) && !available(safety)) {
+        return Err(Error::Unavailable);
+    }
+    let inputs: Vec<_> = strokes
+        .iter()
+        .map(|s| unicode_input(*s, safety.marker))
+        .collect();
+    submit_inputs(&inputs)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn desktop() -> Rect {
+        Rect {
+            left: 0,
+            top: 0,
+            width: 65536,
+            height: 65536,
+        }
+    }
     #[test]
     fn native_flags_keep_extended_unicode_wheel_and_marker_distinct() {
         unsafe {
@@ -229,6 +283,7 @@ mod tests {
                     down: false,
                 },
                 42,
+                desktop(),
             )
             .Anonymous
             .ki;
@@ -239,8 +294,8 @@ mod tests {
                 KEYEVENTF_SCANCODE | KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP
             );
             assert_eq!(right_ctrl.dwExtraInfo, 42);
-            let text = to_input(
-                Action::Unicode {
+            let text = unicode_input(
+                super::super::encoding::Unicode {
                     unit: 0xd83d,
                     down: true,
                 },
@@ -255,12 +310,15 @@ mod tests {
                     delta: -120,
                 },
                 42,
+                desktop(),
             )
             .Anonymous
             .mi;
             assert_eq!(wheel.mouseData as i32, -120);
             assert_eq!(wheel.dwFlags, MOUSEEVENTF_HWHEEL);
-            let movement = to_input(Action::Move { x: 1, y: 65535 }, 42).Anonymous.mi;
+            let movement = to_input(Action::Move { x: 1, y: 65535 }, 42, desktop())
+                .Anonymous
+                .mi;
             assert_eq!(
                 movement.dwFlags,
                 MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK

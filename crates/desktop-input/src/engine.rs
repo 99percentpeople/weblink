@@ -71,14 +71,19 @@ pub trait Device {
     fn available(&self) -> bool;
     fn geometry_current(&self, geometry: Geometry) -> bool;
     fn submit(&mut self, actions: &[Action]) -> Result<(), Error>;
-    /// Insert committed text into a supported focused editor. False guarantees
-    /// nothing was submitted; an error may be partial and must not be retried.
-    fn insert_text(
+    /// Submit committed text using native encoding. Recheck the window and deadline
+    /// between native submissions. Errors may be partial and must not be replayed.
+    fn submit_text(
         &mut self,
         _text: &str,
         _window: Option<&crate::window::BoundWindow>,
-    ) -> Result<bool, Error> {
-        Ok(false)
+        _deadline: Instant,
+    ) -> Result<(), Error> {
+        Err(Error::Unavailable)
+    }
+    /// Release any partially injected native text after error, panic or revocation.
+    fn cancel_text(&mut self) -> Result<(), Error> {
+        Ok(())
     }
 }
 #[derive(Clone, Debug)]
@@ -97,7 +102,7 @@ struct InputState<D: Device> {
     panning: bool,
     interrupted: bool,
     cursor: crate::trackpad::Cursor,
-    unicode: Option<u16>,
+    text_pending: bool,
     failure: Option<Error>,
     submitted: u64,
 }
@@ -122,8 +127,11 @@ impl<D: Device> InputState<D> {
             self.device.backend.cancel_touch()
         }))
         .is_ok_and(|result| result.is_ok());
-        if let Some(unit) = self.unicode.take() {
-            ok &= self.release_action(Action::Unicode { unit, down: false });
+        if std::mem::take(&mut self.text_pending) {
+            ok &= std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.device.backend.cancel_text()
+            }))
+            .is_ok_and(|result| result.is_ok());
         }
         // Release only inputs recorded for this grant, in reverse order (keys before modifiers).
         for held in std::mem::take(&mut self.held).into_iter().rev() {
@@ -194,10 +202,7 @@ impl<D: Device> InputState<D> {
             if !gesture.valid() {
                 return Err(Error::Invalid);
             }
-            if !self.device.backend.pan_supported()
-                || !self.held.is_empty()
-                || self.unicode.is_some()
-            {
+            if !self.device.backend.pan_supported() || !self.held.is_empty() || self.text_pending {
                 return Err(Error::Unavailable);
             }
             match gesture {
@@ -211,7 +216,7 @@ impl<D: Device> InputState<D> {
                     let Event::Move(position) = position else {
                         unreachable!()
                     };
-                    let (x, y) = geometry.absolute(position).ok_or(Error::Invalid)?;
+                    let (x, y) = geometry.pixels(position).ok_or(Error::Invalid)?;
                     self.device.backend.submit(&[Action::Move { x, y }])?;
                     self.panning = true;
                 }
@@ -246,7 +251,7 @@ impl<D: Device> InputState<D> {
         let mut transition = None;
         let move_to = |p| {
             geometry
-                .absolute(p)
+                .pixels(p)
                 .map(|(x, y)| Action::Move { x, y })
                 .ok_or(Error::Invalid)
         };
@@ -256,7 +261,7 @@ impl<D: Device> InputState<D> {
             Event::Touch(contacts) => {
                 if !self.device.backend.touch_supported()
                     || !self.held.is_empty()
-                    || self.unicode.is_some()
+                    || self.text_pending
                 {
                     return Err(Error::Unavailable);
                 }
@@ -303,26 +308,13 @@ impl<D: Device> InputState<D> {
                     return Err(Error::Invalid);
                 }
                 self.check_window(None)?;
-                if self
-                    .device
-                    .backend
-                    .insert_text(&text, self.window.as_ref())?
-                {
-                    self.submitted += 1;
-                    return Ok(());
-                }
-                for unit in text.encode_utf16() {
-                    if started.elapsed() > MAX_INPUT_AGE {
-                        return Err(Error::Stale);
-                    }
-                    self.check_window(None)?;
-                    self.unicode = Some(unit); // also covers a partially inserted pair
-                    self.device.backend.submit(&[
-                        Action::Unicode { unit, down: true },
-                        Action::Unicode { unit, down: false },
-                    ])?;
-                    self.unicode = None;
-                }
+                self.text_pending = true;
+                self.device.backend.submit_text(
+                    &text,
+                    self.window.as_ref(),
+                    started + MAX_INPUT_AGE,
+                )?;
+                self.text_pending = false;
                 self.submitted += 1;
                 return Ok(());
             }
@@ -338,7 +330,7 @@ impl<D: Device> InputState<D> {
         if let Some((held, down)) = transition {
             if down {
                 if !self.held.contains(&held) {
-                    // Record before SendInput, which may partially succeed.
+                    // Record before native injection, which may partially succeed.
                     self.held.push(held);
                 } else if matches!(held, Held::Button(_)) {
                     return Ok(());
@@ -439,7 +431,7 @@ impl<D: Device> Engine<D> {
                 panning: false,
                 interrupted: false,
                 cursor: Default::default(),
-                unicode: None,
+                text_pending: false,
                 failure: None,
                 submitted: 0,
             }),
@@ -546,7 +538,7 @@ impl<D: Device> Engine<D> {
         if state.window.is_some()
             || state.interrupted
             || !state.held.is_empty()
-            || state.unicode.is_some()
+            || state.text_pending
             || state.panning
             || !state.touches.is_empty()
         {

@@ -204,17 +204,10 @@ fn desktop_automation_accepts_pointer_keys_and_text_without_window_binding() {
                 key: enter,
                 down: false,
             },
-            Action::Unicode {
-                unit: '中' as u16,
-                down: true,
-            },
-            Action::Unicode {
-                unit: '中' as u16,
-                down: false,
-            },
         ] {
             assert!(observations.contains(&Observation::Input(action)));
         }
+        assert!(observations.contains(&Observation::Text("中".into())));
         drop(observations);
         assert!(rig.service.automation_matches("client", &lease));
         assert!(!rig
@@ -247,10 +240,7 @@ fn same_verified_device_borrows_without_replacing_manual_grant_or_media() {
         .observations
         .lock()
         .unwrap()
-        .contains(&Observation::Input(Action::Unicode {
-            unit: '中' as u16,
-            down: true,
-        })));
+        .contains(&Observation::Text("中文".into())));
     rig.service.automation_release("other");
     assert!(rig.service.automation_matches("client", &lease));
     rig.service.automation_release("client");

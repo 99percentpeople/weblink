@@ -92,6 +92,7 @@ export interface AccessibilityCapabilities {
   maxTextLength?: number;
   supportsWait?: boolean;
   supportsObservation?: boolean;
+  supportsWindowBinding?: boolean;
 }
 export interface AccessibilityWindows {
   coordinateSpace: "desktopPhysicalPixels";

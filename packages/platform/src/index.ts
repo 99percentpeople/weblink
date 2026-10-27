@@ -2,6 +2,7 @@ export * from "./recording";
 export type * from "./automation";
 export { DEFAULT_MCP_SERVER } from "./automation";
 import type { NativeAutomation } from "./automation";
+import type { AccessibilityCapabilities } from "./accessibility";
 export * from "./recording-audio-codec";
 import type { InputDeviceSnapshot } from "./input";
 import type {
@@ -37,6 +38,8 @@ export interface RuntimeCapabilities {
   /** Current refresh rates of connected displays; empty when unavailable. */
   displayRefreshRates: number[];
   remoteInput: boolean;
+  /** Native backend support; absent on older runtimes. */
+  accessibility?: AccessibilityCapabilities;
   systemKeyboard?: boolean;
   nativeClipboard?: boolean;
   /** True only after a recoverable native tray icon has been created. */

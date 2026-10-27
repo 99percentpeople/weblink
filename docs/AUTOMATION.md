@@ -788,9 +788,20 @@ return `UNSUPPORTED`; WebMCP can target a connected Windows desktop through the
 existing authorized peer route.
 
 The portable Rust `Backend` trait in `crates/desktop-accessibility` owns OS
-discovery, inspection and actions. `packages/platform/src/accessibility.ts`
+discovery, inspection, actions and implementation capabilities. The same backend
+descriptor feeds `runtime_capabilities.accessibility` and
+`accessibility.capabilities`; device discovery uses its actions, `supportsWait`
+and `supportsWindowBinding` rather than the OS name. Missing backend metadata
+does not imply support. `supportsObservation` governs optional post-action reads.
+`packages/platform/src/accessibility.ts`
 defines the corresponding TS contract. Future macOS AX or Linux AT-SPI adapters
-implement this backend without changing the tool names, consent flow or transport.
+implement this backend and select its event runtime in `platform.rs` without
+changing the tool names, consent flow or transport. The shared worker retains
+bounded queues, cancellation and reference ownership. `EventRuntime` handles
+native event-loop policy; enqueue, cleanup and disconnect notify the selected
+runtime. Windows uses the blocking MTA queue because UIA delivers callbacks on
+COM threads. Native objects and subscriptions are created and dropped on their
+own backend thread.
 Roles and actions are platform-neutral; a node advertises only its available
 actions. Native pointers, HWNDs and COM interfaces never leave the backend.
 

@@ -1,13 +1,16 @@
 //! Portable accessibility contract. OS objects stay on one worker thread;
 //! transports receive only bounded snapshots and caller-bound opaque references.
+mod capabilities;
 mod model;
 mod observation;
-#[cfg(any(windows, test))]
+mod platform;
+mod runtime;
 mod session;
 mod wait;
 #[cfg(windows)]
 mod windows;
 mod worker;
+pub use capabilities::{capabilities, Capabilities, Features};
 pub use model::*;
 use std::sync::Arc;
 pub use wait::WaitSignal;
@@ -45,7 +48,7 @@ pub trait Backend {
     fn bind_window(&mut self, _element: &Self::Element, _check: &Check) -> Result<BoundWindow> {
         Err(Error::Unsupported)
     }
-    fn name(&self) -> &'static str;
+    fn capabilities(&self) -> Capabilities;
     fn roots(&mut self, limit: usize, check: &Check) -> Result<(Vec<Self::Element>, bool)>;
     fn children(
         &mut self,

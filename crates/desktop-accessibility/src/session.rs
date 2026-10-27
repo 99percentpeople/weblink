@@ -48,6 +48,14 @@ impl<B: Backend> Session<B> {
     ) -> Result<Access> {
         condition.validate()?;
         (access.check)()?;
+        if !self
+            .backend
+            .capabilities()
+            .features
+            .is_some_and(|f| f.supports_wait)
+        {
+            return Err(Error::Unsupported);
+        }
         self.purge();
         if self.subscriptions.len() >= MAX_SUBSCRIPTIONS {
             return Err(Error::Busy);
@@ -120,6 +128,14 @@ impl<B: Backend> Session<B> {
     }
     pub fn bind_window(&mut self, id: &str, mut access: Access) -> Result<BoundWindow> {
         (access.check)()?;
+        if !self
+            .backend
+            .capabilities()
+            .features
+            .is_some_and(|f| f.supports_window_binding)
+        {
+            return Err(Error::Unsupported);
+        }
         self.purge();
         let element = self.resolve(id, &mut access)?;
         let info = self
@@ -141,11 +157,7 @@ impl<B: Backend> Session<B> {
         (access.check)()?;
         self.purge();
         let result = match request {
-            Request::Capabilities => {
-                json!({"supported":true,"backend":self.backend.name(),"actions":ACTIONS,
-                "maxNodes":256,"maxDepth":8,"referenceTtlMs":60000,"coordinateSpace":"desktopPhysicalPixels",
-                "maxTextLength":4096,"supportsWait":true,"supportsObservation":true})
-            }
+            Request::Capabilities => json!(self.backend.capabilities()),
             Request::Windows { limit } => {
                 let (elements, truncated) = self.backend.roots(limit, &access.check)?;
                 let mut nodes = Vec::new();
@@ -223,6 +235,17 @@ impl<B: Backend> Session<B> {
                 value,
                 observe_after,
             } => {
+                let capabilities = self.backend.capabilities();
+                if !capabilities.actions.contains(&action) {
+                    return Err(Error::UnsupportedAction);
+                }
+                if observe_after.is_some()
+                    && !capabilities
+                        .features
+                        .is_some_and(|f| f.supports_observation)
+                {
+                    return Err(Error::Unsupported);
+                }
                 let element = self.resolve(&element_id, &mut access)?;
                 let info =
                     self.backend

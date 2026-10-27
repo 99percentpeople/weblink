@@ -1,5 +1,6 @@
 //! Native actor. No Tauri IPC or network handler is exposed by this module.
 mod device;
+mod encoding;
 mod environment;
 mod gamepad;
 mod hotkey;
@@ -152,6 +153,7 @@ impl Worker {
                         touch,
                         pan::PanDevice::new(),
                         gamepad::GamepadDevice::new(),
+                        encoding::TextState::default(),
                     ));
                     let _ = ready.send(Ok((shortcut, observations.clone())));
                     loop {

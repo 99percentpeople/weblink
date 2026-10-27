@@ -1269,6 +1269,13 @@ even if another device fails cleanup. Uncertain cleanup closes the authority.
 Pausing input neutralizes held state; it does not revoke remembered consent.
 Keyboard and mouse are logical injection resources, not additional HID devices.
 
+The shared input engine passes physical desktop pixels and committed UTF-8 text
+to `Device`. Windows owns SendInput's absolute-coordinate grid, UTF-16 keyboard
+packets and cleanup of partially injected text. Each text backend rechecks the
+bound window and deadline between native submissions and implements `cancel_text`.
+The existing PC set-1 key identifiers and 120-units-per-detent scroll wire format
+remain unchanged; native backends translate these protocol values at injection.
+
 `NativeRemoteControl.devices()` probes local capabilities without opening a
 control owner. Native status snapshots include capabilities and mounted device
 states. Each backend reports `available`, `unsupported`, `driverRequired` or

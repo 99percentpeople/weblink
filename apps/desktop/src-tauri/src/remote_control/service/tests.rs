@@ -15,6 +15,7 @@ pub(in crate::remote_control) mod automation_reuse;
 #[derive(Debug, PartialEq)]
 enum Observation {
     Input(Action),
+    Text(String),
     ChannelClosed,
     Shutdown,
 }
@@ -52,6 +53,25 @@ impl Default for DeviceState {
 }
 struct TestDevice(Arc<DeviceState>);
 impl Device for TestDevice {
+    fn submit_text(
+        &mut self,
+        text: &str,
+        window: Option<&weblink_desktop_input::window::BoundWindow>,
+        deadline: Instant,
+    ) -> Result<(), Error> {
+        if Instant::now() > deadline {
+            return Err(Error::Stale);
+        }
+        if let Some(window) = window {
+            window.check(None)?;
+        }
+        self.0
+            .observations
+            .lock()
+            .unwrap()
+            .push(Observation::Text(text.into()));
+        Ok(())
+    }
     fn gamepad_feedback(&mut self) -> Vec<(u8, weblink_desktop_input::gamepad::Rumble)> {
         self.0.gamepad_feedback.lock().unwrap().clone()
     }

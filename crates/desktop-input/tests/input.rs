@@ -15,6 +15,7 @@ struct State {
     native_text: bool,
     inserted: String,
     text_error: Option<Error>,
+    text_cancels: usize,
     fail: bool,
     unavailable: bool,
     panic: bool,
@@ -29,17 +30,39 @@ struct State {
 #[derive(Clone, Default)]
 struct Fake(Rc<RefCell<State>>);
 impl Device for Fake {
-    fn insert_text(
+    fn submit_text(
         &mut self,
         text: &str,
-        _: Option<&weblink_desktop_input::window::BoundWindow>,
-    ) -> Result<bool, Error> {
-        let mut state = self.0.borrow_mut();
-        if !state.native_text {
-            return Ok(false);
+        window: Option<&weblink_desktop_input::window::BoundWindow>,
+        deadline: Instant,
+    ) -> Result<(), Error> {
+        if self.0.borrow().native_text {
+            let mut state = self.0.borrow_mut();
+            state.inserted.push_str(text);
+            return state.text_error.map_or(Ok(()), Err);
         }
-        state.inserted.push_str(text);
-        state.text_error.map_or(Ok(true), Err)
+        for character in text.chars() {
+            if Instant::now() > deadline {
+                return Err(Error::Stale);
+            }
+            if let Some(window) = window {
+                window.check(None)?;
+            }
+            let mut state = self.0.borrow_mut();
+            state.inserted.push(character);
+            if state.panic {
+                state.panic = false;
+                panic!("text failure");
+            }
+            if state.fail {
+                return Err(Error::Injection);
+            }
+        }
+        Ok(())
+    }
+    fn cancel_text(&mut self) -> Result<(), Error> {
+        self.0.borrow_mut().text_cancels += 1;
+        Ok(())
     }
     fn pan_supported(&self) -> bool {
         self.0.borrow().pan_supported
@@ -258,7 +281,7 @@ fn trackpad_reads_the_current_system_cursor_and_never_replays_a_cached_position(
         now,
     )
     .unwrap();
-    let expected = g.absolute(Position { x: 0.3, y: 0.4 }).unwrap();
+    let expected = g.pixels(Position { x: 0.3, y: 0.4 }).unwrap();
     assert_eq!(
         fake.0.borrow().actions.last(),
         Some(&Action::Move {
@@ -278,7 +301,7 @@ fn trackpad_reads_the_current_system_cursor_and_never_replays_a_cached_position(
         now,
     )
     .unwrap();
-    let expected = g.absolute(current).unwrap();
+    let expected = g.pixels(current).unwrap();
     assert_eq!(
         &fake.0.borrow().actions[1..],
         &[
@@ -416,11 +439,9 @@ fn maps_physical_pixels_with_negative_origins_and_rejects_bad_geometry() {
         Position { x: 1., y: 1. },
         Position { x: 0.5, y: 0.5 },
     ] {
-        let (x, y) = g.absolute(p).unwrap();
-        let actual_x =
-            i64::from(g.desktop.left) + i64::from(x) * i64::from(g.desktop.width) / 65536;
-        let actual_y =
-            i64::from(g.desktop.top) + i64::from(y) * i64::from(g.desktop.height) / 65536;
+        let (x, y) = g.pixels(p).unwrap();
+        let actual_x = i64::from(x);
+        let actual_y = i64::from(y);
         assert_eq!(
             actual_x,
             i64::from(g.display.left) + (p.x * f64::from(g.display.width - 1)).round() as i64
@@ -431,7 +452,7 @@ fn maps_physical_pixels_with_negative_origins_and_rejects_bad_geometry() {
         );
     }
     for x in [f64::NAN, f64::INFINITY, -0.01, 1.001] {
-        assert!(g.absolute(Position { x, y: 0.5 }).is_none());
+        assert!(g.pixels(Position { x, y: 0.5 }).is_none());
     }
     let bad = Geometry {
         display: Rect {
@@ -627,19 +648,11 @@ fn availability_loss_drop_and_explicit_failure_all_release() {
     }
 }
 #[test]
-fn text_preserves_surrogate_pairs_and_rejects_controls_or_held_modifiers() {
+fn text_preserves_scalars_and_rejects_controls_or_held_modifiers() {
     let (mut e, f, g, now) = setup();
     e.input(&g, Event::Text("中😀".into()), now).unwrap();
-    let expected: Vec<_> = "中😀"
-        .encode_utf16()
-        .flat_map(|unit| {
-            [
-                Action::Unicode { unit, down: true },
-                Action::Unicode { unit, down: false },
-            ]
-        })
-        .collect();
-    assert_eq!(f.0.borrow().actions, expected);
+    assert_eq!(f.0.borrow().inserted, "中😀");
+    assert!(f.0.borrow().actions.is_empty());
     e.input(&g, key(true), now).unwrap();
     assert_eq!(
         e.input(&g, Event::Text("A".into()), now),
@@ -653,7 +666,7 @@ fn text_preserves_surrogate_pairs_and_rejects_controls_or_held_modifiers() {
 }
 
 #[test]
-fn unicode_text_stops_at_blur_and_remembers_the_reason_until_revoked() {
+fn text_stops_at_blur_and_remembers_the_reason_until_revoked() {
     use std::sync::atomic::Ordering::SeqCst;
     let (mut e, f, g, now) = setup();
     let window = WindowCheck::new();
@@ -664,7 +677,8 @@ fn unicode_text_stops_at_blur_and_remembers_the_reason_until_revoked() {
         e.input(&g, Event::Text("AB".into()), now),
         Err(Error::WindowFocusLost)
     );
-    assert_eq!(f.0.borrow().actions.len(), 2);
+    assert_eq!(f.0.borrow().inserted, "A");
+    assert_eq!(f.0.borrow().text_cancels, 1);
     assert_eq!(e.status().window_error, Some(Error::WindowFocusLost));
     assert!(e.status().input_suspended);
     e.revoke();
@@ -1184,29 +1198,38 @@ fn destroyed_or_obscured_windows_stop_mouse_before_injection() {
     }
 }
 #[test]
-fn window_focus_is_checked_between_unicode_submissions() {
+fn window_focus_is_checked_between_backend_text_submissions() {
     use std::sync::atomic::Ordering::SeqCst;
     let (mut e, f, g, now) = setup();
     let window = WindowCheck::new();
     e.bind_window(&g, window.clone(), now).unwrap();
     window.checks.store(0, SeqCst);
-    window.fail_after.store(3, SeqCst); // event, native text probe, first character; stop before the second
+    window.fail_after.store(3, SeqCst); // event, text preflight, first character; stop before the second
     assert_eq!(
         e.input(&g, Event::Text("AB".into()), now),
         Err(Error::WindowFocusLost)
     );
-    assert_eq!(
-        f.0.borrow().actions,
-        vec![
-            Action::Unicode {
-                unit: 65,
-                down: true
-            },
-            Action::Unicode {
-                unit: 65,
-                down: false
-            }
-        ]
-    );
+    assert_eq!(f.0.borrow().inserted, "A");
+    assert_eq!(f.0.borrow().text_cancels, 1);
     assert!(e.status().input_suspended);
+}
+
+#[test]
+fn partial_text_failure_or_panic_delegates_cleanup_without_replaying_text() {
+    for panic in [false, true] {
+        let (mut e, f, g, now) = setup();
+        f.0.borrow_mut().panic = panic;
+        f.0.borrow_mut().fail = !panic;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            e.input(&g, Event::Text("AB".into()), now)
+        }));
+        if panic {
+            assert!(result.is_err());
+        } else {
+            assert_eq!(result.unwrap(), Err(Error::Injection));
+        }
+        drop(e);
+        assert_eq!(f.0.borrow().inserted, "A");
+        assert_eq!(f.0.borrow().text_cancels, 1);
+    }
 }

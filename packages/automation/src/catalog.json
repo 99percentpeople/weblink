@@ -3763,6 +3763,9 @@
                 },
                 "supportsObservation": {
                   "type": "boolean"
+                },
+                "supportsWindowBinding": {
+                  "type": "boolean"
                 }
               },
               "required": [

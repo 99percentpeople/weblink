@@ -78,40 +78,6 @@ impl Geometry {
                 as i32,
         ))
     }
-    /// Physical, already-oriented display coordinates. DPI is not a multiplier.
-    pub fn absolute(self, position: Position) -> Option<(i32, i32)> {
-        if !self.valid()
-            || !position.x.is_finite()
-            || !position.y.is_finite()
-            || !(0.0..=1.0).contains(&position.x)
-            || !(0.0..=1.0).contains(&position.y)
-        {
-            return None;
-        }
-        let axis =
-            |origin: i32, span: u32, virtual_origin: i32, virtual_span: u32, fraction: f64| {
-                let pixel = i64::from(origin) + (fraction * f64::from(span - 1)).round() as i64;
-                // Aim at the pixel's center in SendInput's 65536-bin virtual desktop grid.
-                (((pixel - i64::from(virtual_origin)) * 65536 + 32768) / i64::from(virtual_span))
-                    .clamp(0, 65535) as i32
-            };
-        Some((
-            axis(
-                self.display.left,
-                self.display.width,
-                self.desktop.left,
-                self.desktop.width,
-                position.x,
-            ),
-            axis(
-                self.display.top,
-                self.display.height,
-                self.desktop.top,
-                self.desktop.height,
-                position.y,
-            ),
-        ))
-    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Button {
@@ -121,7 +87,8 @@ pub enum Button {
     Back,
     Forward,
 }
-/// Whitelisted PC set-1 scan code. E1/Pause and PrintScreen are intentionally unsupported.
+/// Physical key identifier in the existing wire contract (PC set-1, not an OS keycode).
+/// Backends translate this identifier to native key events. E1/Pause and PrintScreen are unsupported.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ScanCode {
     code: u16,
@@ -149,6 +116,7 @@ pub enum Held {
     Button(Button),
 }
 pub(crate) fn valid_text(text: &str) -> bool {
+    // Preserve the existing wire size limit, independently of the backend's native encoding.
     !text.is_empty()
         && text.len() <= 256
         && text.encode_utf16().count() <= 64
@@ -165,7 +133,7 @@ pub enum Event {
         button: Button,
         down: bool,
     },
-    /// Win32 wheel units: 120 = one detent. Each axis is bounded to +/-1200.
+    /// Wire scroll units: 120 = one detent. Each axis is bounded to +/-1200.
     Wheel {
         position: Position,
         horizontal: i32,
@@ -183,11 +151,23 @@ pub enum Event {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
-    Move { x: i32, y: i32 },
-    Button { button: Button, down: bool },
-    Wheel { horizontal: bool, delta: i32 },
-    Key { key: ScanCode, down: bool },
-    Unicode { unit: u16, down: bool },
+    /// Physical desktop pixels, including negative multi-monitor origins.
+    Move {
+        x: i32,
+        y: i32,
+    },
+    Button {
+        button: Button,
+        down: bool,
+    },
+    Wheel {
+        horizontal: bool,
+        delta: i32,
+    },
+    Key {
+        key: ScanCode,
+        down: bool,
+    },
 }
 impl Held {
     pub fn up(self) -> Action {

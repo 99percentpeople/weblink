@@ -432,6 +432,9 @@ impl Safety {
     pub fn geometry_current(&self, g: Geometry) -> bool {
         g.desktop == self.layout.desktop && self.layout.monitors.iter().any(|m| m.1 == g.display)
     }
+    pub fn desktop(&self) -> crate::input::Rect {
+        self.layout.desktop
+    }
     pub fn pointer_in_guard(&self, x: i32, y: i32) -> bool {
         let d = self.layout.desktop;
         let px = i64::from(d.left) + i64::from(x) * i64::from(d.width) / 65536;

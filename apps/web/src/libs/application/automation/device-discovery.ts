@@ -60,8 +60,23 @@ export function localAutomationCapability(
             if (
               tool.name.startsWith("accessibility.") &&
               tool.name !== "accessibility.capabilities"
-            )
-              return capabilities.os === "windows";
+            ) {
+              const backend = capabilities.accessibility;
+              if (!backend?.supported) return false;
+              if (tool.name === "accessibility.wait")
+                return backend.supportsWait === true;
+              if (tool.name === "accessibility.action")
+                return backend.actions.length > 0;
+              return true;
+            }
+            if (tool.name === "control.bindWindow")
+              return (
+                capabilities.remoteInput &&
+                capabilities.accessibility?.supported ===
+                  true &&
+                capabilities.accessibility
+                  .supportsWindowBinding === true
+              );
             if (tool.name === "control.screenshot")
               return capabilities.nativeScreenCapture;
             if (tool.name.startsWith("control."))

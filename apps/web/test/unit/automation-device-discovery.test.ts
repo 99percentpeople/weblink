@@ -17,6 +17,23 @@ const windows: RuntimeCapabilities = {
   nativeScreenCapture: true,
   displayRefreshRates: [60],
   remoteInput: true,
+  accessibility: {
+    supported: true,
+    backend: "windows-uia",
+    actions: [
+      "focus",
+      "invoke",
+      "setValue",
+      "toggle",
+      "select",
+      "expand",
+      "collapse",
+      "scrollIntoView",
+    ],
+    supportsWait: true,
+    supportsObservation: true,
+    supportsWindowBinding: true,
+  },
 };
 
 it("distinguishes a connected browser's diagnostics from desktop automation", () => {
@@ -130,6 +147,11 @@ it("uses native support rather than advertising Windows-only controls on another
     {
       ...windows,
       os: "linux",
+      accessibility: {
+        supported: false,
+        backend: null,
+        actions: [],
+      },
       remoteInput: false,
       nativeScreenCapture: false,
     },
@@ -192,4 +214,59 @@ it("accepts compatible old/new descriptors and rejects malformed or unbounded di
         ...patch,
       }),
     ).toBe(false);
+});
+
+it("derives partial backend tools from features independently of the OS label", () => {
+  for (const os of ["windows", "linux", "macos"]) {
+    const reported = localAutomationCapability(
+      { kind: "desktop" },
+      {
+        ...windows,
+        os,
+        accessibility: {
+          supported: true,
+          backend: "test-reader",
+          actions: [],
+          supportsWait: false,
+          supportsObservation: false,
+          supportsWindowBinding: false,
+        },
+      },
+      true,
+    ).supportedTools;
+    expect(reported).toContain("accessibility.snapshot");
+    expect(reported).not.toContain("accessibility.action");
+    expect(reported).not.toContain("accessibility.wait");
+    expect(reported).not.toContain("control.bindWindow");
+    expect(reported).toContain("control.pointer");
+  }
+});
+it("does not infer missing or unavailable backend capabilities from Windows", () => {
+  for (const accessibility of [
+    undefined,
+    { supported: false, backend: null, actions: [] },
+  ]) {
+    const reported = localAutomationCapability(
+      { kind: "desktop" },
+      { ...windows, accessibility },
+      true,
+    ).supportedTools;
+    expect(reported).toContain(
+      "accessibility.capabilities",
+    );
+    expect(reported).not.toContain(
+      "accessibility.snapshot",
+    );
+    expect(reported).not.toContain("accessibility.wait");
+    expect(reported).not.toContain("control.bindWindow");
+  }
+});
+it("keeps all current Windows backend tools available", () => {
+  expect(
+    localAutomationCapability(
+      { kind: "desktop" },
+      windows,
+      true,
+    ).supportedTools,
+  ).toEqual(tools.map((tool) => tool.name));
 });
