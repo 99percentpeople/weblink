@@ -304,12 +304,7 @@ fn run(
             life.stop(FOCUS);
             return;
         }
-        let mut initial = [false; 256];
-        for (vk, down) in initial.iter_mut().enumerate().skip(8) {
-            if !(0x10..=0x12).contains(&vk) {
-                *down = GetAsyncKeyState(vk as i32) < 0;
-            }
-        }
+        let initial = initial_keys();
         CAPTURE.with(|slot| {
             *slot.borrow_mut() = Some(Capture {
                 hwnd,
@@ -341,7 +336,9 @@ fn run(
         );
         life.thread_id
             .store(GetCurrentThreadId(), Ordering::Release);
-        let _ = ready.send(Ok(()));
+        // Installing the hook does not yet mean it owns keyboard input. Until
+        // preexisting keys are released, keep the frontend's DOM path available.
+        let mut ready = Some(ready);
         let mut draining = None;
         let mut desktop_check = Instant::now();
         loop {
@@ -374,6 +371,20 @@ fn run(
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+            if ready.is_some() && life.active() {
+                // Query outside CAPTURE's RefCell borrow and outside hook(): Win32
+                // updates asynchronous key state only after the hook returns.
+                let down = initial_keys();
+                let waiting = CAPTURE.with(|slot| {
+                    let mut slot = slot.borrow_mut();
+                    let capture = slot.as_mut().expect("installed capture");
+                    capture.policy.reconcile_initial(&down);
+                    capture.policy.waiting_for_release()
+                });
+                if !waiting {
+                    let _ = ready.take().unwrap().send(Ok(()));
+                }
+            }
             let mut wait = Duration::from_millis(50).saturating_sub(desktop_check.elapsed());
             if draining.is_none() {
                 wait = wait.min(Duration::from_millis(
@@ -398,7 +409,23 @@ fn run(
         life.thread_id.store(0, Ordering::Release);
         CAPTURE.with(|slot| slot.borrow_mut().take());
         life.stop(CLOSED);
+        if let Some(ready) = ready {
+            let _ = ready.send(Err(
+                "Keyboard capture ended before keys were released".into()
+            ));
+        }
     }
+}
+
+unsafe fn initial_keys() -> [bool; 256] {
+    let mut initial = [false; 256];
+    for (vk, down) in initial.iter_mut().enumerate().skip(8) {
+        // Generic Shift/Ctrl/Alt duplicate their left/right virtual keys.
+        if !(0x10..=0x12).contains(&vk) {
+            *down = GetAsyncKeyState(vk as i32) < 0;
+        }
+    }
+    initial
 }
 
 /// Implementation availability only; starting still verifies focus and native access.

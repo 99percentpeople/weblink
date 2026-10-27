@@ -1620,7 +1620,9 @@ selected remote surface has active control, no local editor owns input, and the
 shared keyboard toggle is on. The
 foreground native window must also match. In that interval, supported scan codes,
 including Alt/Win combinations, come from the native channel; DOM handlers stop
-forwarding only after native startup succeeds, so they do not send a second copy.
+forwarding only after native startup confirms that preexisting keys have been
+released, so they do not send a second copy. Startup reconciles those keys outside
+the hook callback, including releases missed while the hook was being installed.
 Local editors, dialogs and the soft-keyboard editor use their
 usual paths. Turning off system shortcuts restores browser key handling.
 
@@ -1635,6 +1637,8 @@ window teardown and page navigation stop capture independently of the renderer.
 After stopping, the hook can drain only previously captured key releases for up
 to two seconds; it never captures new background presses. If capture fails or stops,
 ordinary DOM keyboard forwarding resumes without changing the shared keyboard toggle.
+Resetting the remote input epoch does not retry a failed capture in the same focus
+and preference interval; this keeps the DOM fallback usable.
 A new focus interval or toggling the keyboard switch retries native capture without
 revoking pointer control. The explicit exit shortcut still disables keyboard forwarding.
 

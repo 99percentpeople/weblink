@@ -301,52 +301,65 @@ export function RemoteControlOverlay(props: {
     const c = control(),
       options = keyboardOptions();
     if (
-      !keyboardActive() ||
+      !enabled() ||
+      !pageActive() ||
+      localEditing() ||
       !nativeKeys() ||
       !c ||
       !platform.keyboard
     )
       return;
-    keyboard?.release();
-    const forwarder = new NativeKeyboardForwarder(
-      platform.keyboard,
-      options.exitShortcut,
-      {
-        capturing: (active) => {
-          if (active) keyboard?.release();
-          setNativeCapturing(active);
-        },
-        current: () =>
-          keyboardActive() &&
-          c === control() &&
-          c.state() === "active" &&
-          !!nativeKeys() &&
-          !surface()?.ownerDocument.hidden,
-        input: (event) => c.input(event),
-        clipboard: (action) => {
-          const input = props.keyboard?.();
-          if (!input?.clipboardEnabled?.(action))
-            return false;
-          return (
-            (action === "copy"
-              ? input.copy?.()
-              : input.paste?.()) !== false
-          );
-        },
-        reset: () => c.resetInput(),
-        cancel: exitKeyboard,
-        stopped: (failed) => {
-          if (focused() || capture.active())
-            releaseControls();
-          if (failed) {
-            toast.error(
-              t("remote_control.system_keyboard_stopped"),
+    // Native failures remain on DOM input for this focus/preference/target
+    // interval. Resetting the remote input epoch must not retry the failed hook.
+    let nativeStopped = false;
+    const api = platform.keyboard;
+    createEffect(() => {
+      if (state() !== "active" || nativeStopped) return;
+      keyboard?.release();
+      const forwarder = new NativeKeyboardForwarder(
+        api,
+        options.exitShortcut,
+        {
+          capturing: (active) => {
+            if (active) keyboard?.release();
+            setNativeCapturing(active);
+          },
+          current: () =>
+            keyboardActive() &&
+            c === control() &&
+            c.state() === "active" &&
+            !!nativeKeys() &&
+            !surface()?.ownerDocument.hidden,
+          input: (event) => c.input(event),
+          clipboard: (action) => {
+            const input = props.keyboard?.();
+            if (!input?.clipboardEnabled?.(action))
+              return false;
+            return (
+              (action === "copy"
+                ? input.copy?.()
+                : input.paste?.()) !== false
             );
-          }
+          },
+          reset: () => {
+            nativeStopped = true;
+            c.resetInput();
+          },
+          cancel: exitKeyboard,
+          stopped: (failed) => {
+            nativeStopped = true;
+            if (focused() || capture.active())
+              releaseControls();
+            if (failed) {
+              toast.error(
+                t("remote_control.system_keyboard_stopped"),
+              );
+            }
+          },
         },
-      },
-    );
-    onCleanup(() => forwarder.stop());
+      );
+      onCleanup(() => forwarder.stop());
+    });
   });
   createEffect(() => {
     const c = control(),

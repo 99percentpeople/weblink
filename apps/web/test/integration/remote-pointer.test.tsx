@@ -1401,6 +1401,117 @@ it.each(["local", "capture"] as const)(
     });
   },
 );
+it("keeps keyboard input on the DOM path until native capture is ready", async () => {
+  let receive!: (event: NativeKeyboardEvent) => void;
+  let ready!: () => void;
+  const close = vi.fn(async () => {});
+  const start = vi.fn(async (_shortcut, listener) => {
+    receive = listener;
+    await new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    return { close, renew: vi.fn(async () => {}) };
+  });
+  Object.assign(platform, {
+    keyboard: { supported: async () => true, start },
+  });
+  setAppState("capabilities", "runtime", {
+    runtime: "desktop",
+    os: "windows",
+    version: null,
+    nativeScreenCapture: false,
+    displayRefreshRates: [],
+    remoteInput: true,
+    systemKeyboard: true,
+  });
+  render(() => <RemoteControlOverlay enabled />);
+  expect(start).toHaveBeenCalledOnce();
+  key();
+  fireEvent.keyUp(window, { code: "KeyA" });
+  expect(fixture.control.input).toHaveBeenCalledTimes(2);
+  expect(fixture.control.input).toHaveBeenLastCalledWith({
+    type: "key",
+    scanCode: 0x1e,
+    extended: false,
+    down: false,
+  });
+  ready();
+  await Promise.resolve();
+  await Promise.resolve();
+  fixture.control.input.mockClear();
+  key();
+  expect(fixture.control.input).not.toHaveBeenCalled();
+  receive({
+    type: "key",
+    sequence: 1,
+    timestamp: Date.now(),
+    scanCode: 0x1e,
+    extended: false,
+    down: true,
+  });
+  expect(fixture.control.input).toHaveBeenCalledOnce();
+});
+
+it.each(["startup", "expired"] as const)(
+  "keeps DOM fallback after native %s resets the real input activation state",
+  async (reason) => {
+    let receive!: (event: NativeKeyboardEvent) => void;
+    const start = vi.fn(async (_shortcut, listener) => {
+      receive = listener;
+      if (
+        reason === "startup" &&
+        start.mock.calls.length === 1
+      )
+        throw new Error("capture did not become ready");
+      return {
+        close: vi.fn(async () => {}),
+        renew: vi.fn(async () => {}),
+      };
+    });
+    Object.assign(platform, {
+      keyboard: { supported: async () => true, start },
+    });
+    setAppState("capabilities", "runtime", {
+      runtime: "desktop",
+      os: "windows",
+      version: null,
+      nativeScreenCapture: false,
+      displayRefreshRates: [],
+      remoteInput: true,
+      systemKeyboard: true,
+    });
+    fixture.control.resetInput.mockImplementation(() => {
+      fixture.control.value = "activating";
+      fixture.control.dispatchEvent(new Event("change"));
+      queueMicrotask(() => {
+        fixture.control.value = "active";
+        fixture.control.dispatchEvent(new Event("change"));
+      });
+    });
+    render(() => <RemoteControlOverlay enabled />);
+    await waitFor(() => expect(start).toHaveBeenCalled());
+    if (reason === "expired") {
+      surface().focus();
+      receive({ type: "stopped", reason: "expired" });
+    }
+    await waitFor(() =>
+      expect(fixture.control.resetInput).toHaveBeenCalled(),
+    );
+    await waitFor(() =>
+      expect(fixture.control.state()).toBe("active"),
+    );
+    expect(start).toHaveBeenCalledOnce();
+    fixture.control.input.mockClear();
+    key();
+    expect(fixture.control.input).toHaveBeenCalledWith({
+      type: "key",
+      scanCode: 0x1e,
+      extended: false,
+      down: true,
+    });
+  },
+);
+
 it("releases native keyboard capture for local editors and ignores late events from the previous capture", async () => {
   const listeners: ((
     event: NativeKeyboardEvent,

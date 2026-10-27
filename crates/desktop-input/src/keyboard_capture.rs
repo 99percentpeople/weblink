@@ -27,6 +27,17 @@ impl KeyboardCapture {
     pub fn held(&self) -> bool {
         self.held.iter().any(|v| *v)
     }
+    pub fn waiting_for_release(&self) -> bool {
+        self.initial.iter().any(|v| *v)
+    }
+    /// Reconcile only startup-owned keys, outside the low-level hook callback.
+    /// A release can occur between the initial snapshot and hook installation,
+    /// or be consumed by another hook. It must not block capture forever.
+    pub fn reconcile_initial(&mut self, down: &[bool; 256]) {
+        for (initial, down) in self.initial.iter_mut().zip(down) {
+            *initial &= *down;
+        }
+    }
     pub fn input(
         &mut self,
         code: u16,
@@ -40,7 +51,7 @@ impl KeyboardCapture {
             return Decision::Pass;
         }
         // Keys already down before capture belong to the local application.
-        if self.initial.iter().any(|v| *v) {
+        if self.waiting_for_release() {
             self.initial[vk as usize] = down;
             return Decision::Pass;
         }
@@ -197,6 +208,57 @@ mod tests {
         assert!(matches!(
             s.input(0x45, false, true, false, 0x90, true),
             Decision::Forward(_, true)
+        ));
+    }
+    #[test]
+    fn a_release_missed_during_hook_installation_cannot_block_every_later_key() {
+        let mut initial = [false; 256];
+        initial[0xa2] = true;
+        let mut s = KeyboardCapture::new(
+            "ctrl-alt-shift-q".to_owned().try_into().unwrap(),
+            Shortcut::default(),
+            initial,
+        );
+        assert!(s.waiting_for_release());
+        // Ctrl was released before the hook existed: no key-up callback will arrive.
+        s.reconcile_initial(&[false; 256]);
+        assert!(!s.waiting_for_release());
+        assert_eq!(
+            s.input(0x1e, false, true, false, 65, true),
+            Decision::Forward(ScanCode::new(0x1e, false).unwrap(), true)
+        );
+        assert_eq!(
+            s.input(0x1e, false, false, false, 65, true),
+            Decision::Forward(ScanCode::new(0x1e, false).unwrap(), false)
+        );
+    }
+    #[test]
+    fn startup_reconciliation_keeps_preexisting_and_new_local_presses_local() {
+        let mut down = [false; 256];
+        down[0xa2] = true;
+        let mut s = KeyboardCapture::new(
+            "ctrl-alt-shift-q".to_owned().try_into().unwrap(),
+            Shortcut::default(),
+            down,
+        );
+        assert_eq!(s.input(0x1e, false, true, false, 65, true), Decision::Pass);
+        down[65] = true;
+        down[0xa2] = false;
+        s.reconcile_initial(&down);
+        assert!(s.waiting_for_release());
+        assert_eq!(s.input(0x1e, false, false, false, 65, true), Decision::Pass);
+        assert!(!s.waiting_for_release());
+        assert!(matches!(
+            s.input(0x1d, false, true, false, 0xa2, true),
+            Decision::Forward(_, true)
+        ));
+        // Suppressed native presses do not appear in asynchronous state. They
+        // belong to this capture and must not be cleared by startup reconciliation.
+        s.reconcile_initial(&[false; 256]);
+        assert!(s.held());
+        assert!(matches!(
+            s.input(0x1d, false, false, false, 0xa2, true),
+            Decision::Forward(_, false)
         ));
     }
 }
