@@ -15,6 +15,7 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { createScreenSettings } from "./screen-settings";
+import { createScreenSharing } from "./screen-sharing";
 import { sessionService } from "../session-service";
 import {
   createNativeScreenStream,
@@ -37,6 +38,28 @@ export function automationHandlers(
     platform,
     read: () => appState.options,
     write: (patch) => setAppState("options", patch),
+  });
+  const shareScreen = createScreenSharing({
+    stream: state.localStream,
+    publish: (stream) => state.replaceLocalStream(stream),
+    capture: async (sourceId, signal) => {
+      if (!platform.capture || !platform.screenShare)
+        throw new AutomationError("UNSUPPORTED");
+      return createNativeScreenStream(
+        platform.capture,
+        platform.screenShare,
+        sourceId,
+        signal,
+        {
+          ...nativeScreenOptions(appState.options),
+          audio: false,
+        },
+        {
+          backend:
+            appState.options.nativeScreenCaptureBackend,
+        },
+      );
+    },
   });
   const localTrack = (id: unknown) => {
     const track = state
@@ -135,6 +158,8 @@ export function automationHandlers(
                 state: t.readyState,
                 sourceId:
                   getNativeScreenPublication(t)?.sourceId,
+                captureSourceId:
+                  getNativeCaptureStatus(t)?.source?.id,
                 settings: t.getSettings(),
               })) ?? [],
           peers: Object.values(sessionService.sessions).map(
@@ -154,38 +179,11 @@ export function automationHandlers(
       case "screen.start": {
         if (!platform.capture || !platform.screenShare)
           throw new AutomationError("UNSUPPORTED");
-        const stream = await createNativeScreenStream(
-          platform.capture,
-          platform.screenShare,
+        return shareScreen(
           String(args.sourceId),
           signal,
-          {
-            ...nativeScreenOptions(appState.options),
-            audio: false,
-          },
-          {
-            backend:
-              appState.options.nativeScreenCaptureBackend,
-          },
+          check,
         );
-        try {
-          await check();
-          signal.throwIfAborted();
-        } catch (error) {
-          stream.getTracks().forEach((t) => t.stop());
-          throw error;
-        }
-        const track = stream.getVideoTracks()[0];
-        state.replaceLocalStream(
-          new MediaStream([
-            ...(state.localStream()?.getTracks() ?? []),
-            ...stream.getTracks(),
-          ]),
-        );
-        return {
-          trackId: track.id,
-          sourceId: args.sourceId,
-        };
       }
       case "screen.stop": {
         const track = localTrack(args.trackId);

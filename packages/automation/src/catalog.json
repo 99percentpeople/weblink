@@ -166,7 +166,7 @@
   },
   {
     "name": "sessions.list",
-    "description": "List active streams and connection state on the explicit target.",
+    "description": "List active streams and connection state on the explicit target. Native local tracks include captureSourceId (the screen.sources device ID) and sourceId (the publication ID); use the track id for control.acquire.",
     "scope": "diagnostics.read",
     "native": false,
     "readOnly": true,
@@ -557,7 +557,7 @@
   },
   {
     "name": "screen.start",
-    "description": "Share a chosen native screen source with connected peers; audio is off.",
+    "description": "Ensure a chosen native screen source is shared with connected peers. Reuses an existing live share of the same source, including manual shares, preserving audio and settings. A new share starts with audio off. Returns trackId for control.acquire and reused.",
     "scope": "screen.manage",
     "native": true,
     "readOnly": false,

@@ -14,6 +14,15 @@ import {
 } from "@/libs/state/app-options";
 const fixture = vi.hoisted(() => ({
   capture: vi.fn(),
+  publications: new WeakMap<object, { sourceId: string }>(),
+  captures: new WeakMap<
+    object,
+    {
+      sessionId: string;
+      state: string;
+      source: { id: string };
+    }
+  >(),
   sessions: {} as Record<string, unknown>,
   views: {} as Record<string, unknown>,
   options: {} as AppOption,
@@ -39,8 +48,10 @@ vi.mock("@/libs/application/session-service", () => ({
 }));
 vi.mock("@/libs/application/native-screen-service", () => ({
   createNativeScreenStream: fixture.capture,
-  getNativeScreenPublication: () => undefined,
-  getNativeCaptureStatus: () => undefined,
+  getNativeScreenPublication: (track: object) =>
+    fixture.publications.get(track),
+  getNativeCaptureStatus: (track: object) =>
+    fixture.captures.get(track),
 }));
 vi.mock(
   "@/libs/application/meeting-video-settings",
@@ -56,6 +67,7 @@ vi.mock("@/libs/state/app-state", () => ({
 }));
 afterEach(() => {
   vi.resetAllMocks();
+  vi.unstubAllGlobals();
   fixture.sessions = {};
   fixture.views = {};
   fixture.capabilities = {};
@@ -233,7 +245,9 @@ it("exports receiver error codes without native error strings or file paths", as
   );
 });
 function handler(stream?: unknown) {
-  const replace = vi.fn();
+  const replace = vi.fn((next: unknown) => {
+    stream = next;
+  });
   const state = {
     localStream: () => stream,
     replaceLocalStream: replace,
@@ -328,6 +342,245 @@ it("does not query native command capabilities after cancellation or permission 
   expect(native).not.toHaveBeenCalled();
 });
 
+class ScreenStream {
+  constructor(readonly tracks: MediaStreamTrack[] = []) {}
+  getTracks() {
+    return this.tracks;
+  }
+  getVideoTracks() {
+    return this.tracks.filter((t) => t.kind === "video");
+  }
+}
+function nativeScreen(sourceId = "monitor", id = "track") {
+  vi.stubGlobal("MediaStream", ScreenStream);
+  const track = {
+    id,
+    kind: "video",
+    readyState: "live",
+    getSettings: () => ({}),
+    stop: vi.fn(() => {
+      track.readyState = "ended";
+    }),
+  };
+  fixture.publications.set(track, {
+    sourceId: `publication-${id}`,
+  });
+  fixture.captures.set(track, {
+    sessionId: `capture-${id}`,
+    state: "running",
+    source: { id: sourceId },
+  });
+  return {
+    track,
+    stream: new ScreenStream([
+      track as unknown as MediaStreamTrack,
+    ]),
+  };
+}
+const startScreen = {
+  name: "screen.start",
+  arguments: { target: "local", sourceId: "monitor" },
+};
+it("reuses the manually shared monitor, preserves its audio, and acquires the same capture", async () => {
+  const { track, stream } = nativeScreen();
+  const audio = {
+    id: "audio",
+    kind: "audio",
+    stop: vi.fn(),
+  } as unknown as MediaStreamTrack;
+  stream.tracks.push(audio);
+  const { run, replace } = handler(stream);
+  const signal = new AbortController();
+  const started = await run(startScreen, signal.signal);
+  expect(started).toEqual({
+    trackId: track.id,
+    sourceId: "monitor",
+    reused: true,
+  });
+  const native = vi.fn(async () => ({ granted: true }));
+  await run(
+    {
+      name: "control.acquire",
+      arguments: { trackId: started.trackId },
+    },
+    signal.signal,
+    native,
+  );
+  expect(native).toHaveBeenCalledWith({
+    sessionId: "capture-track",
+    sourceId: "publication-track",
+  });
+  const sessions = await run(
+    { name: "sessions.list", arguments: {} },
+    signal.signal,
+  );
+  expect(sessions.localTracks).toEqual([
+    expect.objectContaining({
+      id: track.id,
+      sourceId: "publication-track",
+      captureSourceId: "monitor",
+    }),
+  ]);
+  signal.abort();
+  expect(fixture.capture).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(track.stop).not.toHaveBeenCalled();
+  expect(audio.stop).not.toHaveBeenCalled();
+});
+it("serializes concurrent MCP starts and reuses the published track on repeated starts", async () => {
+  const { track, stream } = nativeScreen();
+  const { run, replace } = handler();
+  let finish!: (value: ScreenStream) => void;
+  fixture.capture.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const signal = new AbortController().signal;
+  const first = run(startScreen, signal);
+  const second = run(startScreen, signal);
+  await vi.waitFor(() =>
+    expect(fixture.capture).toHaveBeenCalled(),
+  );
+  expect(fixture.capture).toHaveBeenCalledOnce();
+  finish(stream);
+  expect(await first).toEqual({
+    trackId: track.id,
+    sourceId: "monitor",
+    reused: false,
+  });
+  expect(await second).toEqual({
+    trackId: track.id,
+    sourceId: "monitor",
+    reused: true,
+  });
+  expect(await run(startScreen, signal)).toEqual(
+    await second,
+  );
+  expect(fixture.capture).toHaveBeenCalledOnce();
+  expect(replace).toHaveBeenCalledOnce();
+  expect(track.stop).not.toHaveBeenCalled();
+});
+it("uses a manual share published while MCP was capturing and disposes only its duplicate", async () => {
+  const manual = nativeScreen("monitor", "manual");
+  const created = nativeScreen("monitor", "mcp");
+  const { run, replace } = handler();
+  let finish!: (value: ScreenStream) => void;
+  fixture.capture.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const pending = run(
+    startScreen,
+    new AbortController().signal,
+  );
+  await vi.waitFor(() =>
+    expect(fixture.capture).toHaveBeenCalledOnce(),
+  );
+  replace(manual.stream);
+  finish(created.stream);
+  expect(await pending).toEqual({
+    trackId: "manual",
+    sourceId: "monitor",
+    reused: true,
+  });
+  expect(created.track.stop).toHaveBeenCalledOnce();
+  expect(manual.track.stop).not.toHaveBeenCalled();
+  expect(replace).toHaveBeenCalledOnce();
+});
+it.each(["ended", "failed", "different source"])(
+  "does not reuse a %s screen",
+  async (reason) => {
+    const old = nativeScreen(
+      reason === "different source"
+        ? "other-monitor"
+        : "monitor",
+      "old",
+    );
+    if (reason === "ended") old.track.stop();
+    if (reason === "failed")
+      fixture.captures.get(old.track)!.state = "failed";
+    const next = nativeScreen("monitor", "next");
+    const { run } = handler(old.stream);
+    fixture.capture.mockResolvedValue(next.stream);
+    expect(
+      await run(startScreen, new AbortController().signal),
+    ).toEqual({
+      trackId: "next",
+      sourceId: "monitor",
+      reused: false,
+    });
+    expect(fixture.capture).toHaveBeenCalledOnce();
+  },
+);
+it("rechecks a queued caller's grant without stopping another caller's shared screen", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler();
+  let finish!: (value: ScreenStream) => void;
+  fixture.capture.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const signal = new AbortController().signal;
+  const first = run(startScreen, signal);
+  let allowed = true;
+  const check = vi.fn(async () => {
+    if (!allowed) throw new Error("GRANT_EXPIRED");
+  });
+  const second = run(startScreen, signal, undefined, check);
+  const rejected =
+    expect(second).rejects.toThrow("GRANT_EXPIRED");
+  await vi.waitFor(() =>
+    expect(fixture.capture).toHaveBeenCalled(),
+  );
+  allowed = false;
+  finish(stream);
+  await first;
+  await rejected;
+  expect(track.stop).not.toHaveBeenCalled();
+  expect(fixture.capture).toHaveBeenCalledOnce();
+});
+it("lets a queued caller retry after the first capture is cancelled without sharing its aborted lifetime", async () => {
+  const cancelled = nativeScreen("monitor", "cancelled");
+  const next = nativeScreen("monitor", "next");
+  const { run, replace } = handler();
+  let finish!: (value: ScreenStream) => void;
+  fixture.capture
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
+    .mockResolvedValueOnce(next.stream);
+  const controller = new AbortController();
+  const first = run(startScreen, controller.signal);
+  const rejected = expect(first).rejects.toThrow();
+  const second = run(
+    startScreen,
+    new AbortController().signal,
+  );
+  await vi.waitFor(() =>
+    expect(fixture.capture).toHaveBeenCalledOnce(),
+  );
+  controller.abort();
+  finish(cancelled.stream);
+  await rejected;
+  expect(await second).toEqual({
+    trackId: "next",
+    sourceId: "monitor",
+    reused: false,
+  });
+  expect(cancelled.track.stop).toHaveBeenCalledOnce();
+  expect(next.track.stop).not.toHaveBeenCalled();
+  expect(replace).toHaveBeenCalledOnce();
+  expect(fixture.capture).toHaveBeenCalledTimes(2);
+});
 it("rechecks permission after async capture and disposes a stream before publishing it", async () => {
   const { run, replace } = handler();
   let resolve!: (stream: unknown) => void;
