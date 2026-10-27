@@ -11,6 +11,7 @@ import {
   RoomMessagingService,
   type RoomChatScope,
   type RoomDeliveryStatus,
+  type RoomMessagingServiceOptions,
 } from "@/libs/application/messaging/room-messaging-service";
 import { P2PProtocol } from "@/libs/domain/protocol/protocol";
 import {
@@ -87,6 +88,7 @@ function node(
   id: string,
   legacy = false,
   avatar: string | null = null,
+  options: Partial<RoomMessagingServiceOptions> = {},
 ): Node {
   const transport = new FakeRtcTransport();
   const protocol = new P2PProtocol(transport);
@@ -98,6 +100,7 @@ function node(
   const service = legacy
     ? undefined
     : new RoomMessagingService(protocol, {
+        ...options,
         getRoom: () => state.room,
         getSessions: () => state.sessions,
         getLocalClient: () => ({
@@ -199,6 +202,157 @@ afterEach(() => {
 });
 
 describe("online room messaging", () => {
+  it.each([
+    "leave",
+    "disconnect",
+    "withdraw",
+    "dispose",
+    "replace",
+  ])(
+    "retires handshake recovery on %s without reviving old room bindings",
+    async (reason) => {
+      let available = true;
+      const a = node("a", false, null, {
+        remoteChat: () => available,
+      });
+      const b = node("b", false, null, {
+        remoteChat: () => true,
+      });
+      const link = connect(a, b);
+      a.transport.sendImpl = () => {};
+      b.transport.sendImpl = () => {};
+      await sync();
+      await vi.advanceTimersByTimeAsync(2_501);
+      expect(a.service!.capabilities.b).toBe("unsupported");
+      if (reason === "leave") {
+        a.state.room = null;
+        a.service!.syncSessions();
+      } else if (reason === "disconnect")
+        link.setReady(false);
+      else if (reason === "withdraw") {
+        available = false;
+        a.service!.refreshCapabilities();
+      } else if (reason === "dispose") a.service!.dispose();
+      else {
+        link.close();
+        connect(a, b, false);
+        await sync();
+      }
+      const offers = () =>
+        a.transport.sendCalls.filter(
+          (call) =>
+            call.message.type === "room-capabilities",
+        ).length;
+      const before = offers();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(offers()).toBe(before);
+      expect(a.service!.capabilities.b).not.toBe(
+        "supported",
+      );
+    },
+  );
+
+  it("recovers when shared capability discovery finishes after its initial wait failed", async () => {
+    const initial = deferred<void>();
+    const discovery = vi
+      .fn()
+      .mockImplementationOnce(() => initial.promise)
+      .mockResolvedValue(undefined);
+    const a = node("a", false, null, {
+      remoteChat: () => true,
+      waitForCapabilities: discovery,
+    });
+    const b = node("b", false, null, {
+      remoteChat: () => true,
+    });
+    connect(a, b);
+    await sync();
+    initial.reject(new Error("discovery timed out"));
+    await flushRtc();
+    expect(a.service!.capabilities.b).toBe("unsupported");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await sync();
+    expect(a.service!.capabilities.b).toBe("supported");
+    await a.service!.send("Discovery recovered");
+    expect(b.store.messages.size).toBe(1);
+  });
+
+  it("does not let delayed capability acknowledgement restore withdrawn chat support", async () => {
+    let available = true;
+    const discovery = deferred<void>();
+    const a = node("a", false, null, {
+      remoteChat: () => available,
+      waitForCapabilities: () => discovery.promise,
+    });
+    const b = node("b", false, null, {
+      remoteChat: () => true,
+    });
+    connect(a, b);
+    await sync();
+    available = false;
+    a.service!.refreshCapabilities();
+    discovery.resolve();
+    await sync();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(a.service!.capabilities.b).toBe("unsupported");
+    expect(
+      a.transport.sendCalls.some(
+        (call) => call.message.type === "room-capabilities",
+      ),
+    ).toBe(false);
+  });
+
+  it("recovers a timed-out room handshake while both modern peers stay connected", async () => {
+    const a = node("a", false, null, {
+      remoteChat: () => true,
+    });
+    const b = node("b", false, null, {
+      remoteChat: () => true,
+    });
+    connect(a, b);
+    const left = a.transport.sendImpl,
+      right = b.transport.sendImpl;
+    a.transport.sendImpl = () => {};
+    b.transport.sendImpl = () => {};
+    await sync();
+    await vi.advanceTimersByTimeAsync(2_501);
+    expect(a.service!.capabilities.b).toBe("unsupported");
+    a.transport.sendImpl = left;
+    b.transport.sendImpl = right;
+    await vi.advanceTimersByTimeAsync(1_000);
+    await sync();
+    expect(a.service!.capabilities.b).toBe("supported");
+    expect(b.service!.capabilities.a).toBe("supported");
+    await a.service!.send("Recovered without reconnecting");
+    expect(b.store.messages.size).toBe(1);
+    const calls =
+      a.transport.sendCalls.length +
+      b.transport.sendCalls.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(
+      a.transport.sendCalls.length +
+        b.transport.sendCalls.length,
+    ).toBe(calls);
+  });
+
+  it("negotiates again when room chat capability becomes available on the same connection", async () => {
+    let available = false;
+    const options = { remoteChat: () => available };
+    const a = node("a", false, null, options);
+    const b = node("b", false, null, options);
+    connect(a, b);
+    await sync();
+    expect(a.service!.capabilities.b).toBe("unsupported");
+    expect(a.transport.sendCalls).toHaveLength(0);
+    available = true;
+    a.service!.refreshCapabilities();
+    b.service!.refreshCapabilities();
+    await sync();
+    expect(a.service!.capabilities.b).toBe("supported");
+    expect(b.service!.capabilities.a).toBe("supported");
+    await a.service!.send("Capability became available");
+    expect(b.store.messages.size).toBe(1);
+  });
   it("rejects sending without online recipients before creating a history entry", async () => {
     const a = node("a");
     await expect(

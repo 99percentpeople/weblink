@@ -377,6 +377,11 @@ or a peer that cannot complete negotiation is not a supported room-chat peer.
 The browser waits for both parts even when an unordered channel delivers the ACK
 before the reciprocal offer. Negotiation waits are bounded and cancelled when
 the room/channel binding ends.
+For peers that explicitly advertise room chat, a failed handshake is retried on
+the live connection with exponential backoff (1 second up to 10 seconds). Late
+capability availability also restarts negotiation. Recovery stops after success,
+capability withdrawal, room exit or channel replacement; it never reuses a retired
+binding. Peers without advertised support retain the bounded compatibility probe.
 
 `send-room-text` carries:
 

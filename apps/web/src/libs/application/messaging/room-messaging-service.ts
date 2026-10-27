@@ -89,6 +89,8 @@ type Binding = {
   acknowledged: boolean;
   capability: RoomChatCapability;
   handshake?: Promise<void>;
+  retry?: ReturnType<typeof setTimeout>;
+  retryDelay: number;
 };
 
 type Recipient = {
@@ -125,6 +127,8 @@ export class RoomMessagingService {
             session,
             message.roomId,
           );
+          if (this.options.remoteChat?.(session) === false)
+            throw new Error("Room chat is unavailable");
           if (message.createdAt < binding.remoteOfferAt)
             throw new Error("Stale room capability offer");
           binding.remoteOfferAt = message.createdAt;
@@ -281,10 +285,22 @@ export class RoomMessagingService {
 
   refreshCapabilities(): void {
     for (const binding of this.bindings.values()) {
-      if (
-        this.options.remoteChat?.(binding.session) === false
-      )
+      const chat = this.options.remoteChat?.(
+        binding.session,
+      );
+      if (chat === false) {
+        if (binding.capability !== "unsupported")
+          this.resetEpoch(binding);
+        clearTimeout(binding.retry);
+        binding.retry = undefined;
         this.setCapability(binding, "unsupported");
+      } else if (
+        chat === true &&
+        binding.capability === "unsupported" &&
+        !binding.retry
+      ) {
+        this.startHandshake(binding);
+      }
       if (!this.options.remoteFiles?.(binding.session)) {
         binding.files.abort();
         binding.files = new AbortController();
@@ -465,6 +481,7 @@ export class RoomMessagingService {
       remoteOfferWaiters: new Set(),
       acknowledged: false,
       capability: "checking",
+      retryDelay: 1_000,
     };
     this.bindings.set(session.targetClientId, binding);
     session.addEventListener(
@@ -498,6 +515,9 @@ export class RoomMessagingService {
   }
 
   private resetEpoch(binding: Binding): void {
+    clearTimeout(binding.retry);
+    binding.retry = undefined;
+    binding.retryDelay = 1_000;
     binding.epoch.abort();
     binding.epoch = new AbortController();
     binding.files.abort();
@@ -521,6 +541,8 @@ export class RoomMessagingService {
       binding.capability !== "unsupported"
     )
       return;
+    clearTimeout(binding.retry);
+    binding.retry = undefined;
     const epoch = binding.epoch;
     this.setCapability(binding, "checking");
     const createdAt = (this.lastOfferAt = Math.max(
@@ -571,15 +593,49 @@ export class RoomMessagingService {
           this.isCurrent(binding) &&
           binding.epoch === epoch
         )
-          this.setCapability(binding, "supported");
+          this.setCapability(
+            binding,
+            this.options.remoteChat?.(binding.session) ===
+              false
+              ? "unsupported"
+              : "supported",
+          );
       } catch {
         if (
           this.isCurrent(binding) &&
           binding.epoch === epoch
-        )
+        ) {
           this.setCapability(binding, "unsupported");
+          this.retryHandshake(binding);
+        }
       }
     });
+  }
+
+  private retryHandshake(binding: Binding): void {
+    // A failed probe is not proof that an explicitly advertised room service
+    // is unsupported. Retry only on this live transport, with bounded backoff.
+    // Legacy peers without room support keep the existing bounded probe.
+    if (
+      binding.retry ||
+      !binding.session.isMessageChannelReady ||
+      this.options.remoteChat?.(binding.session) !== true
+    )
+      return;
+    const epoch = binding.epoch;
+    binding.retry = setTimeout(() => {
+      binding.retry = undefined;
+      if (
+        this.isCurrent(binding) &&
+        binding.epoch === epoch &&
+        this.options.remoteChat?.(binding.session) === true
+      )
+        this.startHandshake(binding);
+    }, binding.retryDelay);
+    binding.retryDelay = Math.min(
+      binding.retryDelay * 2,
+      10_000,
+    );
   }
 
   private waitForRemoteOffer(
@@ -652,6 +708,11 @@ export class RoomMessagingService {
     binding: Binding,
     value: RoomChatCapability,
   ): void {
+    if (value === "supported") {
+      clearTimeout(binding.retry);
+      binding.retry = undefined;
+      binding.retryDelay = 1_000;
+    }
     if (binding.capability === value) return;
     binding.capability = value;
     this.publishCapabilities();
@@ -665,6 +726,8 @@ export class RoomMessagingService {
   }
 
   private retire(binding: Binding): void {
+    clearTimeout(binding.retry);
+    binding.retry = undefined;
     binding.epoch.abort();
     binding.files.abort();
     binding.lifetime.abort();

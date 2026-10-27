@@ -43,6 +43,12 @@ const service = vi.hoisted(() => ({
   sendRoomFile: vi.fn(),
   sendFile: vi.fn(),
   fileCapability: "supported",
+  chatCapabilities: (() => ({
+    alice: "supported",
+  })) as () => Record<
+    string,
+    "checking" | "supported" | "unsupported"
+  >,
   sendClipboard: vi.fn(),
   following: (() => true) as () => boolean,
 }));
@@ -97,7 +103,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
             appState.roomStatus.roomId,
           )
         : null,
-    roomChatCapabilities: () => ({ alice: "supported" }),
+    roomChatCapabilities: () => service.chatCapabilities(),
     roomFileCapabilities: () => ({
       alice: service.fileCapability,
     }),
@@ -314,6 +320,7 @@ beforeEach(async () => {
   service.sendFile.mockReset();
   service.sendFile.mockResolvedValue(undefined);
   service.fileCapability = "supported";
+  service.chatCapabilities = () => ({ alice: "supported" });
   store.setClient({
     clientId: "alice",
     name: "Alice",
@@ -353,6 +360,45 @@ afterEach(() => {
 });
 
 describe("shared conversation UI", () => {
+  it("reenables the room composer when online peers finish recovering their chat handshake", async () => {
+    const [capabilities, setCapabilities] = createSignal<
+      Record<
+        string,
+        "checking" | "supported" | "unsupported"
+      >
+    >({ alice: "unsupported" });
+    service.chatCapabilities = capabilities;
+    renderInRouter(() => (
+      <ConversationView conversationId={roomId} embedded />
+    ));
+    const input = (await screen.findByRole("textbox", {
+      name: "conversations.room_message",
+    })) as HTMLTextAreaElement;
+    expect(input.disabled).toBe(true);
+    setCapabilities({ alice: "supported" });
+    await waitFor(() => expect(input.disabled).toBe(false));
+    fireEvent.input(input, {
+      target: { value: "Room recovered" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "conversations.send",
+      }),
+    );
+    await waitFor(() =>
+      expect(service.sendRoomText).toHaveBeenCalledWith(
+        "Room recovered",
+      ),
+    );
+    setAppState(
+      "session",
+      "clientViewData",
+      "alice",
+      "messageChannel",
+      false,
+    );
+    await waitFor(() => expect(input.disabled).toBe(true));
+  });
   it.each([
     ["direct", "header"],
     ["direct", "messages"],
