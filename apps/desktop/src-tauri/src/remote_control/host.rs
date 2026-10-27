@@ -45,6 +45,7 @@ impl Peer {
     }
 }
 pub(super) struct Consent {
+    pub(super) handoff: Option<Grant>,
     pub(super) view: Pending,
     pub(super) media: String,
     pub(super) request_id: String,
@@ -73,6 +74,7 @@ pub(super) struct Host {
     pub(super) peers: HashMap<String, Peer>,
     pub(super) geometry_watches: GeometryWatches,
     pub(super) pending: Vec<Consent>,
+    pub(super) handoff_seen: HashMap<(String, String), Instant>,
     pub(super) active: Option<Active>,
     pub(super) cursor: super::cursor::Monitor,
     pub(super) text_focus: super::text_focus::Monitor,
@@ -126,6 +128,11 @@ impl Host {
         let status = self.worker.status();
         Snapshot {
             controller_kind: self.active.as_ref().map(|a| a.kind),
+            automation_active: !status.input_suspended
+                && self.active.as_ref().is_some_and(|a| {
+                    a.kind == ControllerKind::Automation
+                        || a.reuse.as_ref().is_some_and(|r| r.window_error.is_none())
+                }),
             source_id: self
                 .active
                 .as_ref()
@@ -196,8 +203,13 @@ impl Host {
     pub(super) fn tick(&mut self) {
         let now = Instant::now();
         let consents = self.worker.status().pending_consents;
-        self.pending
-            .retain(|p| consents.contains(&p.view.consent_id));
+        self.pending.retain(|p| {
+            p.handoff.as_ref().map_or_else(
+                || consents.contains(&p.view.consent_id),
+                |previous| self.active.as_ref().is_some_and(|a| &a.grant == previous),
+            )
+        });
+        self.handoff_seen.retain(|_, expires| *expires > now);
         if self.worker.status().grant.as_ref() != self.active.as_ref().map(|a| &a.grant) {
             self.end_grant();
         }
@@ -427,6 +439,9 @@ impl Host {
     }
     fn message(&mut self, id: &str, movement: bool, data: &[u8], at: Instant) {
         self.synchronize_input();
+        if !movement && self.handoff_message(id, data, at) {
+            return;
+        }
         let Some(peer) = self.peers.get_mut(id) else {
             return;
         };
@@ -463,13 +478,22 @@ impl Host {
                 self.cursor.cancel();
             }
             for event in events {
-                // A held automation gesture owns its keys/buttons until release.
-                // Manual reset still releases everything through the shared engine.
-                if let Some(reuse) = active.reuse.as_mut() {
-                    if matches!(event, weblink_desktop_input::input::Event::ReleaseAll) {
-                        reuse.held.clear();
-                    } else if !reuse.held.is_empty() {
-                        continue;
+                // Valid human input ends the borrowed lease. Release only its
+                // held inputs before accepting this event; old automation cannot resume.
+                if let Some(reuse) = active.reuse.take() {
+                    if !reuse.held.is_empty() {
+                        if self
+                            .worker
+                            .input(
+                                active.grant.clone(),
+                                weblink_desktop_input::input::Event::ReleaseInputs(reuse.held),
+                            )
+                            .and_then(|_| self.worker.flush().map(|_| ()))
+                            .is_err()
+                        {
+                            peer.endpoint.closed();
+                            return;
+                        }
                     }
                 }
                 if self.worker.input(active.grant.clone(), event).is_err() {
@@ -521,6 +545,7 @@ impl Host {
                         Ok(Some(RequestResult::Pending { consent_id })) => {
                             let _ = self.worker.flush();
                             self.pending.push(Consent {
+                                handoff: None,
                                 view: Pending {
                                     consent_id,
                                     client_id: peer.binding.client_id.clone(),

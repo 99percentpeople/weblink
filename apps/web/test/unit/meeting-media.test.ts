@@ -147,6 +147,21 @@ function setup(initial: MediaStream | null = null) {
   };
 }
 beforeEach(() => vi.stubGlobal("MediaStream", FakeStream));
+it("does not stop an already published source when a sharing dialog finishes after cancellation", async () => {
+  const video = new FakeTrack("video", "screen");
+  const shared = stream(video);
+  const { media, service, getDisplayMedia } = setup(shared);
+  const pending = deferred();
+  getDisplayMedia.mockReturnValueOnce(pending.promise);
+  const adding = media.addSharing();
+  media.cancelRequests();
+  pending.resolve(shared);
+  await adding;
+  expect(video.stop).not.toHaveBeenCalled();
+  expect(service.stream()?.getVideoTracks()).toEqual([
+    asTrack(video),
+  ]);
+});
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup());
   vi.unstubAllGlobals();

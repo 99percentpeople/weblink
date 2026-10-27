@@ -37,6 +37,7 @@ import type {
   NativeControlStatus,
 } from "@weblink/platform";
 import type { Principal } from "@weblink/automation";
+import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
 
 const fixture = vi.hoisted(() => ({
   permissions: undefined as AppPermissions | undefined,
@@ -64,6 +65,8 @@ const [automationController, setAutomationController] =
 const [controlledPeers, setControlledPeers] = createSignal<
   { id: string; name: string }[]
 >([]);
+const [peerCapabilities, setPeerCapabilities] =
+  createSignal<Record<string, PeerCapabilities>>({});
 const [hostControl, setHostControl] =
   createSignal<NativeControlStatus>({
     pending: [],
@@ -103,6 +106,17 @@ vi.mock("@/components/icons", async (importOriginal) => ({
   >()),
   IconStop: () => <svg />,
 }));
+vi.mock(
+  "@/components/common/automation-pointer-icon",
+  () => ({
+    AutomationPointerIcon: () => (
+      <svg
+        data-testid="automation-pointer"
+        aria-hidden="true"
+      />
+    ),
+  }),
+);
 vi.mock("@/components/app/account-menu", () => ({
   AccountMenu: () => null,
 }));
@@ -190,6 +204,8 @@ vi.mock("@/libs/state/app-state", async () => ({
 }));
 vi.mock("@/libs/state/app-state-context", () => ({
   useAppState: () => ({
+    peerCapabilities: (id: string) =>
+      peerCapabilities()[id],
     automation: {
       controller: automationController,
       controlledPeers,
@@ -358,6 +374,7 @@ beforeEach(() => {
   fixture.routeState = undefined;
   setAutomationController(null);
   setControlledPeers([]);
+  setPeerCapabilities({});
   fixture.screenControl.mockReset();
   fixture.releaseAutomationControl
     .mockReset()
@@ -484,7 +501,7 @@ describe("automation control status", () => {
       { id: "desktop", name: "Desktop" },
     ]);
     const statuses = screen.getAllByRole("status", {
-      name: "remote_control.controller_active",
+      name: "remote_control.automation_controller_active",
     });
     expect(statuses).toHaveLength(2);
     expect(statuses[0]).toHaveTextContent("Surface Go 2");
@@ -495,7 +512,7 @@ describe("automation control status", () => {
     ]);
     expect(
       screen.getAllByRole("status", {
-        name: "remote_control.controller_active",
+        name: "remote_control.automation_controller_active",
       })[0],
     ).toBe(statuses[0]);
     expect(statuses[0]).toHaveTextContent(
@@ -515,7 +532,7 @@ describe("automation control status", () => {
     setControlledPeers([]);
     expect(
       screen.queryByRole("status", {
-        name: "remote_control.controller_active",
+        name: "remote_control.automation_controller_active",
       }),
     ).toBeNull();
   });
@@ -540,7 +557,7 @@ describe("automation control status", () => {
     );
     expect(
       screen.getByRole("status", {
-        name: "remote_control.controller_active",
+        name: "remote_control.automation_controller_active",
       }),
     ).toHaveTextContent("Surface Go 2");
     expect(
@@ -576,9 +593,56 @@ describe("automation control status", () => {
     setControlledPeers([{ id: "bob", name: "Bob" }]);
     expect(
       screen.getAllByRole("status", {
-        name: "remote_control.controller_active",
+        name: "remote_control.automation_controller_active",
       }),
     ).toHaveLength(1);
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    const setType = (
+      controllerKind: "remote" | "automation",
+      automationActive: boolean,
+    ) =>
+      setPeerCapabilities({
+        bob: {
+          control: {
+            request: true,
+            host: true,
+            occupancy: {
+              state: "controlled",
+              clientId: "me",
+              sourceId: "screen",
+              controllerKind,
+              automationActive,
+            },
+          },
+        },
+      });
+    // Host status wins over a stale controller-only lease, matching picture labels.
+    setType("remote", false);
+    expect(
+      screen.getByRole("status", {
+        name: "remote_control.controller_active",
+      }),
+    ).toHaveTextContent("Bob");
+    expect(
+      screen.queryByTestId("automation-pointer"),
+    ).toBeNull();
+    setControlledPeers([]);
+    setType("remote", true);
+    expect(
+      screen.getByRole("status", {
+        name: "remote_control.automation_controller_active",
+      }),
+    ).toHaveTextContent("Bob");
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    // A temporarily suspended exclusive automation grant still has automation identity.
+    setType("automation", false);
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", {
         name: "remote_control.end",
@@ -589,11 +653,36 @@ describe("automation control status", () => {
       fixture.releaseAutomationControl,
     ).not.toHaveBeenCalled();
     setControlledPeers([]);
+    setPeerCapabilities({});
     expect(
       screen.getByRole("status", {
         name: "remote_control.controller_active",
       }),
     ).toHaveTextContent("Bob");
+  });
+  it("removes an automation-only label when the host ends control before local lease bookkeeping catches up", () => {
+    renderNativeWindow();
+    setControlledPeers([{ id: "bob", name: "Bob" }]);
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    setPeerCapabilities({
+      bob: {
+        control: {
+          request: true,
+          host: true,
+          occupancy: { state: "idle" },
+        },
+      },
+    });
+    expect(
+      screen.queryByTestId("automation-pointer"),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("status", {
+        name: "remote_control.automation_controller_active",
+      }),
+    ).toBeNull();
   });
   it.each(["mcp", "peer"] as const)(
     "shows an active %s controller outside a room and removes it when released",
@@ -604,8 +693,8 @@ describe("automation control status", () => {
         screen.queryByRole("status", {
           name:
             kind === "mcp"
-              ? "remote_control.host_active_short"
-              : "remote_control.host_active",
+              ? "remote_control.automation_host_active_short"
+              : "remote_control.automation_controlled_by",
         });
       expect(status()).toBeNull();
       setAutomationController({
@@ -615,7 +704,7 @@ describe("automation control status", () => {
       });
       expect(status()).toHaveTextContent(
         kind === "mcp"
-          ? "remote_control.host_active_short"
+          ? "remote_control.automation_host_active_short"
           : "Agent",
       );
       if (kind === "mcp") {
@@ -644,7 +733,7 @@ describe("automation control status", () => {
       expect(status()).toBe(original);
       expect(status()).toHaveTextContent(
         kind === "mcp"
-          ? "remote_control.host_active_short"
+          ? "remote_control.automation_host_active_short"
           : "Agent renamed",
       );
       fireEvent.click(
@@ -671,7 +760,7 @@ describe("automation control status", () => {
       kind: "peer",
     });
     const status = screen.getByRole("status", {
-      name: "remote_control.host_active",
+      name: "remote_control.automation_controlled_by",
     });
     expect(status).toHaveTextContent("Bob");
     expect(

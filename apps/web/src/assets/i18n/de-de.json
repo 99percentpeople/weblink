@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "Wird gesteuert",
     "controlled_by": "Wird von {{name}} gesteuert",
+    "automation_controlled_by": "Automatisierte Steuerung durch {{name}}",
+    "automation_host_active_short": "Wird automatisiert gesteuert",
+    "automation_controller_active": "Automatisierte Steuerung von {{name}}",
+    "automation_controller_active_short": "Automatisierte Steuerung",
     "clipboard_transfer": {
       "sending": "Zwischenablagedateien senden",
       "receiving": "Zwischenablagedateien werden empfangen",

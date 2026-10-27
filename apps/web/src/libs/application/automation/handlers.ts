@@ -15,7 +15,10 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { createScreenSettings } from "./screen-settings";
-import { createScreenSharing } from "./screen-sharing";
+import {
+  AutomationScreenShares,
+  type AutomationScreenAuthority,
+} from "./screen-sharing";
 import { sessionService } from "../session-service";
 import {
   createNativeScreenStream,
@@ -33,34 +36,46 @@ export function automationHandlers(
   platform: PlatformRuntime,
   diagnostics: AutomationDiagnostics,
   discovery?: DeviceDiscoverySource,
+  shares = new AutomationScreenShares(state.screenSharing),
 ) {
   const screenSettings = createScreenSettings({
     platform,
     read: () => appState.options,
     write: (patch) => setAppState("options", patch),
   });
-  const shareScreen = createScreenSharing({
-    stream: state.localStream,
-    publish: (stream) => state.replaceLocalStream(stream),
-    capture: async (sourceId, signal) => {
-      if (!platform.capture || !platform.screenShare)
-        throw new AutomationError("UNSUPPORTED");
-      return createNativeScreenStream(
-        platform.capture,
-        platform.screenShare,
-        sourceId,
-        signal,
-        {
-          ...nativeScreenOptions(appState.options),
-          audio: false,
-        },
-        {
-          backend:
-            appState.options.nativeScreenCaptureBackend,
-        },
-      );
-    },
-  });
+  const shareScreen = async (
+    sourceId: string,
+    signal: AbortSignal,
+    check: () => Promise<void>,
+    owner?: string,
+  ) => {
+    const shared = await shares.start(
+      owner,
+      sourceId,
+      signal,
+      async (signal) => {
+        if (!platform.capture || !platform.screenShare)
+          throw new AutomationError("UNSUPPORTED");
+        return createNativeScreenStream(
+          platform.capture,
+          platform.screenShare,
+          sourceId,
+          signal,
+          {
+            ...nativeScreenOptions(appState.options),
+            audio: false,
+          },
+          {
+            backend:
+              appState.options.nativeScreenCaptureBackend,
+          },
+        );
+      },
+      check,
+    );
+    const { trackId, reused } = shared;
+    return { trackId, sourceId, reused };
+  };
   const localTrack = (id: unknown) => {
     const track = state
       .localStream()
@@ -78,6 +93,7 @@ export function automationHandlers(
     ) => Promise<Record<string, unknown>>,
     check: () => Promise<void> = async () =>
       signal.throwIfAborted(),
+    authority?: AutomationScreenAuthority,
   ): Promise<Record<string, unknown>> => {
     await check();
     signal.throwIfAborted();
@@ -183,6 +199,7 @@ export function automationHandlers(
           String(args.sourceId),
           signal,
           check,
+          authority?.grantId,
         );
       }
       case "screen.stop": {
@@ -192,15 +209,10 @@ export function automationHandlers(
           !track.getSettings().displaySurface
         )
           throw new AutomationError("INVALID_TARGET");
-        state.replaceLocalStream(
-          new MediaStream(
-            state
-              .localStream()!
-              .getTracks()
-              .filter((t) => t !== track),
-          ),
+        return shares.stop(
+          authority?.screenGrantIds ?? [],
+          track.id,
         );
-        return { stopped: true };
       }
       case "screen.configure": {
         const track = localTrack(args.trackId);
@@ -246,12 +258,32 @@ export function automationHandlers(
         const capture = getNativeCaptureStatus(track);
         const sourceId =
           getNativeScreenPublication(track)?.sourceId;
-        if (!native || !capture?.sessionId || !sourceId)
-          throw new AutomationError("CAPTURE_REQUIRED");
-        return native({
-          sessionId: capture.sessionId,
-          sourceId,
-        });
+        try {
+          if (!native || !capture?.sessionId || !sourceId)
+            throw new AutomationError("CAPTURE_REQUIRED");
+          const { controlLeaseId, ...result } =
+            await native({
+              sessionId: capture.sessionId,
+              sourceId,
+            });
+          if (typeof controlLeaseId === "string")
+            for (const id of authority?.screenGrantIds ??
+              [])
+              shares.acquired(id, track.id, controlLeaseId);
+          return result;
+        } catch (error) {
+          for (const id of authority?.screenGrantIds ?? [])
+            shares.failedAcquire(id, track.id);
+          throw error;
+        }
+      }
+      case "control.release": {
+        if (!native)
+          throw new AutomationError("UNSUPPORTED");
+        const result = await native();
+        for (const id of authority?.screenGrantIds ?? [])
+          shares.release(id);
+        return result;
       }
       case "diagnostics.snapshot":
         return diagnostics.snapshot();

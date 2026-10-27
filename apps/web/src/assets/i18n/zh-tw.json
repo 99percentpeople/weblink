@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "正在被控制",
     "controlled_by": "{{name}} 控制中",
+    "automation_controlled_by": "{{name}} 自動化控制中",
+    "automation_host_active_short": "被自動化控制中",
+    "automation_controller_active": "正在自動化控制 {{name}}",
+    "automation_controller_active_short": "自動化控制中",
     "clipboard_transfer": {
       "sending": "正在傳送剪貼簿檔案",
       "receiving": "正在接收剪貼簿檔案",

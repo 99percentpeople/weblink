@@ -34,6 +34,14 @@ export class RemoteControlHost {
               state: "controlled",
               clientId: status.clientId,
               sourceId: status.sourceId,
+              controllerKind:
+                status.controllerKind ?? "remote",
+              automationActive:
+                status.automationActive ??
+                status.controllerKind === "automation",
+              takeover:
+                status.controllerKind === "automation" ||
+                status.clientId === clientId,
             }
           : status.clientId
             ? { state: "unavailable" }
@@ -83,25 +91,24 @@ export class RemoteControlHost {
     const status = this.state[0]();
     return {
       ...status,
-      pending:
-        status.clientId || this.selected[0]()
-          ? []
-          : [
-              ...this.screen
-                .pending()
-                .filter(
+      pending: this.selected[0]()
+        ? []
+        : [
+            ...this.screen
+              .pending()
+              .filter(
+                (p) =>
+                  this.exposes(p.clientId) &&
+                  !this.decision(p.clientId),
+              ),
+            ...(!this.screen.reservation()
+              ? status.pending.filter(
                   (p) =>
                     this.exposes(p.clientId) &&
                     !this.decision(p.clientId),
-                ),
-              ...(!this.screen.reservation()
-                ? status.pending.filter(
-                    (p) =>
-                      this.exposes(p.clientId) &&
-                      !this.decision(p.clientId),
-                  )
-                : []),
-            ],
+                )
+              : []),
+          ],
     };
   };
   private decision(clientId: string) {
@@ -214,23 +221,25 @@ export class RemoteControlHost {
       }
       this.recoveryDelay = 1000;
       this.state[1](status);
+      this.screen.synchronize(
+        status.clientId,
+        status.sourceId,
+      );
       const selected = this.selected[0]();
       if (
         selected &&
-        (status.clientId ||
-          !status.pending.some(
-            (p) => p.consentId === selected.consentId,
-          ))
+        !status.pending.some(
+          (p) => p.consentId === selected.consentId,
+        )
       )
         this.selected[1](null);
       if (status.clientId) {
-        this.screen.close();
+        this.screen.cancelPending();
         if (
           status.controllerKind !== "automation" &&
           !this.exposes(status.clientId)
         )
           await this.platform.remoteControl!.revoke(owner);
-        return;
       }
       for (const pending of status.pending) {
         if (!current()) return;
@@ -330,7 +339,7 @@ export class RemoteControlHost {
       approve &&
       (this.selected[0]() ||
         this.screen.reservation() ||
-        this.state[0]().clientId)
+        (screen && this.state[0]().clientId))
     )
       return;
     if (screen) {
@@ -369,8 +378,7 @@ export class RemoteControlHost {
     if (
       !this.exposes(pending.clientId) ||
       this.decisions.has(key) ||
-      (approve &&
-        (this.selected[0]() || this.state[0]().clientId))
+      (approve && this.selected[0]())
     )
       return false;
     this.decisions.add(key);
@@ -378,7 +386,8 @@ export class RemoteControlHost {
       this.selected[1](pending);
       // A native selection also rejects every avatar request.
       // Keep an approved avatar reservation until its native grant is acknowledged.
-      if (!this.screen.reservation()) this.screen.close();
+      if (!this.screen.reservation())
+        this.screen.cancelPending();
     }
     try {
       await this.platform.remoteControl!.approve(
@@ -413,10 +422,18 @@ export class RemoteControlHost {
       !this.exposes(clientId) ||
       signal.aborted ||
       this.screen.reservation() ||
-      this.selected[0]() ||
-      this.state[0]().clientId
+      this.selected[0]()
     )
       return;
+    if (this.state[0]().clientId) {
+      const occupancy = this.capability(clientId).occupancy;
+      // Existing media needs only the native handoff consent. Do not start a
+      // second capture or create a separate avatar reservation over its owner.
+      return occupancy.state === "controlled" &&
+        occupancy.takeover
+        ? occupancy.sourceId
+        : undefined;
+    }
     const result = this.screen.request(
       clientId,
       generation,

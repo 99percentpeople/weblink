@@ -80,9 +80,11 @@ vi.mock("@/i18n", () => ({
   t: (key: string, values?: { name?: string }) =>
     key === "remote_control.controlled_by"
       ? `Controlled by ${values?.name}`
-      : key === "meeting.you"
-        ? "You"
-        : key,
+      : key === "remote_control.automation_controlled_by"
+        ? `Automated by ${values?.name}`
+        : key === "meeting.you"
+          ? "You"
+          : key,
 }));
 // Test tile media/control lifetimes with actions exposed, independently of
 // the mobile menu presentation. Keep the real action registration and cleanup.
@@ -530,7 +532,7 @@ it("uses the header's AI lease only for the matching remote screen and returns t
     screen.getByTestId("automation-pointer"),
   ).toBeTruthy();
   expect(
-    screen.getByRole("img", { name: "Controlled by Bob" }),
+    screen.getByRole("img", { name: "Automated by Bob" }),
   ).toBe(indicator);
   setCapabilities(occupancy("screen-1"));
   expect(
@@ -561,6 +563,75 @@ it("uses the header's AI lease only for the matching remote screen and returns t
     screen.queryByRole("img", { name: /Controlled by/ }),
   ).toBeNull();
 });
+
+it.each([
+  { controllerKind: "automation", automationActive: true },
+  { controllerKind: "automation", automationActive: false },
+  { controllerKind: "remote", automationActive: true },
+] as const)(
+  "shows a third party's automation type and switches back to manual from host status: %j",
+  (control) => {
+    setAppState("profile", {
+      clientId: "observer",
+      name: "Observer",
+    });
+    const [capability, setCapability] =
+      createSignal<PeerCapabilities>({
+        control: {
+          request: true,
+          host: true,
+          occupancy: {
+            state: "controlled",
+            clientId: "third",
+            sourceId: "screen",
+            ...control,
+            takeover: true,
+          },
+        },
+      });
+    fixture.peerCapabilities.mockImplementation(capability);
+    render(() => (
+      <MeetingTile
+        name="Host"
+        clientId="host"
+        sourceKind="screen"
+        controlSourceId="screen"
+        pinned={false}
+        compact
+      />
+    ));
+    expect(
+      screen.getByRole("img", {
+        name: "Automated by third",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByTestId("automation-pointer"),
+    ).toBeTruthy();
+    setCapability({
+      control: {
+        request: true,
+        host: true,
+        occupancy: {
+          state: "controlled",
+          clientId: "third",
+          sourceId: "screen",
+          controllerKind: "remote",
+          automationActive: false,
+          takeover: false,
+        },
+      },
+    });
+    expect(
+      screen.getByRole("img", {
+        name: "Controlled by third",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId("automation-pointer"),
+    ).toBeNull();
+  },
+);
 
 it.each([
   { kind: "peer", controllerKind: "remote" },
@@ -598,8 +669,8 @@ it.each([
     ));
     const label =
       kind === "mcp"
-        ? "remote_control.host_active_short"
-        : `Controlled by ${principal.label}`;
+        ? "remote_control.automation_host_active_short"
+        : `Automated by ${principal.label}`;
     const indicator = screen.getByRole("img", {
       name: label,
     });

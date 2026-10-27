@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "En uso",
     "controlled_by": "Controlado por {{name}}",
+    "automation_controlled_by": "Control automatizado por {{name}}",
+    "automation_host_active_short": "Bajo control automatizado",
+    "automation_controller_active": "Control automatizado de {{name}}",
+    "automation_controller_active_short": "Control automatizado",
     "clipboard_transfer": {
       "sending": "Enviar archivos del portapapeles",
       "receiving": "Recibir archivos del portapapeles",

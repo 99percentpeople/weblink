@@ -505,6 +505,22 @@ impl<D: Device> Engine<D> {
     pub fn decline(&mut self, consent: &str) -> Option<Signal> {
         self.authority.decline(consent)
     }
+    pub fn approve_handoff(
+        &mut self,
+        previous: &Grant,
+        media: &str,
+        request: &Signal,
+        now: Instant,
+    ) -> Option<Signal> {
+        let approved = self
+            .authority
+            .approve_handoff(previous, media, request, now);
+        if approved.is_some() {
+            self.authority.backend_mut().interrupted = false;
+            self.authority.backend_mut().window_error = None;
+        }
+        approved
+    }
     pub fn renew(&mut self, grant: &Grant, now: Instant) -> bool {
         self.authority.renew(&grant.binding, &grant.id, now)
     }

@@ -91,6 +91,21 @@ fn manual() -> (Rig, String) {
 }
 
 #[test]
+fn public_status_distinguishes_borrowed_automation_from_its_manual_grant() {
+    let (rig, manual) = manual();
+    assert!(!rig.service.status(&rig.owner).unwrap().automation_active);
+    let lease = borrow(&rig);
+    let status = rig.service.status(&rig.owner).unwrap();
+    assert_eq!(status.controller_kind, Some(ControllerKind::Remote));
+    assert!(status.automation_active);
+    assert_eq!(status.grant_id.as_deref(), Some(manual.as_str()));
+    rig.service.automation_revoke_lease("client", &lease);
+    let status = rig.service.status(&rig.owner).unwrap();
+    assert!(!status.automation_active);
+    assert_eq!(status.grant_id.as_deref(), Some(manual.as_str()));
+}
+
+#[test]
 fn owned_window_scope_ends_on_blur_and_can_acquire_a_fresh_lease() {
     let rig = Rig::new();
     let first = rig.acquire_automation();
@@ -140,6 +155,71 @@ fn borrow(rig: &Rig) -> String {
         .acquire_automation(rig.source.clone(), request, true)
         .unwrap());
     host.automation_grant("client", None).unwrap().1.to_owned()
+}
+
+#[test]
+fn human_input_ends_borrowed_automation_before_injecting_and_requires_a_fresh_acquire() {
+    for holding in [false, true] {
+        let (rig, manual_grant) = manual();
+        let first = borrow(&rig);
+        let ctrl = ScanCode::new(0x1d, false).unwrap();
+        if holding {
+            rig.service
+                .automation_input("client", &first, vec![key(ctrl, true)])
+                .unwrap();
+        }
+        // Invalid/stale packets must not interrupt a valid automation lease.
+        rig.input(
+            "stale",
+            1,
+            2,
+            json!({"type":"key","scanCode":30,"extended":false,"down":true}),
+        );
+        assert!(rig.service.automation_matches("client", &first));
+        rig.input(
+            &manual_grant,
+            1,
+            2,
+            json!({"type":"key","scanCode":30,"extended":false,"down":true}),
+        );
+        assert!(!rig.service.automation_matches("client", &first));
+        assert!(rig
+            .service
+            .automation_input("client", &first, vec![key(ctrl, true)])
+            .is_err());
+        assert_eq!(
+            rig.service.status(&rig.owner).unwrap().grant_id.as_deref(),
+            Some(manual_grant.as_str())
+        );
+        let observations = rig.state.observations.lock().unwrap();
+        let human = observations.iter().position(|o| {
+            *o == Observation::Input(Action::Key {
+                key: ScanCode::new(30, false).unwrap(),
+                down: true,
+            })
+        });
+        let released = observations.iter().position(|o| {
+            *o == Observation::Input(Action::Key {
+                key: ctrl,
+                down: false,
+            })
+        });
+        drop(observations);
+        let human = human.expect("Human input must reach the input backend");
+        if holding {
+            assert!(released.unwrap() < human);
+        }
+        rig.input(
+            &manual_grant,
+            1,
+            3,
+            json!({"type":"key","scanCode":30,"extended":false,"down":false}),
+        );
+        let next = borrow(&rig);
+        assert_ne!(first, next);
+        assert!(!rig.service.automation_revoke_lease("client", &first));
+        assert!(rig.service.automation_matches("client", &next));
+    }
 }
 fn key(key: ScanCode, down: bool) -> Event {
     Event::Key { key, down }

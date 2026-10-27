@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "操作中",
     "controlled_by": "{{name}} が操作中",
+    "automation_controlled_by": "{{name}} が自動操作中",
+    "automation_host_active_short": "自動操作されています",
+    "automation_controller_active": "{{name}} を自動操作中",
+    "automation_controller_active_short": "自動操作中",
     "clipboard_transfer": {
       "sending": "クリップボードファイルの送信",
       "receiving": "クリップボードファイルの受信",

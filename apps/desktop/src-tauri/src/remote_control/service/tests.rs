@@ -11,6 +11,7 @@ use weblink_desktop_input::{
     session::Session,
 };
 pub(in crate::remote_control) mod automation_reuse;
+mod handoff;
 
 #[derive(Debug, PartialEq)]
 enum Observation {
@@ -197,6 +198,16 @@ impl Session for TestSession {
             .lock()
             .unwrap()
             .approve(&consent, Instant::now()))
+    }
+    fn approve_handoff(
+        &self,
+        previous: Grant,
+        media: String,
+        request: Signal,
+    ) -> Result<Option<Signal>, Error> {
+        let mut engine = self.engine.lock().unwrap();
+        let approved = engine.approve_handoff(&previous, &media, &request, Instant::now());
+        engine.status().failure.map_or(Ok(approved), Err)
     }
     fn decline(&self, consent: String) -> Result<Option<Signal>, Error> {
         Ok(self.engine.lock().unwrap().decline(&consent))

@@ -121,6 +121,29 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("remote pointer transport", () => {
+  it("requests handoff on another shared screen only when the host advertises takeover", () => {
+    const { c, r } = setup();
+    const occupancy = {
+      state: "controlled" as const,
+      clientId: "viewer",
+      sourceId: "other-screen",
+    };
+    c.setHostStatus(occupancy, "viewer");
+    expect(c.state()).toBe("busy");
+    c.setHostStatus(
+      { ...occupancy, takeover: true },
+      "viewer",
+    );
+    expect(c.state()).toBe("viewing");
+    c.request();
+    expect(c.state()).toBe("requesting");
+    expect(r.sent.at(-1)).toMatchObject({
+      type: "request",
+      target: { sourceId: "source" },
+    });
+    c.cancel();
+    expect(r.sent.at(-1)).toMatchObject({ type: "cancel" });
+  });
   it("blocks competing requests until public occupancy is released, while preserving an existing grant", () => {
     const { c, r, approve, activate } = setup();
     const before = r.sent.length;

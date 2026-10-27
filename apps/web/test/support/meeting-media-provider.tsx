@@ -3,6 +3,7 @@ import { platform } from "@/libs/platform/runtime";
 import { useAppState } from "@/libs/state/app-state-context";
 import { useAudioPlayer } from "@/libs/state/audio-player-context";
 import { createMeetingMedia } from "@/libs/state/create-meeting-media";
+import { createScreenSharing } from "@/libs/application/screen-sharing";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { createAppMediaCapabilities } from "@/libs/state/create-app-media-capabilities";
 import { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
@@ -11,6 +12,10 @@ import { MeetingMediaProvider as InjectMedia } from "@/components/app/meeting-me
 export function MeetingMediaProvider(props: ParentProps) {
   const state = useAppState();
   const audio = useAudioPlayer();
+  state.screenSharing ??= createScreenSharing({
+    stream: state.localStream,
+    publish: state.replaceLocalStream,
+  });
   // Mocked application contexts still need the shared permission lifetime used
   // by real capture and device discovery. Reuse it when the fixture provides one.
   state.permissions ??= createAppPermissions({

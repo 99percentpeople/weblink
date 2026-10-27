@@ -9,6 +9,11 @@ interface ScreenRequest {
   resolve(sourceId?: string): void;
 }
 
+export interface ControlScreenShare {
+  sourceId: string;
+  release(): void;
+}
+
 /** Consent queues independently; only the selected request reserves capture and handoff. */
 export class RemoteScreenConsent {
   private readonly reserved = createSignal<{
@@ -37,9 +42,14 @@ export class RemoteScreenConsent {
     sourceId: string;
     expires: number;
   };
+  private shared?: ControlScreenShare & {
+    clientId: string;
+    generation: string;
+    active: boolean;
+  };
   share?: (
     signal: AbortSignal,
-  ) => Promise<string | undefined>;
+  ) => Promise<string | ControlScreenShare | undefined>;
 
   request(
     clientId: string,
@@ -118,16 +128,30 @@ export class RemoteScreenConsent {
       if (other !== request) other.abort.abort();
     }
     try {
-      const sourceId = await this.share?.(
+      const result = await this.share?.(
         request.abort.signal,
       );
+      const share =
+        typeof result === "string"
+          ? { sourceId: result, release: () => {} }
+          : result;
       if (
         this.selected !== request ||
         request.abort.signal.aborted
-      )
+      ) {
+        share?.release();
         return false;
+      }
+      const sourceId = share?.sourceId;
       if (!sourceId)
         throw new Error("Could not start screen sharing");
+      this.releaseShared();
+      this.shared = {
+        ...share!,
+        clientId: request.clientId,
+        generation: request.generation,
+        active: false,
+      };
       this.approved = {
         clientId: request.clientId,
         generation: request.generation,
@@ -168,7 +192,10 @@ export class RemoteScreenConsent {
       grant.expires < Date.now()
     )
       return false;
-    if (consume) this.clearApproval();
+    if (consume) {
+      if (this.shared) this.shared.active = true;
+      this.clearApproval();
+    }
     return true;
   }
   cancelPeer(clientId: string, generation: string) {
@@ -184,6 +211,11 @@ export class RemoteScreenConsent {
       this.approved.generation === generation
     )
       this.clearApproval();
+    if (
+      this.shared?.clientId === clientId &&
+      this.shared.generation === generation
+    )
+      this.releaseShared();
   }
   cancelClient(clientId: string) {
     for (const request of this.requests.values()) {
@@ -192,15 +224,40 @@ export class RemoteScreenConsent {
     }
     if (this.approved?.clientId === clientId)
       this.clearApproval();
+    if (this.shared?.clientId === clientId)
+      this.releaseShared();
   }
-  close() {
+  synchronize(
+    clientId: string | null,
+    sourceId?: string | null,
+  ) {
+    const shared = this.shared;
+    if (!shared) return;
+    if (
+      shared.clientId === clientId &&
+      shared.sourceId === sourceId
+    )
+      shared.active = true;
+    else if (shared.active) this.releaseShared();
+  }
+  cancelPending() {
     for (const request of this.requests.values())
       request.abort.abort();
     this.clearApproval();
   }
+  close() {
+    this.cancelPending();
+    this.releaseShared();
+  }
+  private releaseShared() {
+    const shared = this.shared;
+    this.shared = undefined;
+    shared?.release();
+  }
   private clearApproval() {
     clearTimeout(this.expiry);
     this.approved = undefined;
+    if (!this.shared?.active) this.releaseShared();
     if (!this.selected) this.reserved[1](null);
   }
 }

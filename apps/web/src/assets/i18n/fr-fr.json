@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "En cours de contrôle",
     "controlled_by": "Contrôlé par {{name}}",
+    "automation_controlled_by": "Contrôle automatisé par {{name}}",
+    "automation_host_active_short": "Sous contrôle automatisé",
+    "automation_controller_active": "Contrôle automatisé de {{name}}",
+    "automation_controller_active_short": "Contrôle automatisé",
     "clipboard_transfer": {
       "sending": "Envoi de fichiers du presse-papiers",
       "receiving": "Réception de fichiers du presse-papiers",

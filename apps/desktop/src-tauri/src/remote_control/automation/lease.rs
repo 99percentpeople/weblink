@@ -98,7 +98,28 @@ impl Host {
         if !self.pending.is_empty() {
             return Err("BUSY".into());
         }
-        if let Some(active) = self.active.as_ref() {
+        let mut replacement = None;
+        if let Some(active) = self
+            .active
+            .as_ref()
+            .filter(|a| a.kind == ControllerKind::Automation)
+        {
+            let old = &active.grant.binding;
+            let next = &target.binding;
+            if old.client_id == next.client_id
+                && old.room_generation == next.room_generation
+                && old.peer_generation == next.peer_generation
+                && (old.capture_session_id != next.capture_session_id
+                    || old.target.source_id != next.target.source_id
+                    || old.target.geometry_revision != next.target.geometry_revision)
+            {
+                if !capture.is_current(next) {
+                    return Err("CAPTURE_REQUIRED".into());
+                }
+                replacement = Some(active.grant.clone());
+            }
+        }
+        if let Some(active) = self.active.as_ref().filter(|_| replacement.is_none()) {
             let binding = &active.grant.binding;
             let requested = &target.binding;
             if binding.client_id != requested.client_id
@@ -157,28 +178,36 @@ impl Host {
         let endpoint = self.register(capture, target, None)?;
         endpoint.opened(Arc::new(Sink));
         let result = (|| {
-            let consent = match self
-                .worker
-                .request(
-                    media.clone(),
-                    Signal::Request {
-                        request_id: uuid::Uuid::new_v4().to_string(),
-                        target: binding.target.clone(),
-                    },
-                )
-                .map_err(input_error)?
-            {
-                Some(RequestResult::Pending { consent_id }) => consent_id,
-                _ => return Err("BUSY".into()),
+            let request = Signal::Request {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                target: binding.target.clone(),
             };
-            let signal = self
-                .worker
-                .approve(consent)
-                .map_err(input_error)?
-                .ok_or("PERMISSION_DENIED")?;
+            let signal = if let Some(previous) = &replacement {
+                self.worker
+                    .approve_handoff(previous.clone(), media.clone(), request)
+                    .map_err(input_error)?
+                    .ok_or("PERMISSION_DENIED")?
+            } else {
+                let consent = match self
+                    .worker
+                    .request(media.clone(), request)
+                    .map_err(input_error)?
+                {
+                    Some(RequestResult::Pending { consent_id }) => consent_id,
+                    _ => return Err("BUSY".into()),
+                };
+                self.worker
+                    .approve(consent)
+                    .map_err(input_error)?
+                    .ok_or("PERMISSION_DENIED")?
+            };
             let Signal::Grant { grant_id, .. } = signal else {
                 return Err("PERMISSION_DENIED".into());
             };
+            if let Some(previous) = &replacement {
+                self.end_grant();
+                self.remove_peer(&previous.binding.target.media_id);
+            }
             self.active = Some(Active {
                 automation_window: None,
                 reuse: None,

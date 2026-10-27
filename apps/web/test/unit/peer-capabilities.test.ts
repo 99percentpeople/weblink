@@ -4,6 +4,7 @@ import { PeerCapabilitiesService } from "@/libs/application/peer-capabilities";
 import {
   validCapabilityUpdate,
   validCurrentCapability,
+  controlBlocked,
   type CapabilityChanges,
   type CapabilityUpdate,
   type PeerCapabilities,
@@ -23,6 +24,86 @@ import {
 } from "../support/rtc-transport";
 
 const disposers: (() => void)[] = [];
+it("validates public control type without deriving takeover permission from it", () => {
+  const base = {
+    state: "controlled" as const,
+    clientId: "owner",
+    sourceId: "screen",
+  };
+  for (const controllerKind of [
+    undefined,
+    "remote",
+    "automation",
+  ] as const) {
+    for (const automationActive of [
+      undefined,
+      false,
+      true,
+    ]) {
+      const occupancy = {
+        ...base,
+        controllerKind,
+        automationActive,
+      };
+      expect(
+        validCurrentCapability("control", {
+          request: true,
+          host: true,
+          occupancy,
+        }),
+      ).toBe(true);
+      expect(controlBlocked(occupancy, "observer")).toBe(
+        true,
+      );
+      expect(
+        controlBlocked(
+          { ...occupancy, takeover: true },
+          "observer",
+        ),
+      ).toBe(false);
+    }
+  }
+  for (const fields of [
+    { controllerKind: "invented" },
+    { automationActive: "true" },
+  ])
+    expect(
+      validCurrentCapability("control", {
+        request: true,
+        host: true,
+        occupancy: { ...base, ...fields },
+      }),
+    ).toBe(false);
+});
+it("requires an explicit compatible takeover capability before offering manual handoff", () => {
+  const occupancy = {
+    state: "controlled" as const,
+    clientId: "alice",
+    sourceId: "screen",
+  };
+  expect(controlBlocked(occupancy, "alice")).toBe(true);
+  expect(
+    controlBlocked(
+      { ...occupancy, takeover: true },
+      "alice",
+    ),
+  ).toBe(false);
+  for (const takeover of [undefined, false, true])
+    expect(
+      validCurrentCapability("control", {
+        request: true,
+        host: true,
+        occupancy: { ...occupancy, takeover },
+      }),
+    ).toBe(true);
+  expect(
+    validCurrentCapability("control", {
+      request: true,
+      host: true,
+      occupancy: { ...occupancy, takeover: "yes" },
+    }),
+  ).toBe(false);
+});
 it("accepts optional automation lease status without changing the protocol version", () => {
   for (const value of [
     {},

@@ -10,6 +10,10 @@ import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keybo
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
 import {
+  AutomationScreenShares,
+  type AutomationScreenAuthority,
+} from "@/libs/application/automation/screen-sharing";
+import {
   createEffect,
   createSignal,
   onCleanup,
@@ -80,6 +84,8 @@ interface NativeSnapshot {
   }[];
   controller?: Principal | null;
   activeCalls?: string[];
+  screenGrants?: string[];
+  controlLeaseId?: string | null;
 }
 const empty: NativeSnapshot = {
   enabled: false,
@@ -131,6 +137,9 @@ export function createAutomation(
   const diagnostics = new AutomationDiagnostics(() =>
     diagnosticSources(state, presentation, platform),
   );
+  const screenShares = new AutomationScreenShares(
+    state.screenSharing,
+  );
   const handle = automationHandlers(
     state,
     platform,
@@ -156,6 +165,7 @@ export function createAutomation(
           : "disconnected";
       },
     },
+    screenShares,
   );
   const life = new AbortController();
   const webPrincipal: Principal = {
@@ -262,8 +272,11 @@ export function createAutomation(
   const configurationRevision = { automation: 0, mcp: 0 };
   let nativeConfiguration = Promise.resolve();
   let snapshotSequence = 0;
+  let shareRevision = 0;
+  const shareCalls = new Set<AbortController>();
   const readNativeSnapshot = async () => {
     const sequence = ++snapshotSequence;
+    const sharing = shareRevision;
     const snapshot = (await native!.snapshot(
       epoch,
     )) as NativeSnapshot;
@@ -273,6 +286,15 @@ export function createAutomation(
     )
       return;
     setNativeState(snapshot);
+    if (
+      sharing === shareRevision &&
+      !shareCalls.size &&
+      snapshot.screenGrants
+    )
+      screenShares.synchronize(
+        snapshot.screenGrants,
+        snapshot.controlLeaseId ?? null,
+      );
     return snapshot;
   };
 
@@ -354,6 +376,7 @@ export function createAutomation(
     call: ToolCall,
     signal: AbortSignal,
     ticket?: string,
+    owner?: AutomationScreenAuthority,
   ): Promise<Record<string, unknown>> => {
     const check = async () => {
       signal.throwIfAborted();
@@ -403,6 +426,7 @@ export function createAutomation(
         ? (binding) => native.action(epoch, ticket, binding)
         : undefined,
       check,
+      owner,
     );
   };
   const invoke = async (
@@ -501,6 +525,17 @@ export function createAutomation(
     request: NativeAutomationRequest,
   ) => {
     const controller = new AbortController();
+    if (
+      [
+        "screen.start",
+        "screen.stop",
+        "control.acquire",
+        "control.release",
+      ].includes(request.call.name)
+    ) {
+      ++shareRevision;
+      shareCalls.add(controller);
+    }
     calls
       .get(request.id)
       ?.abort(new AutomationError("CANCELLED"));
@@ -529,6 +564,14 @@ export function createAutomation(
         request.call,
         signal,
         request.id,
+        request.grantId
+          ? {
+              grantId: request.grantId,
+              screenGrantIds: request.screenGrantIds ?? [
+                request.grantId,
+              ],
+            }
+          : undefined,
       );
       applied =
         request.call.name === "accessibility.action" &&
@@ -544,12 +587,17 @@ export function createAutomation(
     }
     clearTimeout(timeout);
     combined.dispose();
+    if (shareCalls.delete(controller)) ++shareRevision;
     // A cancelled invocation can finish after its ID has been reused.
     if (calls.get(request.id) !== controller) return;
     calls.delete(request.id);
     await native!
       .finish(epoch, request.id, result)
       .catch(() => {});
+    // Read after completion; an older in-flight snapshot must not release a
+    // screen just acquired by a concurrent call.
+    if (!life.signal.aborted)
+      await readNativeSnapshot().catch(() => {});
   };
   const canConnect = (session: PeerSession) => {
     const capabilities =
@@ -1009,6 +1057,7 @@ export function createAutomation(
     webRegistration?.abort();
     unregister?.();
     diagnostics.dispose();
+    screenShares.dispose();
     presentation.clear();
     for (const b of bindings.values()) b.abort.abort();
     for (const l of [...links.values()]) l.close();

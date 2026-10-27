@@ -199,6 +199,74 @@ fn exact_cleanup_distinguishes_prior_revocation_and_preserves_a_replacement() {
 }
 
 #[test]
+fn handoff_validates_before_releasing_and_rejects_queued_old_grant_input() {
+    use std::sync::{atomic::AtomicBool, atomic::Ordering, Arc};
+    let (mut engine, fake, old, now) = setup();
+    engine.input(&old, key(true), now).unwrap();
+    let mut next = target();
+    next.binding.target.media_id = "next".into();
+    next.binding.target.source_id = "next-screen".into();
+    let invalidated = Arc::new(AtomicBool::new(false));
+    assert!(engine.register_until(next.clone(), invalidated.clone()));
+    let request = Signal::Request {
+        request_id: "handoff".into(),
+        target: next.binding.target,
+    };
+    invalidated.store(true, Ordering::Release);
+    assert!(engine
+        .approve_handoff(&old, "next", &request, now)
+        .is_none());
+    assert_eq!(engine.status().grant, Some(old.clone()));
+    assert!(!engine.status().held.is_empty());
+    assert!(!engine.status().input_suspended);
+    assert_eq!(fake.0.borrow().actions.len(), 1);
+    invalidated.store(false, Ordering::Release);
+    assert!(engine
+        .approve_handoff(&old, "next", &request, now)
+        .is_some());
+    assert!(engine.status().held.is_empty());
+    assert!(!engine.status().input_suspended);
+    assert_eq!(
+        fake.0.borrow().actions.last(),
+        Some(&Action::Key {
+            key: ScanCode::new(30, false).unwrap(),
+            down: false
+        })
+    );
+    assert_eq!(
+        engine.queued_input(&old, key(true), now, now),
+        Err(Error::Unauthorized)
+    );
+    let new = engine.status().grant.unwrap();
+    engine.input(&new, key(true), now).unwrap();
+    assert!(!engine.revoke_matching(&old));
+    assert!(!engine.status().held.is_empty());
+}
+
+#[test]
+fn handoff_cleanup_failure_closes_input_without_granting_or_restoring_control() {
+    let (mut engine, fake, old, now) = setup();
+    engine.input(&old, key(true), now).unwrap();
+    fake.0.borrow_mut().fail = true;
+    let request = Signal::Request {
+        request_id: "handoff".into(),
+        target: old.binding.target.clone(),
+    };
+    assert!(engine
+        .approve_handoff(&old, "media", &request, now)
+        .is_none());
+    let status = engine.status();
+    assert!(status.closed);
+    assert_eq!(status.failure, Some(Error::Release));
+    assert!(status.grant.is_none());
+    fake.0.borrow_mut().fail = false;
+    assert!(!engine.renew(&old, now));
+    assert!(engine
+        .approve_handoff(&old, "media", &request, now)
+        .is_none());
+}
+
+#[test]
 fn selective_cleanup_releases_only_recorded_inputs_without_moving_or_ending_the_grant() {
     let (mut engine, fake, grant, now) = setup();
     let first = ScanCode::new(30, false).unwrap();

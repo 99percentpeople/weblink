@@ -41,6 +41,19 @@ impl crate::session::Session for Worker {
     fn approve(&self, consent: String) -> Result<Option<Signal>, Error> {
         Worker::approve(self, consent)
     }
+    fn approve_handoff(
+        &self,
+        previous: Grant,
+        media: String,
+        request: Signal,
+    ) -> Result<Option<Signal>, Error> {
+        // Do not use the revoke priority lane: it discards queued input even
+        // when admission fails. Old-grant packets cannot run after replacement.
+        self.call(move |engine| {
+            let approved = engine.approve_handoff(&previous, &media, &request, Instant::now());
+            engine.status().failure.map_or(Ok(approved), Err)
+        })?
+    }
     fn decline(&self, consent: String) -> Result<Option<Signal>, Error> {
         Worker::decline(self, consent)
     }

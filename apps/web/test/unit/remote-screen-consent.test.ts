@@ -15,6 +15,120 @@ import type {
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
+it("uses the explicit takeover decision for avatar requests regardless of display type", () => {
+  for (const controllerKind of [
+    undefined,
+    "remote",
+    "automation",
+  ] as const) {
+    for (const takeover of [undefined, false, true]) {
+      const send = vi.fn();
+      const request = new ScreenControlRequest(send);
+      request.setAvailable(true);
+      request.setHostStatus(
+        {
+          state: "controlled",
+          clientId: "other",
+          sourceId: "screen",
+          controllerKind,
+          takeover,
+        },
+        "observer",
+      );
+      expect(request.state()).toBe(
+        takeover ? "viewing" : "busy",
+      );
+      request.request();
+      expect(send).toHaveBeenCalledTimes(takeover ? 1 : 0);
+      request.reset();
+    }
+  }
+});
+
+async function sharedConsent() {
+  const consent = new RemoteScreenConsent();
+  const release = vi.fn();
+  consent.share = async () => ({
+    sourceId: "screen",
+    release,
+  });
+  const result = consent.request(
+    "alice",
+    "peer",
+    new AbortController().signal,
+  );
+  await consent.respond(
+    consent.pending()[0].consentId,
+    true,
+  );
+  expect(await result).toBe("screen");
+  return { consent, release };
+}
+
+it.each(["timeout", "disconnect", "close"])(
+  "releases a published temporary share when native handoff never completes: %s",
+  async (action) => {
+    const { consent, release } = await sharedConsent();
+    if (action === "timeout")
+      await vi.advanceTimersByTimeAsync(30_000);
+    else if (action === "disconnect")
+      consent.cancelPeer("alice", "peer");
+    else consent.close();
+    expect(release).toHaveBeenCalledOnce();
+    expect(consent.reservation()).toBeNull();
+    consent.close();
+    expect(release).toHaveBeenCalledOnce();
+  },
+);
+
+it.each([true, false])(
+  "retains the share while controlled and releases on exit (native observation first: %s)",
+  async (observedFirst) => {
+    const { consent, release } = await sharedConsent();
+    if (observedFirst)
+      consent.synchronize("alice", "screen");
+    expect(consent.consume("alice", "peer", "screen")).toBe(
+      true,
+    );
+    consent.synchronize("alice", "screen");
+    consent.cancelPending();
+    consent.cancelPeer("alice", "old-peer");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(release).not.toHaveBeenCalled();
+    consent.synchronize(null, null);
+    consent.close();
+    expect(release).toHaveBeenCalledOnce();
+  },
+);
+
+it("releases an in-flight share returned after the requesting peer cancels", async () => {
+  const consent = new RemoteScreenConsent();
+  const release = vi.fn();
+  let finish!: (result: {
+    sourceId: string;
+    release(): void;
+  }) => void;
+  consent.share = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const abort = new AbortController();
+  const result = consent.request(
+    "alice",
+    "peer",
+    abort.signal,
+  );
+  const responding = consent.respond(
+    consent.pending()[0].consentId,
+    true,
+  );
+  abort.abort();
+  finish({ sourceId: "screen", release });
+  expect(await responding).toBe(false);
+  expect(await result).toBeUndefined();
+  expect(release).toHaveBeenCalledOnce();
+});
+
 it("waits for approval, shares once, and binds one-use consent to peer generation and source", async () => {
   const consent = new RemoteScreenConsent();
   consent.share = vi.fn(async () => "screen-1");

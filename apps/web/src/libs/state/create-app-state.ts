@@ -82,6 +82,7 @@ import type { AppPermissions } from "./create-app-permissions";
 import { createAppSettings } from "./create-app-settings";
 import { createConversationActivity } from "./create-conversation-activity";
 import { platform } from "@/libs/platform/runtime";
+import { createScreenSharing } from "@/libs/application/screen-sharing";
 
 /** Services are owned by the application composition scope, independently of views. */
 export function createAppState(
@@ -99,6 +100,21 @@ export function createAppState(
     messageStores,
   );
   const localStream = localStreamService.stream;
+  const screenSharing = createScreenSharing({
+    stream: localStream,
+    publish: localStreamService.replace,
+    controlledSource: () => {
+      const status = sessionService.remoteControl.status();
+      return !status.closed && status.grantId
+        ? (status.sourceId ?? undefined)
+        : undefined;
+    },
+  });
+  createEffect(() => {
+    localStream();
+    sessionService.remoteControl.status();
+    screenSharing.synchronize();
+  });
   const settings = createAppSettings({
     platform,
     permissions: permissions.media,
@@ -1006,6 +1022,7 @@ export function createAppState(
       speedTestApproval.decline(target);
     },
     localStream,
+    screenSharing,
     replaceLocalStream: (stream) =>
       localStreamService.replace(stream),
     clearLocalStream: () => localStreamService.clear(),

@@ -151,6 +151,94 @@ fn only_local_consent_opens_permission_and_all_binding_fields_must_match() {
         assert!(!a.permits(&wrong, &grant_id, now));
     }
 }
+
+#[test]
+fn handoff_rejects_stale_owners_targets_and_requests_without_releasing_the_grant() {
+    let (mut a, fake, b, now) = setup();
+    let cancelled = pending(&mut a, &b, "cancelled", now);
+    a.decline(&cancelled).unwrap();
+    grant(&mut a, &b, now);
+    let old = a.grant().unwrap().clone();
+    let mut second = b.clone();
+    second.target.media_id = "media-2".into();
+    fake.current.borrow_mut().push(second.clone());
+    assert!(a.register(second.clone()));
+    fake.current
+        .borrow_mut()
+        .retain(|binding| binding != &second);
+    let mut wrong = old.clone();
+    wrong.id = "stale-grant".into();
+    let mut wrong_binding = old.clone();
+    wrong_binding.binding.peer_generation = "stale-peer".into();
+    for (expected, media, signal) in [
+        (&wrong, "media-1", request(&b, "fresh")),
+        (&wrong_binding, "media-1", request(&b, "fresh")),
+        (&old, "unregistered", request(&b, "fresh")),
+        (&old, "media-1", request(&second, "fresh")),
+        (&old, "media-2", request(&second, "fresh")),
+        (&old, "media-1", request(&b, "cancelled")),
+        (&old, "media-1", request(&b, "")),
+        (
+            &old,
+            "media-1",
+            Signal::Cancel {
+                request_id: "fresh".into(),
+            },
+        ),
+    ] {
+        assert!(a.approve_handoff(expected, media, &signal, now).is_none());
+        assert_eq!(a.grant(), Some(&old));
+        assert!(fake.released.borrow().is_empty());
+    }
+    assert!(a
+        .approve_handoff(&old, "media-1", &request(&b, "fresh"), now)
+        .is_some());
+}
+
+#[test]
+fn handoff_checks_replay_capacity_before_releasing_and_recovers_when_it_expires() {
+    let (mut a, fake, b, now) = setup();
+    grant(&mut a, &b, now);
+    let old = a.grant().unwrap().clone();
+    for i in 0..255 {
+        assert!(matches!(
+            a.request("media-1", &request(&b, &format!("busy-{i}")), now),
+            Some(RequestResult::Reply(Signal::Deny {
+                reason: DenialReason::Busy,
+                ..
+            }))
+        ));
+    }
+    assert!(a
+        .approve_handoff(&old, "media-1", &request(&b, "fresh"), now)
+        .is_none());
+    assert_eq!(a.grant(), Some(&old));
+    assert!(fake.released.borrow().is_empty());
+    let later = now + Duration::from_secs(31);
+    assert!(a
+        .approve_handoff(&old, "media-1", &request(&b, "fresh"), later)
+        .is_some());
+    assert_ne!(a.grant(), Some(&old));
+}
+
+#[test]
+fn handoff_cannot_revive_old_grants_or_reuse_an_approved_request() {
+    let (mut a, fake, b, now) = setup();
+    grant(&mut a, &b, now);
+    let old = a.grant().unwrap().clone();
+    let signal = request(&b, "handoff");
+    assert!(a.approve_handoff(&old, "media-1", &signal, now).is_some());
+    let new = a.grant().unwrap().clone();
+    assert_ne!(new.id, old.id);
+    assert_eq!(*fake.released.borrow(), vec![old.clone()]);
+    assert!(!a.renew(&old.binding, &old.id, now));
+    assert!(a.approve_handoff(&new, "media-1", &signal, now).is_none());
+    assert!(a
+        .approve_handoff(&old, "media-1", &request(&b, "fresh"), now)
+        .is_none());
+    assert_eq!(a.grant(), Some(&new));
+    assert_eq!(fake.released.borrow().len(), 1);
+}
 #[test]
 fn cancellation_timeout_and_replayed_requests_cannot_approve_an_old_dialog() {
     let (mut a, _, b, now) = setup();

@@ -263,17 +263,26 @@ including requests from the avatar sharing flow. Declining, cancelling or expiri
 one unanswered request leaves the others available.
 
 `pending` means a controller has been selected and capture/native authorization
-is in progress; both `pending` and `controlled` block competing requests. The
+is in progress; `pending` blocks competing requests. `controlled` blocks requests
+unless the host explicitly advertises `takeover: true` for that recipient. The
 status publisher broadcasts selection, cancellation, revocation and release;
 a newly connected client receives current occupancy immediately. The avatar
 flow reserves occupancy from approval through capture and native handoff, with
 expiry/cancellation clearing the reservation.
 The pending owner may complete that handoff. Other viewers retain the control
-action but cannot click it until the host reports `idle`. A request guard also
+action but cannot click it until the host reports `idle` or permits takeover.
+The same rule applies to screen tiles and avatar requests; an avatar takeover
+reuses the current source and proceeds through native authorization. A request guard also
 enforces this outside the UI; native arbitration resolves simultaneous requests.
 An occupancy update does not renegotiate media or replace existing input grants.
 
-`controlled` plus the matching client/source identifies the public owner. It is
+`controlled` plus the matching client/source identifies the public owner. Optional
+`controllerKind: "remote" | "automation"` identifies the grant type and
+`automationActive: boolean` identifies current automation use, including a borrowed
+manual grant. The host sends both fields to every observer. Missing fields remain
+valid for older peers, but neither these fields nor a guessed type imply takeover
+permission. Control labels and icons use these fields without local-controller
+knowledge. The public status is
 not an input credential: only the requesting peer receives the native grant
 bound to its connection, source, media and geometry, and input starts after its
 activation acknowledgement. Grant IDs and input epochs never enter the public

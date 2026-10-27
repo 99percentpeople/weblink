@@ -12,6 +12,7 @@ import { platform } from "@/libs/platform/runtime";
 import {
   createNativeScreenStream,
   getNativeScreenPublication,
+  getNativeCaptureStatus,
 } from "@/libs/application/native-screen-service";
 import type { createNativeScreenDialog } from "@/components/dialogs/native-screen-dialog";
 import { createEffect, on, onCleanup } from "solid-js";
@@ -81,17 +82,24 @@ export function createMeetingMedia({
         const pending = (pendingNative =
           new AbortController());
         try {
-          return await createNativeScreenStream(
-            platform.capture!,
-            platform.screenShare!,
+          const shared = await state.screenSharing.start(
             source.sourceId,
             pending.signal,
-            {
-              ...nativeScreenOptions(appState.options),
-              audio: source.audio,
-            },
-            { backend: source.backend },
+            () =>
+              createNativeScreenStream(
+                platform.capture!,
+                platform.screenShare!,
+                source.sourceId,
+                pending.signal,
+                {
+                  ...nativeScreenOptions(appState.options),
+                  audio: source.audio,
+                },
+                { backend: source.backend },
+              ),
           );
+          shared.release();
+          return shared.stream;
         } finally {
           if (pendingNative === pending)
             pendingNative = undefined;
@@ -158,19 +166,21 @@ export function createMeetingMedia({
           getNativeScreenPublication(track)
             ?.controlEligible,
       );
-    if (existing)
-      return getNativeScreenPublication(existing)?.sourceId;
     const capture = platform.capture;
     const share = platform.screenShare;
     if (!capture || !share || signal.aborted) return;
-    const source = (await capture.sources()).find(
-      (source) => source.kind === "monitor",
-    );
+    const source =
+      (existing &&
+        getNativeCaptureStatus(existing)?.source) ||
+      (await capture.sources()).find(
+        (source) => source.kind === "monitor",
+      );
     if (!source || disposed || signal.aborted) return;
-    let captured: MediaStream | undefined;
-    await media.addSharing(
-      async () =>
-        (captured = await createNativeScreenStream(
+    const shared = await state.screenSharing.start(
+      source.id,
+      signal,
+      () =>
+        createNativeScreenStream(
           capture,
           share,
           source.id,
@@ -183,14 +193,24 @@ export function createMeetingMedia({
             backend:
               appState.options.nativeScreenCaptureBackend,
           },
-        )),
-      signal,
+        ),
+      async () => {
+        if (disposed)
+          throw new DOMException(
+            "Capture cancelled",
+            "AbortError",
+          );
+      },
+      true,
     );
-    const track = captured?.getVideoTracks()[0];
-    return track &&
-      state.localStream()?.getVideoTracks().includes(track)
-      ? getNativeScreenPublication(track)?.sourceId
-      : undefined;
+    const track = shared.stream.getVideoTracks()[0];
+    const sourceId =
+      getNativeScreenPublication(track)?.sourceId;
+    if (!sourceId) {
+      shared.release();
+      return;
+    }
+    return { sourceId, release: shared.release };
   };
   sessionService.remoteControl.screen.share =
     shareDefaultScreen;

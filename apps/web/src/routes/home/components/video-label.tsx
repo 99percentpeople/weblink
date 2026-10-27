@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
-import { Monitor, MousePointer2 } from "lucide-solid";
+import { Monitor } from "lucide-solid";
 import { Badge } from "@/components/ui/badge";
-import { AutomationPointerIcon } from "@/components/common/automation-pointer-icon";
+import { ControlIndicatorIcon } from "@/components/common/control-indicator";
 import {
   IconRecord,
   IconPause,
@@ -28,10 +28,19 @@ export function VideoLabel(props: VideoLabelProps) {
     );
   const controller = () =>
     props.controller
-      ? t("remote_control.controlled_by", {
-          name: props.controller,
-        })
-      : t("remote_control.host_active_short");
+      ? t(
+          props.automation
+            ? "remote_control.automation_controlled_by"
+            : "remote_control.controlled_by",
+          {
+            name: props.controller,
+          },
+        )
+      : t(
+          props.automation
+            ? "remote_control.automation_host_active_short"
+            : "remote_control.host_active_short",
+        );
   return (
     <Badge
       variant="secondary"
@@ -79,20 +88,10 @@ export function VideoLabel(props: VideoLabelProps) {
           title={controller()}
           class="shrink-0"
         >
-          <Show
-            when={props.automation}
-            fallback={
-              <MousePointer2
-                class="size-4"
-                aria-hidden="true"
-              />
-            }
-          >
-            <AutomationPointerIcon
-              class="size-4"
-              aria-hidden="true"
-            />
-          </Show>
+          <ControlIndicatorIcon
+            automation={props.automation}
+            class="size-4"
+          />
         </span>
       </Show>
       <Show when={props.speaking}>

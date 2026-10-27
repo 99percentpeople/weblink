@@ -5,6 +5,7 @@ mod automation;
 mod binding;
 mod commands;
 mod cursor;
+mod handoff;
 mod host;
 mod service;
 mod text_focus;
@@ -44,6 +45,7 @@ pub enum ControllerKind {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub controller_kind: Option<ControllerKind>,
+    pub automation_active: bool,
     pub source_id: Option<String>,
     pub devices: weblink_desktop_input::devices::Snapshot,
     pub grant_id: Option<String>,

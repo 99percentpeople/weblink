@@ -273,13 +273,37 @@ When the same verified device already controls the requested monitor,
 as must the capture, source and geometry. Automation permissions are still checked
 independently. Local MCP token identities cannot borrow another device's grant.
 The native snapshot continues to report the manual controller; its media and
-input channels remain open. Repeated acquisition is idempotent. Borrowed leases
+input channels remain open. Repeated acquisition of the same source is idempotent. Borrowed leases
 have separate IDs, held-input ownership and optional window confinement.
 Release, cancellation and window-focus failure clear only the borrowed lease and
 its held inputs. A human's held modifiers/buttons block automated input rather
-than becoming part of it. Manual input pauses while an automated gesture holds
-keys/buttons. Native interruption, grant revocation, media teardown and connection
+than becoming part of it. Valid manual input terminates the borrowed lease and
+releases its held keys/buttons before processing the human event. Automation must
+explicitly acquire a fresh lease; pending actions cannot resume the old one.
+Native interruption, grant revocation, media teardown and connection
 replacement invalidate the borrowed lease; stale cleanup cannot release a new one.
+When automation owns an exclusive grant, a manual control request can replace it
+after host approval (including an existing allow rule). Until approval, the old
+grant remains active. The same automation principal and connection may explicitly
+acquire another monitor, replacing its previous lease only after the new target is
+validated and authorized. A failed switch leaves the old control intact.
+Borrowing manual control never moves the human's grant to another monitor.
+Sharing has one owner per physical capture source. Explicit user sharing and local
+recording retain the publication. Manual control requests and automation instead
+hold temporary uses: release removes only that use, preserving user sharing,
+other callers and the current native control grant, including during handoff.
+`screen.start` acquires a caller-owned temporary use, reusing existing capture and
+audio settings. `screen.stop` releases only a track acquired by this caller;
+`released: true, stopped: false, retained: true` means another owner still needs it.
+`control.release` releases the caller's input and screen uses even if their
+permissions were approved separately. After acquisition, control ending or switching
+monitors releases the associated use; a failed acquisition releases only the new,
+unused candidate. Permission revocation and peer disconnection release all uses of
+that permission lifetime. Late cleanup cannot close a replacement permission's share.
+A screen started without acquiring control remains until explicit release or its
+permission ends. Stateless MCP has no conversation-end signal; finishing an individual
+tool call does not release the share. Callers should finish with `control.release`
+or `screen.stop`.
 The policy remains indexed by client ID, but is effective only after the peer
 proves its paired device key. Failed device verification resets it to deny.
 Automatic pairing-key repair/renewal preserves saved permissions. First pairing

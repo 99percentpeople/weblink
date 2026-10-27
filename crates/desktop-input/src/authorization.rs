@@ -117,30 +117,10 @@ impl<B: Backend> Authority<B> {
         if !signal.valid() {
             return None;
         }
-        let deny = |reason| {
-            Some(RequestResult::Reply(Signal::Deny {
-                request_id: request_id.clone(),
-                reason,
-            }))
+        let binding = match self.admit_request(media_id, request_id, target, now) {
+            Ok(binding) => binding,
+            Err(result) => return Some(result),
         };
-        let Some(binding) = self
-            .bindings
-            .get(media_id)
-            .filter(|binding| binding.target == *target && self.backend.is_current(binding))
-            .cloned()
-        else {
-            return deny(DenialReason::Unavailable);
-        };
-        self.seen.retain(|_, deadline| *deadline > now);
-        let key = (media_id.to_owned(), request_id.clone());
-        if self.seen.contains_key(&key) {
-            return Some(RequestResult::Duplicate);
-        }
-        if self.seen.len() >= 256 {
-            return deny(DenialReason::Busy);
-        }
-        self.seen
-            .insert(key, now + Duration::from_millis(REQUEST_TIMEOUT_MS));
         if !matches!(self.state, State::Idle)
             || self.pending.len() >= 32
             || self
@@ -148,7 +128,10 @@ impl<B: Backend> Authority<B> {
                 .iter()
                 .any(|p| p.binding.client_id == binding.client_id)
         {
-            return deny(DenialReason::Busy);
+            return Some(RequestResult::Reply(Signal::Deny {
+                request_id: request_id.clone(),
+                reason: DenialReason::Busy,
+            }));
         }
         let consent_id = uuid::Uuid::new_v4().to_string();
         self.pending.push(Pending {
@@ -158,6 +141,39 @@ impl<B: Backend> Authority<B> {
             deadline: now + Duration::from_millis(REQUEST_TIMEOUT_MS),
         });
         Some(RequestResult::Pending { consent_id })
+    }
+    /// Resolve the native target and consume the shared, bounded replay token.
+    /// Admission never releases the current grant or its held inputs.
+    fn admit_request(
+        &mut self,
+        media_id: &str,
+        request_id: &str,
+        target: &Target,
+        now: Instant,
+    ) -> Result<Binding, RequestResult> {
+        let deny = |reason| {
+            RequestResult::Reply(Signal::Deny {
+                request_id: request_id.to_owned(),
+                reason,
+            })
+        };
+        let binding = self
+            .bindings
+            .get(media_id)
+            .filter(|binding| binding.target == *target && self.backend.is_current(binding))
+            .cloned()
+            .ok_or_else(|| deny(DenialReason::Unavailable))?;
+        self.seen.retain(|_, deadline| *deadline > now);
+        let key = (media_id.to_owned(), request_id.to_owned());
+        if self.seen.contains_key(&key) {
+            return Err(RequestResult::Duplicate);
+        }
+        if self.seen.len() >= 256 {
+            return Err(deny(DenialReason::Busy));
+        }
+        self.seen
+            .insert(key, now + Duration::from_millis(REQUEST_TIMEOUT_MS));
+        Ok(binding)
     }
     /// Only an explicit local approval may call this. There is no remote "approve" handler.
     pub fn approve(&mut self, consent_id: &str, now: Instant) -> Option<Signal> {
@@ -173,18 +189,49 @@ impl<B: Backend> Authority<B> {
             .iter()
             .position(|p| p.consent_id == consent_id)?;
         let pending = self.pending.remove(index);
-        // Selection and invalidation of all other consent tokens are atomic.
-        self.pending.clear();
+        self.issue_grant(pending.binding, pending.request_id, now)
+    }
+    /// Only the local owner may call this after approving a pending handoff.
+    /// Validate against the exact previous grant before committing in this actor turn.
+    pub fn approve_handoff(
+        &mut self,
+        previous: &Grant,
+        media_id: &str,
+        request: &Signal,
+        now: Instant,
+    ) -> Option<Signal> {
+        self.tick(now);
+        if self.grant() != Some(previous) || !request.valid() {
+            return None;
+        }
+        let Signal::Request { request_id, target } = request else {
+            return None;
+        };
+        let binding = self.admit_request(media_id, request_id, target, now).ok()?;
+        self.issue_grant(binding, request_id.clone(), now)
+    }
+    fn issue_grant(
+        &mut self,
+        binding: Binding,
+        request_id: String,
+        now: Instant,
+    ) -> Option<Signal> {
         let grant = Grant {
             id: uuid::Uuid::new_v4().to_string(),
-            binding: pending.binding,
+            binding,
         };
         let signal = Signal::Grant {
-            request_id: pending.request_id,
+            request_id,
             target: grant.binding.target.clone(),
             grant_id: grant.id.clone(),
             lease_ms: LEASE_MS,
         };
+        // All admission checks have passed. Neutralize the previous controller
+        // and invalidate losing consents before installing its replacement.
+        self.revoke();
+        if self.closed {
+            return None;
+        }
         self.state = State::Granted {
             grant,
             deadline: Some(now + Duration::from_millis(LEASE_MS)),

@@ -473,12 +473,13 @@ impl Service {
                 return Err("GRANT_EXPIRED".into());
             }
             let (tx, rx) = oneshot::channel();
+            let screen_grants = native::screen_grants(&s, Some(&principal));
             s.tickets.insert(
                 id.clone(),
                 Ticket {
                     principal: principal.clone(),
                     call: call.clone(),
-                    grant,
+                    grant: grant.clone(),
                     deadline: Instant::now() + Duration::from_secs(150),
                     answer: tx,
                     used: false,
@@ -487,7 +488,7 @@ impl Service {
             if s.channel
                 .as_ref()
                 .ok_or("APP_NOT_READY")?
-                .send(json!({"kind":"call","id":id,"principal":principal,"call":call}))
+                .send(json!({"kind":"call","id":id,"principal":principal,"grantId":grant,"screenGrantIds":screen_grants,"call":call}))
                 .is_err()
             {
                 s.tickets.remove(&id);

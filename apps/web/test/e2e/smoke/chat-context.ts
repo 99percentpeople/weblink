@@ -1,6 +1,7 @@
 // Only replace the application context: chat, history, layout and observers are real.
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import { clipboardFixture } from "./clipboard-context";
+import { createScreenSharing } from "@/libs/application/screen-sharing";
 let context: AppStateContextProps;
 export const setChatTestContext = (
   value: Omit<
@@ -8,6 +9,7 @@ export const setChatTestContext = (
     | "conversationMessaging"
     | "remoteClipboard"
     | "remoteFileDrop"
+    | "screenSharing"
   > &
     Partial<
       Pick<
@@ -15,6 +17,7 @@ export const setChatTestContext = (
         | "conversationMessaging"
         | "remoteClipboard"
         | "remoteFileDrop"
+        | "screenSharing"
       >
     >,
 ) => {
@@ -23,6 +26,10 @@ export const setChatTestContext = (
       (client: string) => client !== "self",
     );
   context = {
+    screenSharing: createScreenSharing({
+      stream: value.localStream,
+      publish: value.replaceLocalStream,
+    }),
     remoteFileDrop: {
       drop: async () => {
         throw new Error("Unexpected file drop");

@@ -1380,6 +1380,36 @@ request then hands off to that publication's ordinary native pointer. A one-use
 approval binds the client, peer generation and source for 30 seconds, preventing
 a second confirmation without carrying consent to other peers or captures.
 Cancellation, room/peer teardown and request expiry invalidate pending startup.
+Manual screen selection, automatic sharing for control requests and MCP
+`screen.start` use one application owner, serializing capture by physical source.
+An existing share keeps its audio and capture settings. Both manual control requests
+and automation acquire temporary uses: cancellation, approval expiry, control exit
+or switching control to another source releases the associated use. Explicit sharing
+or local recording retains the publication; other temporary users and a current native
+grant also keep it alive. Automation can stop only its own acquired uses, and permission
+revocation or peer disconnection releases them. Unrelated shares and later permission
+lifetimes are never stopped by old cleanup. See `AUTOMATION.md` for tool release results.
+
+One native input grant remains authoritative across all monitors. The same verified
+device and connection can request control on another shared monitor. A manual
+request may also replace an automation-owned grant. The host approves the new
+request before releasing old held input and issuing the new grant. The native
+actor checks the exact previous grant, target validity and shared request replay
+budget before committing the replacement in one operation. Rejected admission,
+declining, cancelling or timing out leaves the old grant and held input unchanged.
+Native cleanup failure closes input without granting new control or restoring the
+old automation lease. Other devices cannot
+replace a manual grant. The optional `control.occupancy.takeover` capability enables
+this request on screen tiles and avatar actions; older hosts remain busy until control ends. An
+avatar takeover reuses the already controlled source and then uses ordinary native
+consent; it does not create a second capture or revoke the current grant in advance. Merely
+viewing another screen does not move input authorization.
+
+Public occupancy includes optional `controllerKind` (the grant owner type) and
+`automationActive` (whether automation is currently operating it), so third-party
+observers distinguish manual control, exclusive automation and automation borrowing a
+manual grant. These display fields never confer takeover permission. Borrowing keeps
+the manual owner and does not let another device replace that owner's grant.
 
 The toast lifetime
 is bound to the native consent ID: polling does not recreate it, and cancellation,

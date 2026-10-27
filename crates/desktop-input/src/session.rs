@@ -52,6 +52,14 @@ pub trait Session: Send {
     ) -> Result<bool, Error>;
     fn request(&self, media: String, signal: Signal) -> Result<Option<RequestResult>, Error>;
     fn approve(&self, consent: String) -> Result<Option<Signal>, Error>;
+    /// Locally approved replacement, validated and committed in one actor turn.
+    /// Admission failure alone must not revoke the old grant or discard input.
+    fn approve_handoff(
+        &self,
+        previous: Grant,
+        media: String,
+        request: Signal,
+    ) -> Result<Option<Signal>, Error>;
     fn decline(&self, consent: String) -> Result<Option<Signal>, Error>;
     fn renew(&self, grant: Grant) -> Result<bool, Error>;
     fn receive_end(&self, media: String, signal: Signal) -> Result<bool, Error>;

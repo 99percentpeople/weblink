@@ -32,6 +32,7 @@ import type { AppUpdates } from "./create-app-updates";
 import type { AppCaptureSources } from "./create-app-capture-sources";
 import type { AppInputDevices } from "./create-app-input-devices";
 export interface AppStateContextProps {
+  screenSharing: import("../application/screen-sharing").ScreenSharing;
   automation?: import("./create-automation").AutomationRuntime;
   updates?: AppUpdates;
   peerCapabilities(

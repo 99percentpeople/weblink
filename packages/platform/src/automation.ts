@@ -19,6 +19,10 @@ export interface McpTokenSummary {
 export interface NativeAutomationRequest {
   kind: "call";
   id: string;
+  /** Trusted local permission lifetime; never supplied by MCP/P2P arguments. */
+  grantId?: string;
+  /** Live screen permissions for this verified caller at dispatch time. */
+  screenGrantIds?: string[];
   principal: {
     id: string;
     label: string;

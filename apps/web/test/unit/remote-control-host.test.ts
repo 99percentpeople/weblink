@@ -62,6 +62,179 @@ function setup(
       receive?.(status),
   };
 }
+
+it.each(["remote", "automation"] as const)(
+  "exposes and approves a native handoff while %s is active",
+  async (controllerKind) => {
+    const { host, api, emit } = setup();
+    host.start();
+    await flush();
+    const active: NativeControlStatus = {
+      closed: false,
+      clientId: "alice",
+      sourceId: "screen-1",
+      grantId: "old",
+      controllerKind,
+      pending: [],
+    };
+    emit(active);
+    await flush();
+    expect(
+      host.capability("alice").occupancy,
+    ).toMatchObject({ takeover: true });
+    expect(host.capability("bob").occupancy).toMatchObject({
+      takeover: controllerKind === "automation",
+    });
+    const pending = {
+      consentId: "handoff",
+      clientId: "alice",
+      sourceId: "screen-2",
+      peerGeneration: "peer-2",
+    };
+    emit({ ...active, pending: [pending] });
+    await flush();
+    expect(host.status().pending).toEqual([pending]);
+    expect(api.approve).not.toHaveBeenCalled();
+    await host.approve("handoff", true);
+    expect(api.approve).toHaveBeenCalledWith(
+      "owner-1",
+      "handoff",
+      true,
+    );
+    expect(api.revoke).not.toHaveBeenCalled();
+    emit({
+      ...active,
+      grantId: "new",
+      sourceId: "screen-2",
+    });
+    await flush();
+    expect(host.status().sourceId).toBe("screen-2");
+    host.close();
+  },
+);
+
+it("advertises automation to third parties without allowing them to take a borrowed manual grant", async () => {
+  const { host, emit } = setup();
+  host.start();
+  await flush();
+  const share = vi.fn();
+  host.screen.share = share;
+  emit({
+    closed: false,
+    clientId: "alice",
+    sourceId: "screen",
+    grantId: "manual",
+    controllerKind: "remote",
+    automationActive: true,
+    pending: [],
+  });
+  expect(host.capability("bob").occupancy).toMatchObject({
+    controllerKind: "remote",
+    automationActive: true,
+    takeover: false,
+  });
+  expect(
+    await host.requestScreen(
+      "bob",
+      "connection",
+      new AbortController().signal,
+    ),
+  ).toBeUndefined();
+  emit({
+    closed: false,
+    clientId: "alice",
+    sourceId: "screen",
+    grantId: "automation",
+    controllerKind: "automation",
+    automationActive: true,
+    pending: [],
+  });
+  expect(host.capability("bob").occupancy).toMatchObject({
+    controllerKind: "automation",
+    automationActive: true,
+    takeover: true,
+  });
+  expect(
+    await host.requestScreen(
+      "bob",
+      "connection",
+      new AbortController().signal,
+    ),
+  ).toBe("screen");
+  expect(share).not.toHaveBeenCalled();
+  expect(host.screen.reservation()).toBeNull();
+  host.close();
+});
+
+it("preserves a temporary control share until native control actually ends", async () => {
+  const { host, emit, api } = setup();
+  const release = vi.fn();
+  host.start();
+  await flush();
+  host.screen.share = async () => ({
+    sourceId: "screen-1",
+    release,
+  });
+  const request = host.requestScreen(
+    "alice",
+    "peer",
+    new AbortController().signal,
+  );
+  await flush();
+  await host.approve(
+    host.status().pending[0].consentId,
+    true,
+  );
+  expect(await request).toBe("screen-1");
+  const controlled: NativeControlStatus = {
+    closed: false,
+    clientId: "alice",
+    sourceId: "screen-1",
+    grantId: "old",
+    controllerKind: "remote",
+    pending: [],
+  };
+  // The pushed grant can arrive before the approval command resolves.
+  api.approve.mockImplementationOnce(async () => {
+    emit(controlled);
+  });
+  emit({
+    closed: false,
+    clientId: null,
+    pending: [
+      {
+        consentId: "native",
+        clientId: "alice",
+        peerGeneration: "peer",
+        sourceId: "screen-1",
+      },
+    ],
+  });
+  await flush();
+  expect(release).not.toHaveBeenCalled();
+  emit({
+    ...controlled,
+    pending: [
+      {
+        consentId: "switch",
+        clientId: "alice",
+        peerGeneration: "peer-2",
+        sourceId: "screen-2",
+      },
+    ],
+  });
+  await flush();
+  await host.approve("switch", true);
+  expect(release).not.toHaveBeenCalled();
+  emit({
+    ...controlled,
+    sourceId: "screen-2",
+    grantId: "new",
+  });
+  await flush();
+  expect(release).toHaveBeenCalledOnce();
+  host.close();
+});
 it("carries shared connection identity separately from the media control generation", async () => {
   const { host } = setup();
   host.start();

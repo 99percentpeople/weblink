@@ -1387,6 +1387,10 @@
   "remote_control": {
     "busy": "In use",
     "controlled_by": "Controlled by {{name}}",
+    "automation_controlled_by": "Automated control by {{name}}",
+    "automation_host_active_short": "Under automation control",
+    "automation_controller_active": "Automating {{name}}",
+    "automation_controller_active_short": "Automating",
     "clipboard_transfer": {
       "sending": "Sending clipboard files",
       "receiving": "Receiving clipboard files",

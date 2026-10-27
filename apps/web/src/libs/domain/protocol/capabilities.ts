@@ -17,6 +17,11 @@ export type ControlOccupancy =
       state: "controlled";
       clientId: string;
       sourceId: string;
+      /** Grant ownership and the current input actor are separate when automation borrows. */
+      controllerKind?: "remote" | "automation";
+      automationActive?: boolean;
+      /** A fresh manual request may be approved to replace the current grant. */
+      takeover?: boolean;
     };
 
 export interface ControlCapability {
@@ -100,6 +105,13 @@ export function validControlOccupancy(
       ((v.state === "pending" ||
         v.state === "controlled") &&
         controlId(v.clientId) &&
+        (v.takeover === undefined ||
+          typeof v.takeover === "boolean") &&
+        (v.controllerKind === undefined ||
+          v.controllerKind === "remote" ||
+          v.controllerKind === "automation") &&
+        (v.automationActive === undefined ||
+          typeof v.automationActive === "boolean") &&
         (controlId(v.sourceId) ||
           (v.state === "pending" && v.sourceId === null))))
   );
@@ -233,7 +245,8 @@ export function controlBlocked(
   return (
     !status ||
     status.state === "unavailable" ||
-    status.state === "controlled" ||
+    (status.state === "controlled" &&
+      status.takeover !== true) ||
     (status.state === "pending" &&
       status.clientId !== clientId)
   );

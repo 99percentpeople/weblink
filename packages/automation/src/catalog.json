@@ -557,7 +557,7 @@
   },
   {
     "name": "screen.start",
-    "description": "Ensure a chosen native screen source is shared with connected peers. Reuses an existing live share of the same source, including manual shares, preserving audio and settings. A new share starts with audio off. Returns trackId for control.acquire and reused.",
+    "description": "Acquire this caller's temporary use of a native screen share. Reuses the same live source, preserving audio and settings; a new share starts with audio off. Release with screen.stop or control.release. After control.acquire, control exit or monitor replacement also releases this use; permission revocation or peer disconnection releases all its shares. User-retained shares and other active users remain. Returns trackId for control.acquire and reused.",
     "scope": "screen.manage",
     "native": true,
     "readOnly": false,
@@ -667,7 +667,7 @@
   },
   {
     "name": "screen.stop",
-    "description": "Stop exactly the specified local shared video track.",
+    "description": "Release only this caller's use of a track obtained through screen.start. Does not stop a user's retained share, another caller's use or a live control grant. Returns released=true and stopped=true only if the picture ended; retained=true means another owner still needs it. A track not acquired by this caller is rejected.",
     "scope": "screen.manage",
     "native": false,
     "readOnly": false,
@@ -702,8 +702,7 @@
               "type": "object",
               "properties": {
                 "stopped": {
-                  "type": "boolean",
-                  "enum": [true]
+                  "type": "boolean"
                 }
               },
               "required": ["stopped"],
@@ -1599,7 +1598,7 @@
   },
   {
     "name": "control.acquire",
-    "description": "Acquire control of a live native monitor stream. New leases default to desktop input: call control.pointer/key/text directly without bindWindow or accessibility focus; keys/text go to the current foreground application and pointer coordinates are physical desktop pixels. Reuses the same verified device's manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Repeated acquisition preserves the existing lease and any optional window binding. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
+    "description": "Acquire control of a live native monitor stream. New leases default to desktop input: call control.pointer/key/text directly without bindWindow or accessibility focus; keys/text go to the current foreground application and pointer coordinates are physical desktop pixels. Reuses the same verified device's manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Repeated acquisition of the same source preserves the lease and optional window binding. An exclusive automation owner can acquire another monitor to replace its lease. Human input ends a borrowed lease; automation must explicitly acquire again. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -1894,7 +1893,7 @@
   },
   {
     "name": "control.release",
-    "description": "Release this caller's input lease and held inputs. A reused manual control grant and its stream remain active.",
+    "description": "Release this caller's input lease, held inputs and temporary screen uses. A reused manual control grant, user-retained sharing and other callers' shares remain active.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,

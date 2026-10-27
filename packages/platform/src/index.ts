@@ -515,6 +515,8 @@ export interface NativeControlContext {
 export interface NativeControlStatus {
   /** Set by the native grant path. Older snapshots describe remote control. */
   controllerKind?: "remote" | "automation" | null;
+  /** Includes an automation lease borrowing an otherwise manual grant. */
+  automationActive?: boolean;
   sourceId?: string | null;
   devices?: InputDeviceSnapshot;
   grantId?: string | null;

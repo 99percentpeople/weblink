@@ -305,6 +305,7 @@ impl Service {
                 peers: HashMap::new(),
                 geometry_watches: Default::default(),
                 pending: vec![],
+                handoff_seen: HashMap::new(),
                 active: None,
                 text_focus: Default::default(),
                 cursor: Default::default(),
@@ -489,13 +490,18 @@ impl Service {
             .find(|p| p.view.consent_id == consent)
             .ok_or("Control request expired")?;
         let media = p.media.clone();
-        let signal = if approve {
-            h.worker.approve(consent.into())
+        let handoff = p.handoff.is_some();
+        let signal = if handoff {
+            h.approve_handoff(consent, approve)?
         } else {
-            h.worker.decline(consent.into())
-        }
-        .map_err(input_error)?
-        .ok_or("Control request expired or input unavailable")?;
+            (if approve {
+                h.worker.approve(consent.into())
+            } else {
+                h.worker.decline(consent.into())
+            })
+            .map_err(input_error)?
+            .ok_or("Control request expired or input unavailable")?
+        };
         h.worker.flush().map_err(input_error)?;
         h.pending.retain(|p| p.view.consent_id != consent);
         if approve {
@@ -532,8 +538,12 @@ impl Service {
             .get(&media)
             .is_some_and(|p| p.endpoint.send(&signal))
         {
-            let _ = h.worker.revoke();
-            h.end_grant();
+            // A failed denial belongs to the requesting channel, not the
+            // controller whose grant was kept during a pending handoff.
+            if matches!(signal, Signal::Grant { .. }) {
+                let _ = h.worker.revoke();
+                h.end_grant();
+            }
             return Err("Control channel ended".into());
         }
         if let (Some(observer), Signal::Grant { grant_id, .. }) = (&h.observer, &signal) {

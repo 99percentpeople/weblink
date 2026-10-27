@@ -1,4 +1,5 @@
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
+import { isAutomationControl } from "@/components/common/control-indicator";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import "./index.css";
 import { createMeetingKeyboardCollapse } from "@/libs/hooks/meeting-keyboard-collapse";
@@ -124,7 +125,17 @@ export default function Home() {
       status.controllerKind === "automation"
     ) {
       const active = state.automation?.controller();
-      if (!active) return;
+      if (!active)
+        return !status.closed &&
+          id &&
+          status.controllerKind === "automation" &&
+          status.automationActive !== undefined
+          ? {
+              name: "",
+              automation: true,
+              revoke: revokeControl,
+            }
+          : undefined;
       return {
         name:
           active.kind === "peer"
@@ -140,7 +151,10 @@ export default function Home() {
     }
     return {
       name: appState.session.clientViewData[id]?.name ?? id,
-      automation: state.automation?.controller()?.id === id,
+      automation: isAutomationControl(
+        status,
+        state.automation?.controller()?.id === id,
+      ),
       revoke: revokeControl,
     };
   });
@@ -194,12 +208,34 @@ export default function Home() {
   const automationPeers = createMemo(
     () => state.automation?.controlledPeers() ?? [],
   );
+  const peerAutomationActive = (
+    id: string | undefined,
+    sourceId?: string,
+  ) => {
+    if (!id) return false;
+    const occupancy =
+      state.peerCapabilities(id)?.control?.occupancy;
+    if (
+      occupancy &&
+      (occupancy.state !== "controlled" ||
+        occupancy.clientId !== appState.profile.clientId ||
+        (sourceId && occupancy.sourceId !== sourceId))
+    )
+      return false;
+    return isAutomationControl(
+      occupancy?.state === "controlled"
+        ? occupancy
+        : undefined,
+      automationPeers().some((peer) => peer.id === id),
+    );
+  };
   const automationOnlyPeerIds = createMemo(() =>
     automationPeers()
       .filter(
         (peer) =>
-          !hasOutgoingControl() ||
-          peer.id !== meeting.selected()?.participantId,
+          peerAutomationActive(peer.id) &&
+          (!hasOutgoingControl() ||
+            peer.id !== meeting.selected()?.participantId),
       )
       .map((peer) => peer.id),
   );
@@ -699,10 +735,9 @@ export default function Home() {
                         meeting.selected()?.name ??
                         ""
                       }
-                      automation={automationPeers().some(
-                        (peer) =>
-                          peer.id ===
-                          meeting.selected()?.participantId,
+                      automation={peerAutomationActive(
+                        meeting.selected()?.participantId,
+                        meeting.selected()?.controlSourceId,
                       )}
                       revoke={() =>
                         outgoingControl.control()?.cancel()

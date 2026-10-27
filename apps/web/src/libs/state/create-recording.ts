@@ -119,6 +119,8 @@ export function createRecording(app: AppStateContextProps) {
       },
     ) {
       if (state()) return;
+      if (options.local)
+        app.screenSharing.retain(options.video);
       presentation = {
         participantName: options.participantName,
         avatar: options.avatar,

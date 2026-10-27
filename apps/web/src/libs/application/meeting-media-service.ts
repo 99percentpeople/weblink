@@ -60,6 +60,19 @@ const screen = (track: MediaStreamTrack) =>
   track.kind === "video" &&
   getMeetingVideoSourceKind(track) === "screen";
 
+/** All native sharing entry points preserve the same screen/audio identity. */
+export function registerScreenStream(
+  stream: MediaStream,
+): void {
+  const video = stream.getVideoTracks()[0];
+  if (!video) return;
+  screenTracks.add(video);
+  for (const audio of stream.getAudioTracks()) {
+    audio.contentHint = "music";
+    screenAudioOwners.set(audio, video);
+  }
+}
+
 const displayAudio = (tracks: MediaStreamTrack[]) =>
   tracks.filter((track) => {
     const owner = screenAudioOwners.get(track);
@@ -210,7 +223,9 @@ export function createMeetingMediaController(
     const retained = (
       port.stream()?.getTracks() ?? []
     ).filter((track) => live(track) && keep(track));
-    const candidates = [...retained, ...incoming];
+    const candidates = [
+      ...new Set([...retained, ...incoming]),
+    ];
     // A display's audio shares its lifetime, including native "Stop sharing".
     // Audio ending on its own must not stop the corresponding picture.
     const tracks = candidates.filter((track) => {
@@ -458,7 +473,14 @@ export function createMeetingMediaController(
         request !== sharingRequest ||
         signal?.aborted
       ) {
-        stop(captured);
+        // Native capture may already have been published by the shared owner.
+        // Cancelling this caller must not stop a source another caller uses.
+        const published = new Set(
+          port.stream()?.getTracks() ?? [],
+        );
+        captured.getTracks().forEach((track) => {
+          if (!published.has(track)) track.stop();
+        });
         return;
       }
       const video = captured.getVideoTracks().find(live);

@@ -1,8 +1,8 @@
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { defaultRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { createSignal, Show, type JSX } from "solid-js";
-import { LoaderCircle, MousePointer2 } from "lucide-solid";
-import { AutomationPointerIcon } from "@/components/common/automation-pointer-icon";
+import { LoaderCircle } from "lucide-solid";
+import { ControlIndicatorIcon } from "@/components/common/control-indicator";
 import { IconStop } from "@/components/icons";
 import { t } from "@/i18n";
 import { MeetingStatusLabel } from "./meeting-status-label";
@@ -18,16 +18,24 @@ export function MeetingControlStatus(props: {
   const [revoking, setRevoking] = createSignal(false);
   const shortLabel = () =>
     t(
-      props.side === "controller"
-        ? "remote_control.controller_active_short"
-        : "remote_control.host_active_short",
+      props.automation
+        ? props.side === "controller"
+          ? "remote_control.automation_controller_active_short"
+          : "remote_control.automation_host_active_short"
+        : props.side === "controller"
+          ? "remote_control.controller_active_short"
+          : "remote_control.host_active_short",
     );
   const label = () =>
     props.name
       ? t(
-          props.side === "controller"
-            ? "remote_control.controller_active"
-            : "remote_control.host_active",
+          props.automation
+            ? props.side === "controller"
+              ? "remote_control.automation_controller_active"
+              : "remote_control.automation_controlled_by"
+            : props.side === "controller"
+              ? "remote_control.controller_active"
+              : "remote_control.host_active",
           { name: props.name },
         )
       : shortLabel();
@@ -46,20 +54,10 @@ export function MeetingControlStatus(props: {
       class="meeting-status-pill max-w-[360px]"
       title={title(label())}
     >
-      <Show
-        when={props.automation}
-        fallback={
-          <MousePointer2
-            class="size-4 shrink-0"
-            aria-hidden="true"
-          />
-        }
-      >
-        <AutomationPointerIcon
-          class="size-4 shrink-0"
-          aria-hidden="true"
-        />
-      </Show>
+      <ControlIndicatorIcon
+        automation={props.automation}
+        class="size-4 shrink-0"
+      />
       <MeetingStatusLabel
         name={props.name || shortLabel()}
         label={label()}

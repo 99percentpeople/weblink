@@ -14,6 +14,7 @@ import {
 import { webcrypto } from "node:crypto";
 import { For } from "solid-js";
 import { createAutomation } from "@/libs/state/create-automation";
+import { AutomationScreenShares } from "@/libs/application/automation/screen-sharing";
 import {
   appState,
   setAppState,
@@ -570,6 +571,10 @@ it("aborts application work immediately on a native cancellation event", async (
 it.each([false, true])(
   "a delayed snapshot preserves newer calls and late cleanup cannot finish a replacement (reuse=%s)",
   async (reuse) => {
+    const synchronize = vi.spyOn(
+      AutomationScreenShares.prototype,
+      "synchronize",
+    );
     const view = mount();
     await waitFor(() =>
       expect(view.runtime.ready()).toBe(true),
@@ -628,11 +633,16 @@ it.each([false, true])(
       expect(signals.has("new")).toBe(true),
     );
     try {
-      resolveSnapshot({ ...snapshot(), activeCalls: [] });
+      resolveSnapshot({
+        ...snapshot(),
+        activeCalls: [],
+        screenGrants: [],
+      });
       await waitFor(() =>
         expect(signals.get("old")!.aborted).toBe(true),
       );
       expect(signals.get("new")!.aborted).toBe(false);
+      expect(synchronize).not.toHaveBeenCalled();
       finish.get("old")!();
       // Let the old native callback complete before the replacement.
       await new Promise((resolve) =>
@@ -674,6 +684,54 @@ it.each([false, true])(
     }
   },
 );
+it("uses native screen authority across separate permissions and reconciles ownership after tool completion", async () => {
+  const synchronize = vi.spyOn(
+    AutomationScreenShares.prototype,
+    "synchronize",
+  );
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  const authority = {
+    grantId: "input",
+    screenGrantIds: ["screen"],
+  };
+  vi.mocked(fixture.native.snapshot).mockResolvedValue({
+    ...snapshot(),
+    screenGrants: ["screen"],
+    controlLeaseId: "lease",
+  });
+  const receive = vi.mocked(fixture.native.open).mock
+    .calls[0][0];
+  receive({
+    kind: "call",
+    id: "acquire",
+    ...authority,
+    principal: { id: "token", kind: "mcp", label: "Agent" },
+    call: {
+      name: "control.acquire",
+      arguments: { target: "local", trackId: "track" },
+    },
+  });
+  await waitFor(() =>
+    expect(fixture.native.finish).toHaveBeenCalled(),
+  );
+  expect(fixture.handle).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.any(AbortSignal),
+    expect.any(Function),
+    expect.any(Function),
+    authority,
+  );
+  await waitFor(() =>
+    expect(synchronize).toHaveBeenCalledWith(
+      ["screen"],
+      "lease",
+    ),
+  );
+});
+
 afterEach(() => {
   cleanup();
   vi.useRealTimers();

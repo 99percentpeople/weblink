@@ -1358,6 +1358,10 @@
   "remote_control": {
     "busy": "제어 중",
     "controlled_by": "{{name}}님이 제어 중",
+    "automation_controlled_by": "{{name}}님이 자동화 제어 중",
+    "automation_host_active_short": "자동화로 제어받는 중",
+    "automation_controller_active": "{{name}} 자동화 제어 중",
+    "automation_controller_active_short": "자동화 제어 중",
     "clipboard_transfer": {
       "sending": "클립보드 파일 보내기",
       "receiving": "클립보드 파일 수신",

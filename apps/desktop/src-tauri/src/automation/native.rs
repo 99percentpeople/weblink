@@ -5,6 +5,24 @@ mod tests;
 pub fn sync_input(app: &tauri::AppHandle, service: &Service) {
     sync_input_control(service, &app.state::<crate::remote_control::Shared>());
 }
+/// Local renderer ownership metadata; never accepted from tool arguments.
+pub(super) fn screen_grants(s: &State, principal: Option<&Principal>) -> Vec<String> {
+    s.grants
+        .values()
+        .filter(|g| {
+            s.enabled
+                && g.target == "local"
+                && g.scopes.iter().any(|scope| scope == "screen.manage")
+                && Service::grant_live(s, g)
+                && principal.is_none_or(|p| {
+                    g.principal.id == p.id
+                        && g.principal.kind == p.kind
+                        && g.principal.generation == p.generation
+                })
+        })
+        .map(|g| g.id.clone())
+        .collect()
+}
 /// Report an actual input lease, not merely permission to acquire one.
 pub(super) fn controller(s: &State, control: &crate::remote_control::Service) -> Option<Principal> {
     s.grants
@@ -190,7 +208,7 @@ pub async fn action(
             "control.acquire" => {
                 let session = binding.get("sessionId").ok_or("CAPTURE_REQUIRED")?;
                 let source = binding.get("sourceId").ok_or("CAPTURE_REQUIRED")?;
-                let result = control.automation_acquire(
+                let mut result = control.automation_acquire(
                     capture.inner().clone(),
                     &principal,
                     &generation,
@@ -198,6 +216,9 @@ pub async fn action(
                     session.clone(),
                     source.clone(),
                 )?;
+                // Renderer-only lifetime marker. The adapter strips it before
+                // returning the public tool result over MCP/P2P.
+                result["controlLeaseId"] = json!(control.automation_lease(&principal)?);
                 if !s.input_owners.contains(&principal) {
                     s.input_owners.push(principal);
                 }

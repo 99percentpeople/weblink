@@ -48,6 +48,47 @@ fn authority(session_consent: bool) -> Service {
 }
 
 #[test]
+fn screen_ownership_is_fenced_by_permission_and_verified_caller() {
+    let service = authority(true);
+    let mut s = service.state.lock().unwrap();
+    let principal = s.peers["client"].clone();
+    s.grants.insert(
+        "screen".into(),
+        Grant {
+            id: "screen".into(),
+            principal: principal.clone(),
+            target: "local".into(),
+            scopes: vec!["screen.manage".into()],
+            expires_at: None,
+            source: GrantSource::Consent,
+        },
+    );
+    // Separately granted input and screen scopes still resolve to the same caller.
+    assert_eq!(screen_grants(&s, Some(&principal)), vec!["screen"]);
+    assert_eq!(screen_grants(&s, None), vec!["screen"]);
+    for changed in ["id", "kind", "generation"] {
+        let mut other = principal.clone();
+        match changed {
+            "id" => other.id = "other".into(),
+            "kind" => other.kind = "mcp".into(),
+            _ => other.generation = Some("replacement".into()),
+        }
+        assert!(screen_grants(&s, Some(&other)).is_empty());
+    }
+    s.grants.get_mut("screen").unwrap().expires_at = Some(0);
+    assert!(screen_grants(&s, None).is_empty());
+    s.grants.get_mut("screen").unwrap().expires_at = None;
+    s.grants.get_mut("screen").unwrap().target = "remote".into();
+    assert!(screen_grants(&s, None).is_empty());
+    s.grants.get_mut("screen").unwrap().target = "local".into();
+    s.enabled = false;
+    assert!(screen_grants(&s, None).is_empty());
+    s.enabled = true;
+    s.peers.clear();
+    assert!(screen_grants(&s, None).is_empty());
+}
+
+#[test]
 fn controller_status_requires_a_live_mcp_input_lease() {
     with_bound_owned_input(|control, _, _| {
         let (service, principal) = super::super::tests::fixture();

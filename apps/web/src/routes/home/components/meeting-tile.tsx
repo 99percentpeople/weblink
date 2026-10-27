@@ -1,4 +1,5 @@
 import { useAppState } from "@/libs/state/app-state-context";
+import { isAutomationControl } from "@/components/common/control-indicator";
 import { appState } from "@/libs/state/app-state";
 import {
   createVideoRemoteControl,
@@ -126,10 +127,20 @@ export function MeetingTile(props: {
         if (
           status.controllerKind === "automation" &&
           active?.id !== controllerId
-        )
-          return;
-        if (active && active.id === controllerId) {
-          automation = true;
+        ) {
+          return status.automationActive === undefined
+            ? undefined
+            : { name: "", automation: true };
+        }
+        automation = isAutomationControl(
+          status,
+          active?.id === controllerId,
+        );
+        if (
+          automation &&
+          active &&
+          active.id === controllerId
+        ) {
           if (active.kind !== "peer")
             return { name: "", automation };
           automationName = active.label;
@@ -143,12 +154,14 @@ export function MeetingTile(props: {
         occupancy.sourceId === props.controlSourceId
       ) {
         controllerId = occupancy.clientId;
-        automation =
+        automation = isAutomationControl(
+          occupancy,
           controllerId === appState.profile.clientId &&
-          (app.automation
-            ?.controlledPeers()
-            .some((peer) => peer.id === props.clientId) ??
-            false);
+            (app.automation
+              ?.controlledPeers()
+              .some((peer) => peer.id === props.clientId) ??
+              false),
+        );
       }
     }
     if (!controllerId) return;

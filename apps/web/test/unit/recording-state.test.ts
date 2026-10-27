@@ -215,8 +215,9 @@ it("identifies direct local camera capture for recorder codec selection", () => 
     dispose = release;
     return createRecording({
       localStream: () => stream(camera),
+      screenSharing: { retain: vi.fn(), start: vi.fn() },
       activeRoomConversationId: () => "room",
-    } as AppStateContextProps);
+    } as unknown as AppStateContextProps);
   });
   recording.start({
     id: "camera",

@@ -4,6 +4,7 @@ import {
   diagnosticSources,
 } from "@/libs/application/automation/handlers";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import { createScreenSharing } from "@/libs/application/screen-sharing";
 import type { PlatformRuntime } from "@weblink/platform";
 import type { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
@@ -245,20 +246,39 @@ it("exports receiver error codes without native error strings or file paths", as
   );
 });
 function handler(stream?: unknown) {
-  const replace = vi.fn((next: unknown) => {
+  const replace = vi.fn((next: MediaStream) => {
+    for (const track of (
+      stream as MediaStream | undefined
+    )?.getTracks?.() ?? [])
+      if (!next.getTracks().includes(track)) track.stop();
     stream = next;
   });
   const state = {
     localStream: () => stream,
     replaceLocalStream: replace,
   } as unknown as AppStateContextProps;
+  state.screenSharing = createScreenSharing({
+    stream: state.localStream,
+    publish: replace,
+  });
+  const handle = automationHandlers(
+    state,
+    { capture: {}, screenShare: {} } as PlatformRuntime,
+    {} as AutomationDiagnostics,
+  );
   return {
     replace,
-    run: automationHandlers(
-      state,
-      { capture: {}, screenShare: {} } as PlatformRuntime,
-      {} as AutomationDiagnostics,
-    ),
+    run: (...args: Parameters<typeof handle>) =>
+      handle(
+        args[0],
+        args[1],
+        args[2],
+        args[3],
+        args[4] ?? {
+          grantId: "permission-1",
+          screenGrantIds: ["permission-1"],
+        },
+      ),
   };
 }
 it("reports no local shell or signals in a browser and uses the native backend when present", async () => {
@@ -350,6 +370,9 @@ class ScreenStream {
   getVideoTracks() {
     return this.tracks.filter((t) => t.kind === "video");
   }
+  getAudioTracks() {
+    return this.tracks.filter((t) => t.kind === "audio");
+  }
 }
 function nativeScreen(sourceId = "monitor", id = "track") {
   vi.stubGlobal("MediaStream", ScreenStream);
@@ -358,6 +381,7 @@ function nativeScreen(sourceId = "monitor", id = "track") {
     kind: "video",
     readyState: "live",
     getSettings: () => ({}),
+    addEventListener: vi.fn(),
     stop: vi.fn(() => {
       track.readyState = "ended";
     }),
@@ -381,6 +405,96 @@ const startScreen = {
   name: "screen.start",
   arguments: { target: "local", sourceId: "monitor" },
 };
+it("releases a caller's screen across separately approved input permissions without exposing lease metadata", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler();
+  fixture.capture.mockResolvedValue(stream);
+  const signal = new AbortController().signal;
+  await run(startScreen, signal);
+  const authority = {
+    grantId: "input-permission",
+    screenGrantIds: ["permission-1"],
+  };
+  const granted = await run(
+    {
+      name: "control.acquire",
+      arguments: { trackId: track.id },
+    },
+    signal,
+    async () => ({
+      granted: true,
+      controlLeaseId: "private-lease",
+    }),
+    undefined,
+    authority,
+  );
+  expect(granted).toEqual({ granted: true });
+  await run(
+    { name: "control.release", arguments: {} },
+    signal,
+    async () => ({ released: true }),
+    undefined,
+    { grantId: "foreign", screenGrantIds: ["foreign"] },
+  );
+  expect(track.readyState).toBe("live");
+  await run(
+    { name: "control.release", arguments: {} },
+    signal,
+    async () => ({ released: true }),
+    undefined,
+    authority,
+  );
+  expect(track.readyState).toBe("ended");
+});
+
+it("reports retention when stopping a caller's use of an explicitly shared screen", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler(stream);
+  const signal = new AbortController().signal;
+  const stop = {
+    name: "screen.stop",
+    arguments: { target: "local", trackId: track.id },
+  };
+  await expect(run(stop, signal)).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
+  });
+  await run(startScreen, signal);
+  const result = await run(stop, signal);
+  expect(result).toEqual({
+    released: true,
+    stopped: false,
+    retained: true,
+  });
+  expect(
+    validate(parseCall(stop).outputSchema, {
+      ok: true,
+      data: result,
+    }),
+  ).toBe(true);
+  expect(track.readyState).toBe("live");
+});
+
+it("removes only the new temporary capture when native acquisition fails", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler();
+  const signal = new AbortController().signal;
+  fixture.capture.mockResolvedValue(stream);
+  await run(startScreen, signal);
+  await expect(
+    run(
+      {
+        name: "control.acquire",
+        arguments: { trackId: track.id },
+      },
+      signal,
+      async () => {
+        throw new Error("CONTROL_BUSY");
+      },
+    ),
+  ).rejects.toThrow("CONTROL_BUSY");
+  expect(track.readyState).toBe("ended");
+});
+
 it("reuses the manually shared monitor, preserves its audio, and acquires the same capture", async () => {
   const { track, stream } = nativeScreen();
   const audio = {
@@ -480,7 +594,7 @@ it("uses a manual share published while MCP was capturing and disposes only its 
   await vi.waitFor(() =>
     expect(fixture.capture).toHaveBeenCalledOnce(),
   );
-  replace(manual.stream);
+  replace(manual.stream as unknown as MediaStream);
   finish(created.stream);
   expect(await pending).toEqual({
     trackId: "manual",
@@ -608,7 +722,10 @@ it("rechecks permission after async capture and disposes a stream before publish
   );
   allowed = false;
   const track = { stop: vi.fn() };
-  resolve({ getTracks: () => [track] });
+  resolve({
+    getTracks: () => [track],
+    getVideoTracks: () => [track],
+  });
   await expect(result).rejects.toThrow("GRANT_EXPIRED");
   expect(track.stop).toHaveBeenCalledOnce();
   expect(replace).not.toHaveBeenCalled();
