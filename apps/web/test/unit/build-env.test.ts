@@ -1,6 +1,59 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { checkBuildEnv } from "../../scripts/check-build-env";
+import {
+  checkBuildEnv,
+  checkDesktopSignalingUrl,
+} from "../../scripts/check-build-env";
+
+describe("packaged desktop signaling", () => {
+  it.each([
+    "wss://ws.webl.ink",
+    "wss://signal.example/custom?deployment=test",
+    "ws://localhost:9000",
+    "ws://dev.localhost:9000",
+    "ws://127.0.0.1:9000",
+    "ws://127.10.0.1:9000",
+    "ws://[::1]:9000",
+  ])("accepts a secure or loopback endpoint %s", (url) => {
+    expect(() =>
+      checkDesktopSignalingUrl(url),
+    ).not.toThrow();
+  });
+  it.each([
+    "ws://192.168.68.53:9000",
+    "ws://signal.example",
+    "ws://localhost.example",
+    "ws://127.0.0.1.example",
+    "ws://[fe80::1]:9000",
+  ])(
+    "rejects an endpoint blocked by the packaged secure origin: %s",
+    (url) => {
+      expect(() => checkDesktopSignalingUrl(url)).toThrow(
+        "Desktop builds require wss://",
+      );
+    },
+  );
+  it.each([
+    "",
+    "https://signal.example",
+    "wss://signal.example/#fragment",
+    "wss://user:private-secret@signal.example",
+  ])(
+    "rejects invalid WebSocket configuration without echoing secrets: %s",
+    (url) => {
+      expect(() => checkDesktopSignalingUrl(url)).toThrow(
+        "without credentials or a fragment",
+      );
+      try {
+        checkDesktopSignalingUrl(url);
+      } catch (error) {
+        expect((error as Error).message).not.toContain(
+          "private-secret",
+        );
+      }
+    },
+  );
+});
 
 const configured = {
   VITE_WEBSOCKET_URL: "wss://signal.example",

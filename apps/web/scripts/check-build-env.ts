@@ -2,6 +2,36 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadEnv } from "vite";
 
+/** Packaged WebView pages use a secure origin, unlike the HTTP dev server. */
+export function checkDesktopSignalingUrl(
+  value: string,
+): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+    if (
+      !["ws:", "wss:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      throw new Error();
+  } catch {
+    throw new Error(
+      "Configure VITE_WEBSOCKET_URL as a WebSocket URL without credentials or a fragment.",
+    );
+  }
+  const loopback =
+    url.hostname === "localhost" ||
+    url.hostname.endsWith(".localhost") ||
+    url.hostname === "[::1]" ||
+    /^127\.\d+\.\d+\.\d+$/.test(url.hostname);
+  if (url.protocol === "ws:" && !loopback)
+    throw new Error(
+      "Desktop builds require wss:// for non-loopback VITE_WEBSOCKET_URL endpoints. Check apps/web/.env.local and .env.desktop.local, or override VITE_WEBSOCKET_URL for this build. Use bun run dev:desktop for HTTP development; packaged WebView pages use a secure origin.",
+    );
+}
+
 /** Validate the effective frontend build settings without logging credentials. */
 export function checkBuildEnv(
   env: Record<string, string | undefined>,

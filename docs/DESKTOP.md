@@ -70,6 +70,13 @@ bun run build:desktop --bundles nsis
 Run the NSIS command on Windows. For a host-only build without installers use
 `bun run build:desktop --no-bundle`. Desktop frontend files go to
 `apps/desktop/dist`; Rust binaries and installers go to root `target/`.
+Packaged desktop pages use a secure origin. Non-loopback signaling endpoints
+must use `wss://`; `ws://` is supported only for loopback endpoints in packaged
+builds. Vite also reads `apps/web/.env.local` in desktop mode, so a LAN development
+endpoint there must be overridden by `VITE_WEBSOCKET_URL` in the build environment
+or `apps/web/.env.desktop.local`. The build rejects incompatible endpoints before
+producing an executable. `bun run dev:desktop` continues to support plain WebSocket
+development servers without changing packaged WebView security settings.
 CI runs shared web/desktop TypeScript checks and tests once. `desktop-dev.yml`
 then runs Rust tests and a `--no-bundle` build in the same release profile and
 with the same `tauri/custom-protocol` feature. Both desktop workflows build the

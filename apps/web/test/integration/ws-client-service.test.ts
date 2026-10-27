@@ -212,6 +212,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(["SecurityError", "SyntaxError"])(
+  "reports a WebSocket constructor %s as connection configuration and allows retry",
+  async (name) => {
+    const blocked = new DOMException(
+      "Blocked signaling endpoint",
+      name,
+    );
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        constructor() {
+          throw blocked;
+        }
+      },
+    );
+    const service = createService();
+    await expect(
+      service.createClient(),
+    ).rejects.toMatchObject({
+      name: "Error",
+      message: "Invalid URL for signaling connection",
+      cause: blocked,
+    });
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const socket = await connectService(service);
+    expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+  },
+);
+
 describe("WebSocketClientService reconnect lifecycle", () => {
   it("routes peer-online notices without a payload version once without leave/join or signaling status churn", async () => {
     const service = createService();

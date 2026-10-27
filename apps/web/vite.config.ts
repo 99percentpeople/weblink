@@ -12,6 +12,7 @@ import { compression } from "vite-plugin-compression2";
 import { readFileSync } from "fs";
 import tailwindcss from "@tailwindcss/vite";
 import { webLinkBranding } from "./scripts/brand-plugin";
+import { checkDesktopSignalingUrl } from "./scripts/check-build-env";
 import {
   buildInfoPlugin,
   createBuildInfo,
@@ -96,6 +97,10 @@ export default defineConfig(({ command, mode }) => {
   const desktopEnv = desktop
     ? loadEnv(mode, process.cwd(), envPrefix)
     : {};
+  const desktopSignalingUrl =
+    desktopEnv.VITE_WEBSOCKET_URL || "wss://ws.webl.ink";
+  if (desktop && command === "build")
+    checkDesktopSignalingUrl(desktopSignalingUrl);
   const buildInfo = createBuildInfo(
     packageJson.version,
     resolveBuildChannel(
@@ -222,10 +227,7 @@ export default defineConfig(({ command, mode }) => {
                     : "https://webl.ink"),
               ),
             "import.meta.env.VITE_WEBSOCKET_URL":
-              JSON.stringify(
-                desktopEnv.VITE_WEBSOCKET_URL ||
-                  "wss://ws.webl.ink",
-              ),
+              JSON.stringify(desktopSignalingUrl),
           }
         : {}),
       // Root .env configures local development without overriding builds.

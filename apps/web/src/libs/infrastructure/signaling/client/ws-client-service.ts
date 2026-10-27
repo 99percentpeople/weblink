@@ -642,7 +642,26 @@ export class WebSocketClientService implements ClientService {
       );
     }
 
-    const socket = new WebSocket(wsUrl);
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch (error) {
+      // A rejected endpoint is a signaling configuration failure, not a
+      // camera/microphone permission request. Preserve the original diagnostic.
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "name" in error &&
+        ["SecurityError", "SyntaxError"].includes(
+          String(error.name),
+        )
+      )
+        throw new Error(
+          "Invalid URL for signaling connection",
+          { cause: error },
+        );
+      throw error;
+    }
     if (
       this.connectionGeneration !== generation ||
       this.closed

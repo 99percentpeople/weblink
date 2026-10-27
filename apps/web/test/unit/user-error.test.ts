@@ -157,6 +157,22 @@ describe.each(Object.keys(dictionaries))(
       ],
       [new Error("password required"), "password_required"],
       [
+        new Error("Invalid URL for signaling connection", {
+          cause: new DOMException(
+            "Insecure WebSocket from HTTPS",
+            "SecurityError",
+          ),
+        }),
+        "connection_config",
+      ],
+      [
+        new DOMException(
+          "Microphone blocked",
+          "NotAllowedError",
+        ),
+        "permission_denied",
+      ],
+      [
         new Error(
           "[WebSocketClientService] invalid join acknowledgement",
         ),
