@@ -8,6 +8,7 @@ import {
 import { createRoot } from "solid-js";
 import { reconcile } from "solid-js/store";
 import type { MeetingMediaPort } from "@/libs/application/meeting-media-service";
+import type { ScreenSharing } from "@/libs/application/screen-sharing";
 import { createMeetingMedia } from "@/libs/state/create-meeting-media";
 import {
   appState,
@@ -20,6 +21,8 @@ const f = vi.hoisted(() => ({
   capture: vi.fn(),
   display: vi.fn(),
   native: vi.fn(),
+  startShare: vi.fn<ScreenSharing["start"]>(),
+  releaseShare: vi.fn(),
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/application/session-service", () => ({
@@ -76,6 +79,15 @@ beforeEach(() => {
     },
   });
   vi.clearAllMocks();
+  f.startShare.mockImplementation(
+    async (sourceId, _signal, capture) => ({
+      sourceId,
+      trackId: "native-video",
+      reused: false,
+      stream: await capture(),
+      release: f.releaseShare,
+    }),
+  );
 });
 afterEach(() => {
   dispose?.();
@@ -87,6 +99,7 @@ function mount(native = false) {
     createMeetingMedia({
       state: {
         localStream: () => null,
+        screenSharing: { start: f.startShare },
         mediaCapabilities: {
           ready: async () => {},
           captureSupported: () => true,
@@ -164,13 +177,21 @@ it("uses current preferences for browser screen audio while retaining audio proc
 });
 
 it("forwards native audio format and codec without overriding the picker audio choice", async () => {
+  const stream = {} as MediaStream;
+  f.native.mockResolvedValueOnce(stream);
   mount(true);
   setAppState(
     "options",
     "suppressLocalAudioPlayback",
     true,
   );
-  await f.port!.getDisplayMedia!();
+  expect(await f.port!.getDisplayMedia!()).toBe(stream);
+  expect(f.startShare).toHaveBeenCalledWith(
+    "monitor",
+    expect.any(AbortSignal),
+    expect.any(Function),
+  );
+  expect(f.releaseShare).toHaveBeenCalledOnce();
   expect(f.native).toHaveBeenCalledWith(
     expect.anything(),
     expect.anything(),
