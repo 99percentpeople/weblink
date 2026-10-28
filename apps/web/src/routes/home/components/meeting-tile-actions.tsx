@@ -315,9 +315,7 @@ export function MeetingTileActions(
               id={menuId}
               role={compact() ? "menu" : "toolbar"}
               aria-label={props.label}
-              aria-hidden={
-                compact() ? !expanded() : undefined
-              }
+              aria-hidden={!expanded()}
               inert={!expanded()}
               class="meeting-action-panel"
               classList={{

@@ -368,9 +368,14 @@
 .meeting-action-panel {
   @apply pointer-events-none absolute inset-0;
   --glass-visibility: 0;
+  visibility: hidden;
+  /* Hide every item after the closing motion, including disabled controls. */
+  transition: visibility 0s 0.3s;
 }
 .meeting-action-panel[data-expanded] {
   --glass-visibility: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 .meeting-action-fan-surface {
   @apply pointer-events-none absolute;
@@ -507,7 +512,11 @@
   @apply cursor-pointer;
 }
 .meeting-action-panel.is-portal button:disabled {
-  @apply cursor-not-allowed opacity-45;
+  @apply cursor-not-allowed;
+}
+.meeting-action-panel.is-portal[data-expanded]
+  button:disabled {
+  @apply opacity-45;
 }
 .meeting-action-panel.is-portal .meeting-icon-button:hover {
   @apply bg-white/15 text-white;

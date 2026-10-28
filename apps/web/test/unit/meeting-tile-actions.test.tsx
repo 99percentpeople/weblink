@@ -370,7 +370,16 @@ describe("desktop meeting toolbar interaction", () => {
   it("dismisses a clicked toolbar outside and on Escape, then can reopen", () => {
     const f = setupToolbar();
     f.touch();
+    const toolbar = screen.getByRole("toolbar", {
+      name: "Actions",
+    });
     fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Other action",
+      }),
+    ).toBeNull();
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
       "false",
     );
@@ -378,6 +387,7 @@ describe("desktop meeting toolbar interaction", () => {
       "false",
     );
     f.touch();
+    expect(screen.getByRole("toolbar")).toBe(toolbar);
     const action = screen.getByRole("button", {
       name: "Other action",
     });
@@ -390,6 +400,7 @@ describe("desktop meeting toolbar interaction", () => {
       "false",
     );
     expect(document.activeElement).toBe(f.trigger);
+    expect(screen.queryByRole("toolbar")).toBeNull();
     f.touch();
     expect(f.trigger.getAttribute("aria-expanded")).toBe(
       "true",
