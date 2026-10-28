@@ -38,7 +38,9 @@ interface ScreenSessionPort {
   ): Promise<string | undefined>;
   /** Synchronous permission check, including before discovery has completed. */
   acceptsControlRequests?(): boolean;
-  cancelScreenRequest?(): void;
+  cancelScreenRequest?(disconnect?: boolean): void;
+  canCloseScreen?(sourceId: string): boolean;
+  closeScreen?(sourceId: string): void;
   /** Omitted until the corresponding control implementation is ready. */
   controlCapabilities?: ControlCapabilities;
   loadControlCapabilities?(): Promise<ControlCapabilities>;
@@ -60,6 +62,7 @@ type Incoming = {
   stream?: MediaStream;
   candidates: RTCIceCandidateInit[];
   retired?: boolean;
+  failureTimer?: ReturnType<typeof setTimeout>;
 };
 
 /** Authenticated control channel; each source owns its media connection and retries.
@@ -71,6 +74,7 @@ export class NativeScreenSession {
   private screenRequest?: {
     id: string;
     abort: AbortController;
+    sourceId?: string;
   };
   private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
@@ -297,7 +301,7 @@ export class NativeScreenSession {
   reset(): void {
     this.screenRequest?.abort.abort();
     this.screenRequest = undefined;
-    this.port.cancelScreenRequest?.();
+    this.port.cancelScreenRequest?.(true);
     this.screenControl.setAvailable(false);
     this.localCapabilities = undefined;
     this.localReady = false;
@@ -349,11 +353,15 @@ export class NativeScreenSession {
         )
       : [...this.incoming.values()];
     for (const incoming of entries) {
+      clearTimeout(incoming.failureTimer);
       incoming.retired = true;
       if (!preserve) this.incoming.delete(incoming.id);
       if (!preserve) this.views.delete(incoming.sourceId);
       if (incoming.control)
-        this.screenControl.detach(incoming.control);
+        this.screenControl.detach(
+          incoming.control,
+          preserve,
+        );
       incoming.control?.close();
       incoming.receiver?.close();
       if (preserve) {
@@ -439,7 +447,7 @@ export class NativeScreenSession {
     if (couldRequest && !services?.control?.request) {
       this.screenRequest?.abort.abort();
       this.screenRequest = undefined;
-      this.port.cancelScreenRequest?.();
+      this.port.cancelScreenRequest?.(true);
     }
     if (couldHost !== this.canHostControl())
       this.restartControlSenders();
@@ -504,11 +512,26 @@ export class NativeScreenSession {
       }
       return;
     }
+    if (value.type === "control-close") {
+      const request = this.screenRequest;
+      if (
+        request?.id === value.id &&
+        request.sourceId &&
+        this.port.acceptsControlRequests?.() !== false &&
+        this.port.canCloseScreen?.(request.sourceId)
+      ) {
+        this.port.closeScreen?.(request.sourceId);
+        this.screenRequest = undefined;
+      }
+      return;
+    }
     if (value.type === "control-request") {
       if (this.screenRequest?.id === value.id) return;
       this.screenRequest?.abort.abort();
       this.port.cancelScreenRequest?.();
-      const request = {
+      const request: NonNullable<
+        NativeScreenSession["screenRequest"]
+      > = {
         id: value.id,
         abort: new AbortController(),
       };
@@ -526,12 +549,18 @@ export class NativeScreenSession {
         this.screenRequest === request &&
         !request.abort.signal.aborted &&
         this.port.acceptsControlRequests?.() !== false
-      )
+      ) {
+        request.sourceId = sourceId;
         this.send({
           type: "control-result",
           id: value.id,
           ...(sourceId ? { sourceId } : {}),
+          ...(sourceId &&
+          this.port.canCloseScreen?.(sourceId)
+            ? { closable: true as const }
+            : {}),
         });
+      }
       return;
     }
     if (value.type === "control-result") {
@@ -618,18 +647,20 @@ export class NativeScreenSession {
     const current = () =>
       this.incoming.get(value.id) === incoming &&
       !incoming.retired;
-    const failed = (error: unknown) => {
+    const reportFailure = (error: unknown) => {
       if (
         !current() ||
         this.views.get(value.sourceId)?.error
       )
         return;
       const terminal = error instanceof ScreenDecodeError;
+      clearTimeout(incoming.failureTimer);
+      incoming.failureTimer = undefined;
       const view = this.views.get(value.sourceId)!;
       view.error = terminal ? "codec" : "connection";
       incoming.retired = true;
       if (incoming.control)
-        this.screenControl.detach(incoming.control);
+        this.screenControl.detach(incoming.control, true);
       incoming.control?.close();
       incoming.receiver?.close();
       incoming.control = undefined;
@@ -650,6 +681,23 @@ export class NativeScreenSession {
                 ? { reason: "decode" as const }
                 : {}),
             },
+      );
+    };
+    const failed = (error: unknown) => {
+      if (!current()) return;
+      if (
+        error instanceof ScreenDecodeError ||
+        error instanceof ScreenDecodeStallError
+      ) {
+        reportFailure(error);
+        return;
+      }
+      // Media/control and the room's stop signal travel on different transports.
+      // Let an intentional stop retire the card before reporting a disconnect.
+      if (incoming.failureTimer !== undefined) return;
+      incoming.failureTimer = setTimeout(
+        () => reportFailure(error),
+        250,
       );
     };
     try {

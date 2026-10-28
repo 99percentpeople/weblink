@@ -1413,6 +1413,7 @@
     "waiting": "Waiting for approval",
     "cancel": "Cancel request",
     "end": "End control",
+    "close_screen": "Close screen",
     "more_choices": "More approval options",
     "allow_remember": "Approve and add to allowlist",
     "deny_remember": "Reject and add to blocklist",

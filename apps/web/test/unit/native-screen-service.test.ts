@@ -598,12 +598,20 @@ describe("native preview ownership", () => {
     const track = stream.getVideoTracks()[0];
     const ended = vi.fn();
     track.addEventListener("ended", ended);
+    const closing = vi.fn(() => {
+      expect(track.readyState).toBe("live");
+      expect(capture.stop).not.toHaveBeenCalled();
+    });
+    getNativeScreenPublication(
+      track,
+    )?.closing?.addEventListener("abort", closing);
     track.stop();
     track.stop();
     await vi.advanceTimersByTimeAsync(15000);
     expect(capture.stop).toHaveBeenCalledOnce();
     expect(capture.stop).toHaveBeenCalledWith("owned");
     expect(ended).toHaveBeenCalledOnce();
+    expect(closing).toHaveBeenCalledOnce();
     expect(track.readyState).toBe("ended");
   });
   it("cleans a capture whose negotiation fails and stops renewing its lease", async () => {

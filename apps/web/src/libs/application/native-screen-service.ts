@@ -75,6 +75,7 @@ export async function createNativeScreenStream(
   let rawPreview: NativeScreenPreview | undefined;
   let stream: MediaStream;
   const previewAbort = new AbortController();
+  const closing = new AbortController();
   let track: MediaStreamTrack | undefined;
   let originalStop: (() => void) | undefined;
   let answerApplied = false;
@@ -85,6 +86,8 @@ export async function createNativeScreenStream(
   const release = () => {
     if (closed) return;
     closed = true;
+    // Notify every room sender before native shutdown can look like a failure.
+    closing.abort();
     stopMonitoring?.();
     previewAbort.abort();
     rawPreview?.close();
@@ -188,6 +191,7 @@ export async function createNativeScreenStream(
     );
     if (closed) throw new Error("Native screen closed");
     const publication: NativeScreenPublication = {
+      closing: closing.signal,
       getRecordingSources: () => {
         const recording = codecs.recording();
         return closed ||

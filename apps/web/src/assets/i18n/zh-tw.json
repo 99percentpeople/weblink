@@ -1384,6 +1384,7 @@
     "waiting": "等待對方批准",
     "cancel": "取消請求",
     "end": "結束控制",
+    "close_screen": "關閉畫面",
     "more_choices": "更多批准選項",
     "allow_remember": "批准並加入白名單",
     "deny_remember": "拒絕並加入黑名單",

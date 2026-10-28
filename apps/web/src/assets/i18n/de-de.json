@@ -1384,6 +1384,7 @@
     "waiting": "Warten auf Genehmigung",
     "cancel": "Anfrage abbrechen",
     "end": "Steuerung beenden",
+    "close_screen": "Bildschirmfreigabe beenden",
     "more_choices": "Weitere Genehmigungsmöglichkeiten",
     "allow_remember": "Genehmigen und zur Zulassungsliste hinzufügen",
     "deny_remember": "Ablehnen und zur Sperrliste hinzufügen",

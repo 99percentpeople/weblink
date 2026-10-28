@@ -166,7 +166,7 @@ it("advertises automation to third parties without allowing them to take a borro
   host.close();
 });
 
-it("preserves a temporary control share until native control actually ends", async () => {
+it("preserves a manual control share after native control changes until host cleanup", async () => {
   const { host, emit, api } = setup();
   const release = vi.fn();
   host.start();
@@ -232,8 +232,9 @@ it("preserves a temporary control share until native control actually ends", asy
     grantId: "new",
   });
   await flush();
-  expect(release).toHaveBeenCalledOnce();
+  expect(release).not.toHaveBeenCalled();
   host.close();
+  expect(release).toHaveBeenCalledOnce();
 });
 it("carries shared connection identity separately from the media control generation", async () => {
   const { host } = setup();

@@ -59,7 +59,7 @@ pub(super) fn window_result<T>(
     })
 }
 pub(super) fn check<'a>(s: &'a State, epoch: &str, id: &str) -> Result<&'a Ticket, String> {
-    Service::check(s, epoch)?;
+    Service::check_call(s, epoch, id)?;
     let t = s.tickets.get(id).ok_or("CANCELLED")?;
     if t.deadline <= Instant::now()
         || !Service::current(s)
@@ -318,6 +318,7 @@ mod tests {
         s.tickets.insert(
             "call".into(),
             Ticket {
+                screen_grant: None,
                 principal: p.clone(),
                 call: Call {
                     source: None,

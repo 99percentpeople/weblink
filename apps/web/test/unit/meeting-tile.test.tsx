@@ -1214,6 +1214,83 @@ it("keeps one remote control action across request, cancellation, active control
   view.unmount();
 });
 
+it("keeps the screen-close action after ending control and reacquires through the same picture", () => {
+  class Control extends EventTarget {
+    gamepadSlots = () => 0;
+    value = "viewing";
+    state = () => this.value;
+    update(value: string) {
+      this.value = value;
+      this.dispatchEvent(new Event("change"));
+    }
+    request = vi.fn(() => this.update("requesting"));
+    cancel = vi.fn(() => this.update("viewing"));
+    resetInput = vi.fn();
+    setCursorVisible = vi.fn();
+    supportsKeyboard = () => false;
+    supportsText = () => false;
+  }
+  const control = (fixture.control = new Control());
+  const send = vi.fn();
+  const request = (fixture.screenControl =
+    new ScreenControlRequest(send));
+  request.setAvailable(true);
+  request.request();
+  const id = send.mock.calls[0][0].id;
+  const stream = new Stream([
+    new Track(
+      "remote-screen",
+    ) as unknown as MediaStreamTrack,
+  ]) as unknown as MediaStream;
+  render(() => (
+    <MeetingTile
+      clientId="host"
+      sourceKind="screen"
+      name="Host"
+      stream={stream}
+      pinned
+    />
+  ));
+  openActions();
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  ).toBeNull();
+  request.result({
+    type: "control-result",
+    id,
+    sourceId: "source",
+    closable: true,
+  });
+  request.attach("source", fixture.control);
+  control.update("active");
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  );
+  expect(control.cancel).toHaveBeenCalledOnce();
+  expect(send).toHaveBeenCalledOnce();
+  const close = screen.getByRole("button", {
+    name: "remote_control.close_screen",
+  });
+  expect(close).toBeEnabled();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.request",
+    }),
+  );
+  expect(control.request).toHaveBeenCalledTimes(2);
+  control.update("active");
+  fireEvent.click(close);
+  expect(control.cancel).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith({
+    type: "control-close",
+    id,
+  });
+});
+
 it.each([false, true])(
   "requests control from the avatar without promoting it (pinned=%s)",
   (pinned) => {

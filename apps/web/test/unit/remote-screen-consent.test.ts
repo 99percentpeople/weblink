@@ -48,9 +48,11 @@ it("uses the explicit takeover decision for avatar requests regardless of displa
 async function sharedConsent() {
   const consent = new RemoteScreenConsent();
   const release = vi.fn();
+  const close = vi.fn();
   consent.share = async () => ({
     sourceId: "screen",
     release,
+    close,
   });
   const result = consent.request(
     "alice",
@@ -62,7 +64,7 @@ async function sharedConsent() {
     true,
   );
   expect(await result).toBe("screen");
-  return { consent, release };
+  return { consent, release, close };
 }
 
 it.each(["timeout", "disconnect", "close"])(
@@ -82,7 +84,7 @@ it.each(["timeout", "disconnect", "close"])(
 );
 
 it.each([true, false])(
-  "retains the share while controlled and releases on exit (native observation first: %s)",
+  "retains the share after control ends until disconnection (native observation first: %s)",
   async (observedFirst) => {
     const { consent, release } = await sharedConsent();
     if (observedFirst)
@@ -96,10 +98,191 @@ it.each([true, false])(
     await vi.advanceTimersByTimeAsync(60_000);
     expect(release).not.toHaveBeenCalled();
     consent.synchronize(null, null);
+    consent.cancelPending();
+    expect(release).not.toHaveBeenCalled();
+    consent.cancelPeer("alice", "peer");
+    expect(release).toHaveBeenCalledOnce();
     consent.close();
     expect(release).toHaveBeenCalledOnce();
   },
 );
+
+it("only lets the approved peer generation close the retained room-wide picture", async () => {
+  const { consent, release, close } = await sharedConsent();
+  consent.consume("alice", "peer", "screen");
+  consent.synchronize(null, null);
+  consent.cancelRequest("alice", "peer");
+  expect(consent.closeScreen("bob", "peer", "screen")).toBe(
+    false,
+  );
+  expect(
+    consent.closeScreen("alice", "old-peer", "screen"),
+  ).toBe(false);
+  expect(
+    consent.closeScreen("alice", "peer", "other"),
+  ).toBe(false);
+  expect(close).not.toHaveBeenCalled();
+  expect(release).not.toHaveBeenCalled();
+  expect(
+    consent.closeScreen("alice", "peer", "screen"),
+  ).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
+  expect(
+    consent.closeScreen("alice", "peer", "screen"),
+  ).toBe(false);
+  consent.close();
+  expect(release).toHaveBeenCalledOnce();
+});
+
+it("does not transfer close ownership when another requester reuses the picture", async () => {
+  const { consent, release, close } = await sharedConsent();
+  consent.consume("alice", "peer", "screen");
+  consent.synchronize(null, null);
+  const nextRelease = vi.fn();
+  consent.share = async () => ({
+    sourceId: "screen",
+    release: nextRelease,
+  });
+  const result = consent.request(
+    "bob",
+    "next-peer",
+    new AbortController().signal,
+  );
+  await consent.respond(
+    consent.pending()[0].consentId,
+    true,
+  );
+  expect(await result).toBe("screen");
+  consent.consume("bob", "next-peer", "screen");
+  expect(
+    consent.canClose("bob", "next-peer", "screen"),
+  ).toBe(false);
+  expect(
+    consent.closeScreen("bob", "next-peer", "screen"),
+  ).toBe(false);
+  expect(close).not.toHaveBeenCalled();
+  expect(
+    consent.closeScreen("alice", "peer", "screen"),
+  ).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
+  expect(nextRelease).toHaveBeenCalledOnce();
+  expect(consent.reservation()).toBeNull();
+  consent.close();
+});
+
+it("keeps the close action after ending control and allows reacquisition on the retained pointer", () => {
+  const send = vi.fn();
+  const request = new ScreenControlRequest(send);
+  request.setAvailable(true);
+  request.request();
+  const id = send.mock.calls[0][0].id;
+  request.result({
+    type: "control-result",
+    id,
+    sourceId: "screen",
+    closable: true,
+  });
+  const pointer = new Pointer();
+  const remote = pointer as unknown as RemotePointer;
+  request.attach("screen", remote);
+  pointer.change("viewing");
+  pointer.change("active");
+  request.cancel();
+  expect(request.canClose(remote)).toBe(true);
+  pointer.request();
+  expect(pointer.request).toHaveBeenCalledTimes(2);
+  pointer.change("active");
+  request.closeScreen(remote);
+  expect(pointer.cancel).toHaveBeenCalledTimes(2);
+  expect(send).toHaveBeenLastCalledWith({
+    type: "control-close",
+    id,
+  });
+  expect(request.canClose(remote)).toBe(true);
+  request.detach(remote);
+  expect(request.canClose(remote)).toBe(false);
+});
+
+it("hides close while a third person controls the picture and restores it after release", () => {
+  const send = vi.fn();
+  const request = new ScreenControlRequest(send);
+  request.setAvailable(true);
+  request.setHostStatus({ state: "idle" }, "alice");
+  request.request();
+  const id = send.mock.calls[0][0].id;
+  request.result({
+    type: "control-result",
+    id,
+    sourceId: "screen",
+    closable: true,
+  });
+  const pointer = new Pointer();
+  const remote = pointer as unknown as RemotePointer;
+  request.attach("screen", remote);
+  request.setHostStatus(
+    {
+      state: "controlled",
+      sourceId: "screen",
+      clientId: "bob",
+    },
+    "alice",
+  );
+  expect(request.canClose(remote)).toBe(false);
+  request.closeScreen(remote);
+  expect(send).toHaveBeenCalledOnce();
+  expect(pointer.cancel).not.toHaveBeenCalled();
+  request.setHostStatus({ state: "idle" }, "alice");
+  expect(request.canClose(remote)).toBe(true);
+  request.closeScreen(remote);
+  expect(send).toHaveBeenLastCalledWith({
+    type: "control-close",
+    id,
+  });
+  request.detach(remote);
+});
+
+it("keeps screen-close ownership across receiver replacement without restoring input control", () => {
+  const send = vi.fn();
+  const request = new ScreenControlRequest(send);
+  request.setAvailable(true);
+  request.request();
+  const id = send.mock.calls[0][0].id;
+  request.result({
+    type: "control-result",
+    id,
+    sourceId: "screen",
+    closable: true,
+  });
+  const first = new Pointer();
+  request.attach(
+    "screen",
+    first as unknown as RemotePointer,
+  );
+  first.change("viewing");
+  first.change("active");
+  request.cancel();
+  request.detach(first as unknown as RemotePointer, true);
+  const replacement = new Pointer();
+  request.attach(
+    "screen",
+    replacement as unknown as RemotePointer,
+  );
+  expect(
+    request.canClose(
+      replacement as unknown as RemotePointer,
+    ),
+  ).toBe(true);
+  expect(replacement.request).not.toHaveBeenCalled();
+  request.closeScreen(
+    replacement as unknown as RemotePointer,
+  );
+  expect(send).toHaveBeenLastCalledWith({
+    type: "control-close",
+    id,
+  });
+});
 
 it("releases an in-flight share returned after the requesting peer cancels", async () => {
   const consent = new RemoteScreenConsent();

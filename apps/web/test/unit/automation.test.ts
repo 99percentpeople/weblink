@@ -50,6 +50,35 @@ it("bounds browser audit history without retaining tool arguments", () => {
   expect(audit.entries[0]).not.toHaveProperty("arguments");
 });
 describe("shared tool contract", () => {
+  it("acquires by exactly one capture source or existing track", () => {
+    for (const arguments_ of [
+      { target: "peer", sourceId: "monitor" },
+      { target: "local", trackId: "live-track" },
+    ])
+      expect(() =>
+        parseCall({
+          name: "control.acquire",
+          arguments: arguments_,
+        }),
+      ).not.toThrow();
+    for (const arguments_ of [
+      { target: "local" },
+      {
+        target: "local",
+        sourceId: "monitor",
+        trackId: "track",
+      },
+      { target: "local", sourceId: "" },
+      { target: "local", sourceId: 1 },
+      { sourceId: "monitor" },
+    ])
+      expect(() =>
+        parseCall({
+          name: "control.acquire",
+          arguments: arguments_,
+        }),
+      ).toThrow(AutomationError);
+  });
   it("maps every current scope to exactly one group and preserves legacy mixed decisions", () => {
     expect(
       Object.values(permissionGroups).flat().sort(),

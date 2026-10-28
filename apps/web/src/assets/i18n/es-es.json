@@ -1384,6 +1384,7 @@
     "waiting": "Esperando aprobación",
     "cancel": "Cancelar solicitud",
     "end": "Finalizar control",
+    "close_screen": "Cerrar pantalla",
     "more_choices": "Más opciones de aprobación",
     "allow_remember": "Aprobar y agregar a la lista de permitidos",
     "deny_remember": "Rechazar y agregar a la lista de bloqueo",

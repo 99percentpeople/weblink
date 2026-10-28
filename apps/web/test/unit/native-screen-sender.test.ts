@@ -25,16 +25,19 @@ async function setup(manual = false) {
     manual ? { codec: "video/h265" } : undefined,
   );
   const signals: ScreenSignal[] = [];
+  const closing = new AbortController();
+  const closePeer = vi.fn(async () => {});
   const offer = vi.fn<NativeScreenPublication["offer"]>(
     async () => "offer",
   );
   const sender = new NativeScreenSender(
     {
       sourceId: "screen",
+      closing: closing.signal,
       selectCodecs: selection.select,
       offer,
       answer: async () => {},
-      closePeer: async () => {},
+      closePeer,
     },
     {
       ready: () => true,
@@ -54,8 +57,29 @@ async function setup(manual = false) {
   const id = () =>
     signals.filter((s) => s.type === "offer").at(-1)!.id;
   await sender.publish();
-  return { sender, id, offer };
+  return { sender, id, offer, signals, closing, closePeer };
 }
+
+it("announces a stopped publication before native teardown and never republishes it", async () => {
+  const { sender, id, offer, signals, closing, closePeer } =
+    await setup();
+  const receiverId = id();
+  closePeer.mockImplementation(async () => {
+    expect(signals.at(-1)).toEqual({
+      type: "stop",
+      id: receiverId,
+    });
+  });
+  closing.abort();
+  expect(closePeer).toHaveBeenCalledExactlyOnceWith(
+    receiverId,
+  );
+  await sender.publish();
+  sender.refreshCodecs();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(offer).toHaveBeenCalledOnce();
+  sender.dispose();
+});
 
 it("preserves an explicit video format after rejection, including repeated capability updates", async () => {
   const { sender, id, offer } = await setup(true);

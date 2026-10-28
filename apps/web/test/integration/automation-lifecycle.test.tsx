@@ -695,6 +695,7 @@ it("uses native screen authority across separate permissions and reconciles owne
   );
   const authority = {
     grantId: "input",
+    screenGrantId: "screen",
     screenGrantIds: ["screen"],
   };
   vi.mocked(fixture.native.snapshot).mockResolvedValue({
@@ -722,13 +723,10 @@ it("uses native screen authority across separate permissions and reconciles owne
     expect.any(AbortSignal),
     expect.any(Function),
     expect.any(Function),
-    authority,
+    { ...authority, requesterId: "token" },
   );
   await waitFor(() =>
-    expect(synchronize).toHaveBeenCalledWith(
-      ["screen"],
-      "lease",
-    ),
+    expect(synchronize).toHaveBeenCalledWith(["screen"]),
   );
 });
 

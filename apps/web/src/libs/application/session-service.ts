@@ -530,11 +530,23 @@ export class SessionService {
           controlGeneration,
           signal,
         ),
-      cancelScreenRequest: () =>
-        this.remoteControl.screen.cancelPeer(
+      cancelScreenRequest: (disconnect) =>
+        this.remoteControl.screen[
+          disconnect ? "cancelPeer" : "cancelRequest"
+        ](client.clientId, controlGeneration),
+      canCloseScreen: (sourceId) =>
+        this.remoteControl.screen.canClose(
           client.clientId,
           controlGeneration,
+          sourceId,
         ),
+      closeScreen: (sourceId) => {
+        this.remoteControl.screen.closeScreen(
+          client.clientId,
+          controlGeneration,
+          sourceId,
+        );
+      },
       controlContext: () =>
         this.remoteControl.context(
           controlGeneration,

@@ -23,6 +23,8 @@ export interface NativeAutomationRequest {
   grantId?: string;
   /** Live screen permissions for this verified caller at dispatch time. */
   screenGrantIds?: string[];
+  /** Exact screen permission bound to a combined control acquisition. */
+  screenGrantId?: string | null;
   principal: {
     id: string;
     label: string;

@@ -84,6 +84,8 @@ struct Ticket {
     principal: Principal,
     call: Call,
     grant: String,
+    // Capture preparation may rely on a separately approved screen permission.
+    screen_grant: Option<String>,
     deadline: Instant,
     answer: oneshot::Sender<Value>,
     used: bool,
@@ -221,7 +223,7 @@ impl Service {
         let calls: Vec<_> = s
             .tickets
             .iter()
-            .filter(|(_, t)| t.grant == id)
+            .filter(|(_, t)| t.grant == id || t.screen_grant.as_deref() == Some(id))
             .map(|(id, _)| id.clone())
             .collect();
         for id in calls {
@@ -359,9 +361,25 @@ impl Service {
             return Err("INVALID_ARGUMENTS".into());
         }
         let tool = catalog::validate(&call.name, &call.arguments)?;
-        let scope = tool["scope"].as_str().unwrap().to_string();
+        let scopes = catalog::required_scopes(tool, &call.arguments);
+        let find_grant = |s: &State, scope: &str| {
+            s.grants
+                .values()
+                .find(|g| {
+                    g.principal.id == principal.id
+                        && g.principal.kind == principal.kind
+                        && g.scopes.iter().any(|member| member == scope)
+                        && (principal.kind != "mcp"
+                            || call.arguments["target"] != "local"
+                            || !catalog::diagnostic(&call.name)
+                            || g.scopes.len() == 1)
+                        && g.covers_target(&call.arguments["target"])
+                        && Self::grant_live(s, g)
+                })
+                .map(|g| g.id.clone())
+        };
         self.expire();
-        let (grant, approval) = {
+        let approval = {
             let mut s = self.state.lock().unwrap();
             if s.requests.get(&id).map(|r| r.generation.as_str()) != Some(generation) {
                 return Err("CANCELLED".into());
@@ -389,29 +407,16 @@ impl Service {
                     catalog::diagnostic(&call.name),
                 )?;
             }
-            let decision = Self::peer_decision(&s, &principal, &scope);
-            if decision == policy::Decision::Deny {
-                return Err("PERMISSION_DENIED".into());
+            for scope in &scopes {
+                let decision = Self::peer_decision(&s, &principal, scope);
+                if decision == policy::Decision::Deny {
+                    return Err("PERMISSION_DENIED".into());
+                }
+                if decision == policy::Decision::Allow {
+                    Self::policy_grant(&mut s, &principal, scope);
+                }
             }
-            if decision == policy::Decision::Allow {
-                Self::policy_grant(&mut s, &principal, &scope);
-            }
-            let grant = s
-                .grants
-                .values()
-                .find(|g| {
-                    g.principal.id == principal.id
-                        && g.principal.kind == principal.kind
-                        && g.scopes.contains(&scope)
-                        && (principal.kind != "mcp"
-                            || call.arguments["target"] != "local"
-                            || !catalog::diagnostic(&call.name)
-                            || g.scopes.len() == 1)
-                        && g.covers_target(&call.arguments["target"])
-                        && Self::grant_live(&s, g)
-                })
-                .map(|g| g.id.clone());
-            if grant.is_none() {
+            if let Some(scope) = scopes.iter().find(|scope| find_grant(&s, scope).is_none()) {
                 if s.pending.len() >= 8 {
                     return Err("BUSY".into());
                 }
@@ -421,14 +426,14 @@ impl Service {
                     Pending {
                         principal: principal.clone(),
                         call: call.clone(),
-                        scope: scope.clone(),
+                        scope: (*scope).to_string(),
                         deadline: Instant::now() + Duration::from_secs(120),
                         answer: tx,
                     },
                 );
-                (None, Some(rx))
+                Some(rx)
             } else {
-                (grant, None)
+                None
             }
         };
         if let Some(approval) = approval {
@@ -451,27 +456,17 @@ impl Service {
             if !Self::call_enabled(&s, &principal, &call) {
                 return Err("DISABLED".into());
             }
-            let grant = grant
-                .or_else(|| {
-                    s.grants
-                        .values()
-                        .find(|g| {
-                            g.principal.id == principal.id
-                                && g.principal.kind == principal.kind
-                                && g.scopes.contains(&scope)
-                                && g.covers_target(&call.arguments["target"])
-                                && Self::grant_live(&s, g)
-                        })
-                        .map(|g| g.id.clone())
-                })
-                .ok_or("GRANT_EXPIRED")?;
-            if !s
-                .grants
-                .get(&grant)
-                .is_some_and(|g| Self::grant_live(&s, g))
+            if scopes
+                .iter()
+                .any(|scope| Self::peer_decision(&s, &principal, scope) == policy::Decision::Deny)
             {
-                return Err("GRANT_EXPIRED".into());
+                return Err("PERMISSION_DENIED".into());
             }
+            let grant = find_grant(&s, scopes[0]).ok_or("GRANT_EXPIRED")?;
+            let screen_grant = scopes
+                .get(1)
+                .map(|scope| find_grant(&s, scope).ok_or("GRANT_EXPIRED"))
+                .transpose()?;
             let (tx, rx) = oneshot::channel();
             let screen_grants = native::screen_grants(&s, Some(&principal));
             s.tickets.insert(
@@ -480,6 +475,7 @@ impl Service {
                     principal: principal.clone(),
                     call: call.clone(),
                     grant: grant.clone(),
+                    screen_grant: screen_grant.clone(),
                     deadline: Instant::now() + Duration::from_secs(150),
                     answer: tx,
                     used: false,
@@ -488,7 +484,7 @@ impl Service {
             if s.channel
                 .as_ref()
                 .ok_or("APP_NOT_READY")?
-                .send(json!({"kind":"call","id":id,"principal":principal,"grantId":grant,"screenGrantIds":screen_grants,"call":call}))
+                .send(json!({"kind":"call","id":id,"principal":principal,"grantId":grant,"screenGrantId":screen_grant,"screenGrantIds":screen_grants,"call":call}))
                 .is_err()
             {
                 s.tickets.remove(&id);
@@ -509,5 +505,7 @@ fn constant_eq(left: &str, right: &str) -> bool {
     }
     diff == 0
 }
+#[cfg(test)]
+mod acquisition_tests;
 #[cfg(test)]
 mod tests;

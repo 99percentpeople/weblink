@@ -6,7 +6,11 @@ import {
   untrack,
 } from "solid-js";
 import { toast } from "solid-sonner";
-import { permissionGroup } from "@weblink/automation";
+import {
+  permissionGroup,
+  type Approval,
+  type Scope,
+} from "@weblink/automation";
 import { sessionService } from "@/libs/application/session-service";
 import type { NotificationService } from "@/libs/application/notifications/notification-service";
 import { appState } from "@/libs/state/app-state";
@@ -29,6 +33,33 @@ export function AutomationApprovalToasts(props: {
   showApplication?(): void | Promise<void>;
 }) {
   const { automation } = useAppState();
+  const needsReview = (request: Approval) => {
+    const policy =
+      appState.options.clientConfigs[request.principal.id]
+        ?.automation;
+    const required: readonly Scope[] =
+      request.tool === "control.acquire" &&
+      typeof request.arguments.sourceId === "string"
+        ? ["input.control", "screen.manage"]
+        : [request.scope];
+    const decisions = required.map(
+      (scope) => policy?.[scope] ?? "ask",
+    );
+    const snapshot = automation?.snapshot();
+    const suspended =
+      snapshot?.peerPoliciesSuspended ??
+      snapshot?.policiesSuspended;
+    // A policy edit can precede the next native snapshot. Do not display its
+    // obsolete request, but preserve consent after an emergency pause.
+    return (
+      !decisions.includes("deny") &&
+      decisions.some(
+        (decision) =>
+          decision === "ask" ||
+          (decision === "allow" && suspended === true),
+      )
+    );
+  };
   const pending = () =>
     automation?.ready()
       ? automation
@@ -38,7 +69,8 @@ export function AutomationApprovalToasts(props: {
               request.principal.kind === "peer" &&
               sessionService.canReceive(
                 request.principal.id,
-              ),
+              ) &&
+              needsReview(request),
           )
       : [];
   const allowLabel = () => t("common.action.allow_session");

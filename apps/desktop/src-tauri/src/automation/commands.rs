@@ -204,6 +204,8 @@ pub async fn automation_snapshot(
     let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"mcpEnabled":s.mcp_enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"policiesSuspended":(s.enabled && s.policies_suspended) || (s.mcp_enabled && s.mcp_suspended),"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
     let control = app.state::<crate::remote_control::Shared>();
     let controller = native::controller(&s, &control);
+    // Diagnostics still honor peer emergency suspension when OS automation is off.
+    snapshot["peerPoliciesSuspended"] = json!(s.policies_suspended);
     snapshot["screenGrants"] = json!(native::screen_grants(&s, None));
     snapshot["controlLeaseId"] = json!(controller.as_ref().and_then(|p| control.automation_lease(&p.id).ok()));
     snapshot["controller"] = json!(controller);

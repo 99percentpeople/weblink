@@ -1384,6 +1384,7 @@
     "waiting": "承認待ち",
     "cancel": "リクエストのキャンセル",
     "end": "操作を終了",
+    "close_screen": "画面共有を終了",
     "more_choices": "その他の承認オプション",
     "allow_remember": "承認して許可リストに追加する",
     "deny_remember": "拒否してブロックリストに追加",

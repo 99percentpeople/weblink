@@ -115,12 +115,16 @@
     "nextAction": "observe"
   },
   "CONTROL_REQUIRED": {
-    "message": "An active exclusive control lease is required.",
+    "message": "An active control lease is required. Call control.acquire with a monitor sourceId from screen.sources to prepare sharing and control together, or trackId for a live native monitor stream.",
     "nextAction": "acquire_control"
   },
   "CAPTURE_REQUIRED": {
-    "message": "A live native monitor capture is required for desktop input.",
-    "nextAction": "start_capture"
+    "message": "A live native monitor capture is required. Choose kind=monitor from screen.sources and call control.acquire with its sourceId to prepare sharing and control together.",
+    "nextAction": "acquire_control"
+  },
+  "RESOURCE_CLOSED": {
+    "message": "The referenced stream has ended or is no longer available. Refresh sessions.list for live track IDs, or screen.sources to choose a new capture source.",
+    "nextAction": "observe"
   },
   "RESULT_TOO_LARGE": {
     "message": "The result exceeds the transport limit; request a smaller region or page.",

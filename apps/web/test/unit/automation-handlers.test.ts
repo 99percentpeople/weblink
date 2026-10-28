@@ -276,6 +276,7 @@ function handler(stream?: unknown) {
         args[3],
         args[4] ?? {
           grantId: "permission-1",
+          requesterId: "caller",
           screenGrantIds: ["permission-1"],
         },
       ),
@@ -405,7 +406,199 @@ const startScreen = {
   name: "screen.start",
   arguments: { target: "local", sourceId: "monitor" },
 };
-it("releases a caller's screen across separately approved input permissions without exposing lease metadata", async () => {
+const acquireSource = {
+  name: "control.acquire",
+  arguments: { target: "local", sourceId: "monitor" },
+};
+const combinedAuthority = {
+  grantId: "input-permission",
+  requesterId: "caller",
+  screenGrantId: "screen-permission",
+  screenGrantIds: ["screen-permission"],
+};
+const acquiredControl = {
+  acquired: true,
+  reused: false,
+  coordinateSpace: "desktopPhysicalPixels",
+  sourceId: "monitor",
+  geometryRevision: "geometry",
+  bounds: { left: 0, top: 0, width: 1920, height: 1080 },
+};
+it("keeps the acquired screen after control.release until screen.stop", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler();
+  fixture.capture.mockResolvedValue(stream);
+  const signal = new AbortController().signal;
+  const native = vi.fn(async () => ({
+    ...acquiredControl,
+    controlLeaseId: "lease",
+  }));
+  const result = await run(
+    acquireSource,
+    signal,
+    native,
+    undefined,
+    combinedAuthority,
+  );
+  expect(result).toEqual({
+    ...acquiredControl,
+    trackId: track.id,
+    shareReused: false,
+  });
+  expect(
+    validate(parseCall(acquireSource).outputSchema, {
+      ok: true,
+      data: result,
+    }),
+  ).toBe(true);
+  expect(fixture.capture).toHaveBeenCalledOnce();
+  expect(fixture.capture.mock.calls[0][4]).toMatchObject({
+    audio: false,
+  });
+  expect(native).toHaveBeenCalledWith({
+    sessionId: "capture-track",
+    sourceId: "publication-track",
+  });
+  expect(track.readyState).toBe("live");
+  const repeated = await run(
+    acquireSource,
+    signal,
+    native,
+    undefined,
+    combinedAuthority,
+  );
+  expect(repeated).toEqual({
+    ...acquiredControl,
+    trackId: track.id,
+    shareReused: true,
+  });
+  expect(fixture.capture).toHaveBeenCalledOnce();
+  await run(
+    {
+      name: "control.release",
+      arguments: { target: "local" },
+    },
+    signal,
+    async () => ({ released: true }),
+    undefined,
+    combinedAuthority,
+  );
+  expect(track.readyState).toBe("live");
+  await run(
+    {
+      name: "screen.stop",
+      arguments: { trackId: track.id },
+    },
+    signal,
+    undefined,
+    undefined,
+    combinedAuthority,
+  );
+  expect(track.readyState).toBe("ended");
+});
+
+it("reuses a user share during combined acquisition and preserves it on release", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler(stream);
+  const signal = new AbortController().signal;
+  const result = await run(
+    acquireSource,
+    signal,
+    async () => ({
+      ...acquiredControl,
+      controlLeaseId: "lease",
+    }),
+    undefined,
+    combinedAuthority,
+  );
+  expect(result).toEqual({
+    ...acquiredControl,
+    trackId: track.id,
+    shareReused: true,
+  });
+  expect(fixture.capture).not.toHaveBeenCalled();
+  await run(
+    { name: "control.release", arguments: {} },
+    signal,
+    async () => ({}),
+    undefined,
+    combinedAuthority,
+  );
+  expect(track.stop).not.toHaveBeenCalled();
+});
+
+it("never starts combined capture without its bound screen permission", async () => {
+  nativeScreen();
+  const { run } = handler();
+  const native = vi.fn(async () => ({}));
+  await expect(
+    run(
+      acquireSource,
+      new AbortController().signal,
+      native,
+    ),
+  ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+  expect(fixture.capture).not.toHaveBeenCalled();
+  expect(native).not.toHaveBeenCalled();
+});
+
+it.each(["CONTROL_BUSY", "GRANT_EXPIRED"])(
+  "releases the combined share after %s without replacing a previous monitor",
+  async (reason) => {
+    const old = nativeScreen(
+      "previous-monitor",
+      "previous",
+    );
+    const candidate = nativeScreen();
+    const { run } = handler(old.stream);
+    fixture.capture.mockResolvedValue(candidate.stream);
+    await expect(
+      run(
+        acquireSource,
+        new AbortController().signal,
+        async () => {
+          throw new Error(reason);
+        },
+        undefined,
+        combinedAuthority,
+      ),
+    ).rejects.toThrow(reason);
+    expect(candidate.track.readyState).toBe("ended");
+    expect(old.track.readyState).toBe("live");
+  },
+);
+
+it("discards a capture completed after combined acquisition was cancelled", async () => {
+  const { track, stream } = nativeScreen();
+  const { run } = handler();
+  let finish!: (stream: ScreenStream) => void;
+  fixture.capture.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const abort = new AbortController();
+  const native = vi.fn(async () => ({}));
+  const result = expect(
+    run(
+      acquireSource,
+      abort.signal,
+      native,
+      undefined,
+      combinedAuthority,
+    ),
+  ).rejects.toThrow();
+  await vi.waitFor(() =>
+    expect(fixture.capture).toHaveBeenCalledOnce(),
+  );
+  abort.abort();
+  finish(stream);
+  await result;
+  expect(track.readyState).toBe("ended");
+  expect(native).not.toHaveBeenCalled();
+});
+it("preserves an explicit screen across separately approved input permissions until screen.stop", async () => {
   const { track, stream } = nativeScreen();
   const { run } = handler();
   fixture.capture.mockResolvedValue(stream);
@@ -428,7 +621,10 @@ it("releases a caller's screen across separately approved input permissions with
     undefined,
     authority,
   );
-  expect(granted).toEqual({ granted: true });
+  expect(granted).toEqual({
+    granted: true,
+    trackId: track.id,
+  });
   await run(
     { name: "control.release", arguments: {} },
     signal,
@@ -444,10 +640,18 @@ it("releases a caller's screen across separately approved input permissions with
     undefined,
     authority,
   );
+  expect(track.readyState).toBe("live");
+  await run(
+    {
+      name: "screen.stop",
+      arguments: { trackId: track.id },
+    },
+    signal,
+  );
   expect(track.readyState).toBe("ended");
 });
 
-it("reports retention when stopping a caller's use of an explicitly shared screen", async () => {
+it("does not let MCP close a manually shared picture even after reusing it", async () => {
   const { track, stream } = nativeScreen();
   const { run } = handler(stream);
   const signal = new AbortController().signal;
@@ -459,22 +663,13 @@ it("reports retention when stopping a caller's use of an explicitly shared scree
     code: "PERMISSION_DENIED",
   });
   await run(startScreen, signal);
-  const result = await run(stop, signal);
-  expect(result).toEqual({
-    released: true,
-    stopped: false,
-    retained: true,
+  await expect(run(stop, signal)).rejects.toMatchObject({
+    code: "PERMISSION_DENIED",
   });
-  expect(
-    validate(parseCall(stop).outputSchema, {
-      ok: true,
-      data: result,
-    }),
-  ).toBe(true);
   expect(track.readyState).toBe("live");
 });
 
-it("removes only the new temporary capture when native acquisition fails", async () => {
+it("preserves explicit screen sharing when native acquisition fails", async () => {
   const { track, stream } = nativeScreen();
   const { run } = handler();
   const signal = new AbortController().signal;
@@ -492,6 +687,14 @@ it("removes only the new temporary capture when native acquisition fails", async
       },
     ),
   ).rejects.toThrow("CONTROL_BUSY");
+  expect(track.readyState).toBe("live");
+  await run(
+    {
+      name: "screen.stop",
+      arguments: { trackId: track.id },
+    },
+    signal,
+  );
   expect(track.readyState).toBe("ended");
 });
 

@@ -85,6 +85,9 @@ beforeEach(() => {
       trackId: "native-video",
       reused: false,
       stream: await capture(),
+      createdByCaller: false,
+      canClose: () => false,
+      close: () => false,
       release: f.releaseShare,
     }),
   );

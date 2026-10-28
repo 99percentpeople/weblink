@@ -75,8 +75,9 @@ commands require approval. A notification approval lasts for that connection;
 Always allow and Deny remain saved policies. The destination does not need to
 expose its own HTTP MCP API for peer calls.
 
-For pointer or keyboard input, start a native monitor stream with `screen.start`
-and acquire it with `control.acquire`. Input then operates the current desktop;
+For pointer or keyboard input, call `control.acquire` with a monitor `sourceId`
+from `screen.sources`; it prepares sharing and acquires control in one call.
+An existing live native monitor can still be acquired by `trackId`. Input then operates the current desktop;
 `control.bindWindow` is optional. Screenshots can inspect an entire source, a
 window or a rectangle; use the returned image-to-desktop transform for pointer
 coordinates. Query `commands.capabilities` before choosing Shell signals.
@@ -288,22 +289,33 @@ grant remains active. The same automation principal and connection may explicitl
 acquire another monitor, replacing its previous lease only after the new target is
 validated and authorized. A failed switch leaves the old control intact.
 Borrowing manual control never moves the human's grant to another monitor.
-Sharing has one owner per physical capture source. Explicit user sharing and local
-recording retain the publication. Manual control requests and automation instead
-hold temporary uses: release removes only that use, preserving user sharing,
-other callers and the current native control grant, including during handoff.
-`screen.start` acquires a caller-owned temporary use, reusing existing capture and
-audio settings. `screen.stop` releases only a track acquired by this caller;
-`released: true, stopped: false, retained: true` means another owner still needs it.
-`control.release` releases the caller's input and screen uses even if their
-permissions were approved separately. After acquisition, control ending or switching
-monitors releases the associated use; a failed acquisition releases only the new,
-unused candidate. Permission revocation and peer disconnection release all uses of
-that permission lifetime. Late cleanup cannot close a replacement permission's share.
-A screen started without acquiring control remains until explicit release or its
-permission ends. Stateless MCP has no conversation-end signal; finishing an individual
-tool call does not release the share. Callers should finish with `control.release`
-or `screen.stop`.
+Sharing has one application owner per physical capture source. Successful manual
+control requests, MCP screen.start and source-based control.acquire all retain the
+publication for the room. Ending control, changing monitors, permission expiry or
+the controlling peer disconnecting does not close an established picture. Pending
+cancellation, failed acquisition and approval expiry release only unestablished
+uses. Cleanup from an old grant cannot stop an established or replacement share.
+
+End control / control.release releases input. Close screen / screen.stop explicitly
+stops the selected source for all room viewers, including its audio and control
+transport. A picture shared manually by the host can only be closed by the host.
+A picture opened for a remote request can also be closed by its original requester,
+except while another caller controls that picture. Reusing a picture or handing off
+control never transfers close permission. MCP screen.stop returns PERMISSION_DENIED
+for an unclaimed track or a picture belonging to the host or another requester, and
+CONTROL_BUSY while another caller controls the picture. After reconnecting, the
+original requester must claim its existing source with screen.start before stopping
+it. Reuse preserves capture/audio settings. Legacy targets may return retained=true
+when another owner keeps the source. The sharing device can always close locally.
+
+Source-based control.acquire requires both screen.manage and input.control, checked
+before capture and again before input acquisition. They require at most one review;
+an explicit Deny on either prevents the operation. Existing trackId calls retain
+their input-only permission requirement. Manual remote Close screen is bound to
+the approved requesting peer generation and source; other viewers cannot close it.
+Stateless MCP has no conversation-end signal. Callers should explicitly release
+input and, when no longer wanted, stop the shared picture.
+
 The policy remains indexed by client ID, but is effective only after the peer
 proves its paired device key. Failed device verification resets it to deny.
 Automatic pairing-key repair/renewal preserves saved permissions. First pairing
@@ -656,11 +668,28 @@ timeout, acquire control again before sending more input.
 
 ## Direct desktop input (default)
 
-Use a live native monitor track from `sessions.list`, or create one with
-`screen.start`, then call `control.acquire` with its `trackId`. Call
+Call `control.acquire` with a monitor `sourceId` from `screen.sources` to start or
+reuse sharing and acquire control together. Alternatively, pass a live native
+monitor `trackId` from `sessions.list` or `screen.start`. Supply exactly one of
+`sourceId` and `trackId`. Call
 `control.pointer`, `control.key` and `control.text` directly afterwards;
 `accessibility.windows`, `accessibility.action` with `focus`, and `control.bindWindow`
 are not prerequisites.
+
+The acquisition result includes `trackId` for `screen.configure` and, for a
+`sourceId` acquisition, `shareReused` to distinguish an existing screen publication
+from a newly started one. This is separate from `reused`, which describes borrowing
+the device's manual control grant. The `trackId` form does not acquire a new screen
+use and omits `shareReused`. Older targets may omit these added result fields;
+`sessions.list` remains available to find their live tracks. Use `control.release`
+when finished to release input while keeping the picture. `screen.stop` closes a
+picture opened by this caller for the room, unless another caller is controlling it.
+
+IDs have distinct meanings: `screen.sources` returns capture IDs used by
+`control.acquire.sourceId`, `screen.start`, and `control.screenshot`. In
+`sessions.list`, `captureSourceId` is that same capture ID, `id` is a `trackId`, and
+`sourceId` is an internal publication ID, not a capture ID. `screen.start` is useful
+for sharing without control; it is not a prerequisite for a `sourceId` acquisition.
 
 Keys and text go to the current foreground application's focused control. Pointer
 actions use physical desktop coordinates with the acquired `sourceId` and

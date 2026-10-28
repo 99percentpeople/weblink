@@ -1413,6 +1413,7 @@
     "waiting": "等待对方批准",
     "cancel": "取消请求",
     "end": "结束控制",
+    "close_screen": "关闭画面",
     "more_choices": "更多批准选项",
     "allow_remember": "批准并加入白名单",
     "deny_remember": "拒绝并加入黑名单",

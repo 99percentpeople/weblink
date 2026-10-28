@@ -1382,13 +1382,27 @@ a second confirmation without carrying consent to other peers or captures.
 Cancellation, room/peer teardown and request expiry invalidate pending startup.
 Manual screen selection, automatic sharing for control requests and MCP
 `screen.start` use one application owner, serializing capture by physical source.
-An existing share keeps its audio and capture settings. Both manual control requests
-and automation acquire temporary uses: cancellation, approval expiry, control exit
-or switching control to another source releases the associated use. Explicit sharing
-or local recording retains the publication; other temporary users and a current native
-grant also keep it alive. Automation can stop only its own acquired uses, and permission
-revocation or peer disconnection releases them. Unrelated shares and later permission
-lifetimes are never stopped by old cleanup. See `AUTOMATION.md` for tool release results.
+An existing share keeps its audio and capture settings. Successful manual control
+requests, MCP screen.start and source-based control.acquire transfer their capture
+to the room. End control releases input; leaving or losing permission to control
+does not stop the picture. Close screen stops that source for the entire room.
+A picture shared manually by the host can only be closed by the host. A picture
+opened for a remote request can also be closed by its original requester, except
+while another caller controls that picture. Reuse and control handoff never transfer
+close permission. Manual control and MCP use the same ownership and occupancy check.
+Updated hosts return control-result.closable to the original requester, who can send
+control-close with the approved request ID. The host checks that ID, current
+permissions, peer generation and controller before stopping its recorded source.
+Other viewers and older hosts do not expose this action; the requester hides it
+while another caller controls the picture. Pending cancellation and approval expiry
+still release captures that never completed the handoff. The sharing device can
+close a retained picture after its original controller leaves. See AUTOMATION.md
+for tool authorization and close results.
+
+Capture shutdown notifies all native senders before closing their transports.
+Receivers allow a short transport-close grace period for the room's explicit stop
+signal before reporting connection failure. Stops and teardown cancel that timer;
+decoder failures and stalls retain their normal immediate handling.
 
 One native input grant remains authoritative across all monitors. The same verified
 device and connection can request control on another shared monitor. A manual

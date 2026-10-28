@@ -19,6 +19,8 @@ export interface NativeScreenPublication {
   ): Promise<{ stream: MediaStream; close(): void }>;
   readonly sourceId: string;
   readonly controlEligible?: boolean;
+  /** Fires before capture tears down its native peer transports. */
+  readonly closing?: AbortSignal;
   selectCodecs?(
     receiver?: MediaDecodeCapabilities,
     excludedVideo?: readonly string[],
@@ -92,11 +94,18 @@ export class NativeScreenSender {
   private codecKey?: string;
   private readonly excludedVideo = new Set<string>();
   private decodeStalls = 0;
+  private readonly onClosing = () => this.stop();
 
   constructor(
     readonly publication: NativeScreenPublication,
     private readonly port: ScreenSenderPort,
-  ) {}
+  ) {
+    publication.closing?.addEventListener(
+      "abort",
+      this.onClosing,
+      { once: true },
+    );
+  }
 
   private selectCodecs(): NativeSendCodecs | undefined {
     return this.publication.selectCodecs?.(
@@ -124,6 +133,10 @@ export class NativeScreenSender {
   }
 
   dispose(): void {
+    this.publication.closing?.removeEventListener(
+      "abort",
+      this.onClosing,
+    );
     this.stop();
   }
 
@@ -197,6 +210,7 @@ export class NativeScreenSender {
   async publish(): Promise<void> {
     if (
       !this.port.ready() ||
+      this.publication.closing?.aborted ||
       !this.port.selected() ||
       this.outgoing ||
       this.timer ||

@@ -85,6 +85,76 @@ const deferred = <T>() => {
   const promise = new Promise<T>((r) => (resolve = r));
   return { promise, resolve };
 };
+
+it("closes only the approved request's room-wide source while permission and ownership remain valid", async () => {
+  let allowed = true;
+  let owned = true;
+  const port = {
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    changed: vi.fn(),
+    error: vi.fn(),
+    controlCapabilities: { host: true, request: true },
+    requestScreen: vi.fn(async () => "approved-source"),
+    acceptsControlRequests: () => allowed,
+    canCloseScreen: (source: string) =>
+      owned && source === "approved-source",
+    closeScreen: vi.fn(),
+    cancelScreenRequest: vi.fn(),
+  };
+  const session = new NativeScreenSession(port);
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+    control: {
+      host: true,
+      request: true,
+      occupancy: { state: "idle" },
+    },
+  });
+  channel.receive({
+    type: "control-request",
+    id: "request",
+  });
+  await flush();
+  expect(channel.sent.at(-1)).toEqual({
+    type: "control-result",
+    id: "request",
+    sourceId: "approved-source",
+    closable: true,
+  });
+  channel.receive({
+    type: "control-close",
+    id: "other-request",
+    sourceId: "approved-source",
+  });
+  allowed = false;
+  channel.receive({ type: "control-close", id: "request" });
+  allowed = true;
+  owned = false;
+  channel.receive({ type: "control-close", id: "request" });
+  expect(port.closeScreen).not.toHaveBeenCalled();
+  owned = true;
+  channel.receive({
+    type: "control-close",
+    id: "request",
+    sourceId: "unrelated-source",
+  });
+  expect(port.closeScreen).toHaveBeenCalledExactlyOnceWith(
+    "approved-source",
+  );
+  channel.receive({ type: "control-close", id: "request" });
+  expect(port.closeScreen).toHaveBeenCalledOnce();
+  session.reset();
+  expect(port.cancelScreenRequest).toHaveBeenLastCalledWith(
+    true,
+  );
+});
 const publication = (
   sourceId = "selected-source",
 ): NativeScreenPublication => ({
@@ -241,6 +311,62 @@ beforeEach(() => {
   vi.stubGlobal("MediaStream", Stream);
   receivers.length = 0;
 });
+
+it.each(["stop", "disconnect", "failure"])(
+  "handles %s during the transport close grace period without a false connection error",
+  async (ending) => {
+    const { session, channel, port } = setup();
+    session.setRemoteCapabilities({
+      screen: {
+        decode: { video: null, audio: null },
+        trickleIce: false,
+        multiScreen: false,
+      },
+    });
+    channel.receive({
+      type: "offer",
+      id: "closing",
+      sourceId: "screen",
+      sdp: "offer",
+    });
+    await flush();
+    receivers[0].failed(
+      new Error("Native control connection ended"),
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect(port.error).not.toHaveBeenCalled();
+    if (ending === "stop")
+      channel.receive({ type: "stop", id: "closing" });
+    else if (ending === "disconnect") session.reset();
+    await vi.advanceTimersByTimeAsync(1000);
+    if (ending === "failure") {
+      expect(port.error).toHaveBeenCalledOnce();
+      expect(channel.sent).toContainEqual({
+        type: "retry",
+        id: "closing",
+      });
+      expect(port.viewsChanged).toHaveBeenLastCalledWith([
+        { sourceId: "screen", error: "connection" },
+      ]);
+    } else {
+      expect(port.error).not.toHaveBeenCalled();
+      expect(
+        port.viewsChanged.mock.calls
+          .flatMap(([views]) => views)
+          .some((view) => view.error),
+      ).toBe(false);
+      expect(port.viewsChanged).toHaveBeenLastCalledWith(
+        [],
+      );
+      expect(
+        channel.sent.some(
+          (value) => value.type === "retry",
+        ),
+      ).toBe(false);
+    }
+    session.dispose();
+  },
+);
 
 it("retains a failed codec card without retry until the publisher explicitly stops", async () => {
   const { session, channel, port } = setup();
@@ -1529,6 +1655,7 @@ it("retries a failed control transport for the same shared source and binds a fr
   receivers[0].failed(
     new Error("Native control connection ended"),
   );
+  await vi.advanceTimersByTimeAsync(250);
   expect(controller?.state()).toBe("unavailable");
   expect(channel.sent.at(-1)).toEqual({
     type: "retry",
@@ -1736,7 +1863,10 @@ it.each(["stop", "failure"] as const)(
     start.mockRestore();
     if (reason === "stop")
       channel.receive({ type: "stop", id: "first" });
-    else receivers[0].failed(new Error("connection ended"));
+    else {
+      receivers[0].failed(new Error("connection ended"));
+      await vi.advanceTimersByTimeAsync(250);
+    }
     expect(pointer.state()).toBe("unavailable");
     expect(session.screenControl.state()).toBe("viewing");
     expect(channel.readyState).toBe("open");

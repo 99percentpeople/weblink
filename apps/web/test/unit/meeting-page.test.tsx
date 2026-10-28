@@ -715,7 +715,7 @@ describe("automation control status", () => {
       }
       expect(
         screen.queryByRole("button", {
-          name: "common.action.revoke",
+          name: "remote_control.end",
         }),
       ).toBeNull();
       const original = status();
@@ -738,7 +738,7 @@ describe("automation control status", () => {
       );
       fireEvent.click(
         screen.getByRole("button", {
-          name: "common.action.revoke",
+          name: "remote_control.end",
         }),
       );
       expect(fixture.revokeControl).toHaveBeenCalledOnce();
@@ -768,7 +768,7 @@ describe("automation control status", () => {
     ).toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "common.action.revoke",
+        name: "remote_control.end",
       }),
     );
     expect(fixture.revokeControl).toHaveBeenCalledOnce();

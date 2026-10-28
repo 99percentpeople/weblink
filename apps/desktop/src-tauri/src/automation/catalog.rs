@@ -46,6 +46,13 @@ pub fn validate(name: &str, args: &Value) -> Result<&'static Value, String> {
     }
     Ok(tool)
 }
+pub fn required_scopes<'a>(tool: &'a Value, args: &Value) -> Vec<&'a str> {
+    let mut scopes = vec![tool["scope"].as_str().expect("tool scope")];
+    if tool["name"] == "control.acquire" && args.get("sourceId").is_some() {
+        scopes.push("screen.manage");
+    }
+    scopes
+}
 #[cfg(test)]
 mod tests {
     use super::*;

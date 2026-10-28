@@ -1,7 +1,7 @@
 import { shortcutLabel } from "@/libs/domain/keyboard-shortcut";
 import { defaultRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { createSignal, Show, type JSX } from "solid-js";
-import { LoaderCircle } from "lucide-solid";
+import { LoaderCircle, X } from "lucide-solid";
 import { ControlIndicatorIcon } from "@/components/common/control-indicator";
 import { IconStop } from "@/components/icons";
 import { t } from "@/i18n";
@@ -14,6 +14,7 @@ export function MeetingControlStatus(props: {
   emergencyShortcut?: string;
   children?: JSX.Element;
   revoke?(): void | Promise<void>;
+  closeScreen?(): void;
 }) {
   const [revoking, setRevoking] = createSignal(false);
   const shortLabel = () =>
@@ -39,12 +40,7 @@ export function MeetingControlStatus(props: {
           { name: props.name },
         )
       : shortLabel();
-  const actionLabel = () =>
-    t(
-      props.side === "controller"
-        ? "remote_control.end"
-        : "common.action.revoke",
-    );
+  const actionLabel = () => t("remote_control.end");
   const title = (text: string) =>
     props.side === "controller"
       ? text
@@ -96,6 +92,21 @@ export function MeetingControlStatus(props: {
               aria-hidden="true"
             />
           </Show>
+        </button>
+      </Show>
+      <Show when={props.closeScreen}>
+        <span
+          class="meeting-status-divider"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          class="meeting-status-action"
+          title={t("remote_control.close_screen")}
+          aria-label={t("remote_control.close_screen")}
+          onClick={() => props.closeScreen?.()}
+        >
+          <X class="size-4" aria-hidden="true" />
         </button>
       </Show>
     </div>

@@ -43,6 +43,7 @@ mod tests {
         s.tickets.insert(
             "active".into(),
             Ticket {
+                screen_grant: None,
                 principal,
                 call: Call {
                     name: "diagnostics.snapshot".into(),

@@ -351,6 +351,7 @@ mod tests {
         s.tickets.insert(
             "ticket".into(),
             Ticket {
+                screen_grant: None,
                 principal: principal.clone(),
                 call: Call {
                     source: None,

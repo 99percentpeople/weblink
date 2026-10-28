@@ -103,6 +103,17 @@ export function createAppState(
   const screenSharing = createScreenSharing({
     stream: localStream,
     publish: localStreamService.replace,
+    controller: () => {
+      const status = sessionService.remoteControl.status();
+      return !status.closed &&
+        status.clientId &&
+        status.sourceId
+        ? {
+            sourceId: status.sourceId,
+            clientId: status.clientId,
+          }
+        : undefined;
+    },
     controlledSource: () => {
       const status = sessionService.remoteControl.status();
       return !status.closed && status.grantId

@@ -130,19 +130,56 @@ impl Service {
             .pending
             .iter()
             .filter(|(_, p)| {
-                p.principal.kind == "peer" && p.principal.id == id && changed(&p.scope)
+                p.principal.kind == "peer"
+                    && p.principal.id == id
+                    && (changed(&p.scope)
+                        || catalog::find(&p.call.name).is_ok_and(|tool| {
+                            catalog::required_scopes(tool, &p.call.arguments)
+                                .iter()
+                                .any(|scope| changed(scope))
+                        }))
             })
             .map(|(key, _)| key.clone())
             .collect();
         for key in pending {
             let p = s.pending.remove(&key).unwrap();
-            let allow = p.deadline > Instant::now()
-                && Self::peer_decision(&s, &principal, &p.scope) == Decision::Allow
-                && p.call.arguments["target"] == "local";
-            if allow {
-                Self::policy_grant(&mut s, &principal, &p.scope);
+            let scopes: Vec<String> = catalog::find(&p.call.name)
+                .map(|tool| {
+                    catalog::required_scopes(tool, &p.call.arguments)
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_else(|_| vec![p.scope.clone()]);
+            if p.deadline <= Instant::now()
+                || p.call.arguments["target"] != "local"
+                || scopes
+                    .iter()
+                    .any(|scope| Self::peer_decision(&s, &principal, scope) == Decision::Deny)
+            {
+                let _ = p.answer.send(false);
+                continue;
             }
-            let _ = p.answer.send(allow);
+            for scope in &scopes {
+                if Self::peer_decision(&s, &principal, scope) == Decision::Allow {
+                    Self::policy_grant(&mut s, &principal, scope);
+                }
+            }
+            let missing = scopes.iter().find(|scope| {
+                !s.grants.values().any(|g| {
+                    g.principal.id == principal.id
+                        && g.principal.kind == principal.kind
+                        && g.target == "local"
+                        && g.scopes.contains(scope)
+                        && Self::grant_live(&s, g)
+                })
+            });
+            if missing.is_some() {
+                // Consent is grouped; keep the identity of an already displayed request.
+                s.pending.insert(key, p);
+            } else {
+                let _ = p.answer.send(true);
+            }
         }
         Ok(())
     }

@@ -50,6 +50,7 @@ fn install(
     s.tickets.insert(
         id.into(),
         Ticket {
+            screen_grant: None,
             principal,
             call: call("diagnostics.snapshot", target),
             grant: id.into(),

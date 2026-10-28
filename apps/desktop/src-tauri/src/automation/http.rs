@@ -20,11 +20,13 @@ struct Handler(Shared);
 impl ServerHandler for Handler {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(concat!(
-            "Weblink automation. Explicit targets. A valid MCP token authorizes forwarding and device discovery. ",
-            "Local diagnostic tools are always available; other local calls require local automation to be enabled. Remote calls follow the destination device's permissions. ",
-            "Calls never approve their own remote permissions. ",
-            "For desktop input, use a live native monitor track (sessions.list or screen.start), call control.acquire once, ",
-            "then call control.pointer/key/text directly. No bindWindow or accessibility focus call is needed. ",
+            "Weblink automation. Use explicit targets. ",
+            "For desktop input, choose kind=monitor from screen.sources, then call control.acquire with that sourceId to prepare sharing and control in one step. ",
+            "Use screen.start for sharing without control. An existing live native monitor trackId from sessions.list is also accepted by control.acquire; supply only one ID. ",
+            "After acquisition, call control.pointer/key/text directly, then control.release to end input. Successful sharing persists after control release or caller disconnection; use screen.stop to close the picture for the entire room. No bindWindow or accessibility focus call is needed. ",
+            "Keep the returned trackId for screen.configure; sourceId and geometryRevision address physical pointer coordinates. ",
+            "A valid MCP token authorizes forwarding and device discovery. Local diagnostic tools are always available; other local calls require local automation to be enabled. ",
+            "Remote calls follow the destination device's permissions. Calls never approve their own remote permissions. ",
             "Keys/text go to the current foreground application; pointer actions use physical desktop coordinates. ",
             "Use bindWindow only when window confinement is explicitly wanted. To remove an existing binding, release and acquire again. ",
             "Loss of the bound window during input or accessibility actions is reported as WINDOW_FOCUS_LOST, including closure. ",

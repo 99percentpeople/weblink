@@ -11,10 +11,12 @@ import type {
 export type ScreenControlSignal =
   | { type: "control-request"; id: string }
   | { type: "control-cancel"; id: string }
+  | { type: "control-close"; id: string }
   | {
       type: "control-result";
       id: string;
       sourceId?: string;
+      closable?: true;
     };
 
 /** Avatar action hands off to the existing screen pointer after consent and publication. */
@@ -37,6 +39,11 @@ export class ScreenControlRequest extends EventTarget {
   private pointer?: RemotePointer;
   private stopWatching?: () => void;
   private requestedPointer = false;
+  private sharing?: {
+    id: string;
+    sourceId: string;
+    pointer?: RemotePointer;
+  };
   constructor(
     private readonly send: (
       value: ScreenControlSignal,
@@ -71,7 +78,10 @@ export class ScreenControlRequest extends EventTarget {
     this.dispatchEvent(new Event("change"));
   }
   setAvailable(available: boolean) {
-    if (!available) this.reset();
+    if (!available) {
+      this.reset();
+      this.sharing = undefined;
+    }
     this.available = available;
     this.changed();
   }
@@ -104,8 +114,20 @@ export class ScreenControlRequest extends EventTarget {
       return;
     }
     this.pending.sourceId = value.sourceId;
+    if (value.closable)
+      this.sharing = {
+        id: value.id,
+        sourceId: value.sourceId,
+      };
   }
   attach(sourceId: string, pointer: RemotePointer) {
+    if (
+      this.sharing?.sourceId === sourceId &&
+      this.sharing.pointer !== pointer
+    ) {
+      this.sharing.pointer = pointer;
+      this.changed();
+    }
     if (
       this.pending?.sourceId !== sourceId ||
       this.pointer === pointer
@@ -132,7 +154,12 @@ export class ScreenControlRequest extends EventTarget {
       pointer.removeEventListener("change", changed);
     changed();
   }
-  detach(pointer: RemotePointer) {
+  detach(pointer: RemotePointer, preserve = false) {
+    if (this.sharing?.pointer === pointer) {
+      if (preserve) this.sharing.pointer = undefined;
+      else this.sharing = undefined;
+      this.changed();
+    }
     if (this.pointer !== pointer) return;
     // The screen ended, but the peer can still accept a fresh avatar request.
     this.reset();
@@ -144,6 +171,26 @@ export class ScreenControlRequest extends EventTarget {
     this.reset();
     if (id) this.send({ type: "control-cancel", id });
     pointer?.cancel();
+    this.changed();
+  }
+  canClose(pointer: RemotePointer | undefined): boolean {
+    const status = this.hostStatus;
+    return (
+      !!pointer &&
+      this.sharing?.pointer === pointer &&
+      !(
+        status?.state === "controlled" &&
+        status.sourceId === this.sharing.sourceId &&
+        status.clientId !== this.clientId
+      )
+    );
+  }
+  closeScreen(pointer: RemotePointer) {
+    if (!this.canClose(pointer)) return;
+    const id = this.sharing!.id;
+    pointer.cancel();
+    this.send({ type: "control-close", id });
+    this.reset();
     this.changed();
   }
   reset() {

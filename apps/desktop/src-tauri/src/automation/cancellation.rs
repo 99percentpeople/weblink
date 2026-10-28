@@ -39,6 +39,19 @@ impl Service {
                     && catalog::find(&t.call.name)
                         .is_ok_and(|tool| g.scopes.iter().any(|scope| tool["scope"] == *scope))
             })
+            || (t.call.name == "control.acquire"
+                && t.call.arguments.get("sourceId").is_some()
+                && !t
+                    .screen_grant
+                    .as_ref()
+                    .and_then(|id| s.grants.get(id))
+                    .is_some_and(|g| {
+                        Self::grant_live(s, g)
+                            && g.principal.id == t.principal.id
+                            && g.principal.kind == t.principal.kind
+                            && g.covers_target(&t.call.arguments["target"])
+                            && g.scopes.iter().any(|scope| scope == "screen.manage")
+                    }))
         {
             return Err("GRANT_EXPIRED".into());
         }

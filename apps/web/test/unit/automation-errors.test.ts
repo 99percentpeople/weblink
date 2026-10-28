@@ -7,6 +7,26 @@ import {
 } from "@weblink/automation";
 
 describe("automation error recovery contract", () => {
+  it("routes missing control or capture to acquisition without allowing blind retries", () => {
+    for (const code of [
+      "CONTROL_REQUIRED",
+      "CAPTURE_REQUIRED",
+    ]) {
+      expect(failureDetails(code)).toMatchObject({
+        code,
+        nextAction: "acquire_control",
+        outcome: "unknown",
+        retryable: false,
+      });
+    }
+    expect(failureDetails("RESOURCE_CLOSED")).toMatchObject(
+      {
+        nextAction: "observe",
+        outcome: "unknown",
+        retryable: false,
+      },
+    );
+  });
   it("does not treat a lost mutation response or cancellation as safe to retry", () => {
     for (const code of [
       "TIMEOUT",

@@ -84,6 +84,7 @@ fn fixture(name: &str) -> Shared {
     s.tickets.insert(
         "ticket".into(),
         Ticket {
+            screen_grant: None,
             principal,
             call: Call {
                 source: None,

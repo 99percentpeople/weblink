@@ -1384,6 +1384,7 @@
     "waiting": "En attente d'approbation",
     "cancel": "Annuler la demande",
     "end": "Terminer le contrôle",
+    "close_screen": "Fermer le partage d’écran",
     "more_choices": "Plus d'options d'approbation",
     "allow_remember": "Approuver et ajouter à la liste blanche",
     "deny_remember": "Rejeter et ajouter à la liste de blocage",

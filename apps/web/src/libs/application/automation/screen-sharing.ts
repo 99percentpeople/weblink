@@ -9,14 +9,23 @@ export interface AutomationScreenAuthority {
   grantId: string;
   /** Screen and input scopes may have been approved separately. */
   screenGrantIds: readonly string[];
+  /** Required when control acquisition also prepares capture. */
+  screenGrantId?: string;
+  /** Verified native principal, never read from tool arguments. */
+  requesterId?: string;
 }
 
+interface ScreenUse {
+  shared: SharedScreen;
+  established?: boolean;
+}
+interface ScreenEntry {
+  screen?: ScreenUse;
+  control?: ScreenUse;
+}
 interface Owner {
   abort: AbortController;
-  screens: Map<
-    string,
-    { shared: SharedScreen; lease?: string }
-  >;
+  screens: Map<string, ScreenEntry>;
 }
 
 /** Native permission IDs fence cleanup across callers, reconnects and reapproval. */
@@ -30,6 +39,8 @@ export class AutomationScreenShares {
     signal: AbortSignal,
     capture: (signal: AbortSignal) => Promise<MediaStream>,
     check: () => Promise<void>,
+    purpose: "screen" | "control" = "screen",
+    requesterId?: string,
   ): Promise<SharedScreen> {
     if (!id) throw new AutomationError("PERMISSION_DENIED");
     let owner = this.owners.get(id);
@@ -51,16 +62,22 @@ export class AutomationScreenShares {
         () => capture(lifetime.signal),
         check,
         true,
+        requesterId,
       );
       if (lifetime.signal.aborted) {
         shared.release();
         lifetime.signal.throwIfAborted();
       }
-      const previous = owner.screens.get(shared.trackId);
+      let entry = owner.screens.get(shared.trackId);
+      if (!entry) {
+        entry = {};
+        owner.screens.set(shared.trackId, entry);
+      }
+      const previous = entry[purpose];
       if (previous) shared.release();
       else {
-        const entry = { shared };
-        owner.screens.set(shared.trackId, entry);
+        const use: ScreenUse = { shared };
+        entry[purpose] = use;
         const current = owner;
         // Cancellation after publication but before the tool reply must not
         // leak a share, or cancel an earlier successful start of the same track.
@@ -68,11 +85,17 @@ export class AutomationScreenShares {
           "abort",
           () => {
             if (
-              current.screens.get(shared.trackId) !== entry
+              use.established ||
+              current.screens.get(shared.trackId)?.[
+                purpose
+              ] !== use
             )
               return;
-            current.screens.delete(shared.trackId);
-            shared.release();
+            this.removeUse(
+              current,
+              shared.trackId,
+              purpose,
+            );
           },
           { once: true },
         );
@@ -83,29 +106,29 @@ export class AutomationScreenShares {
     }
   }
 
-  acquired(
-    id: string | undefined,
-    track: string,
-    lease: string,
-  ) {
+  retain(id: string | undefined, track: string) {
     const owner = id && this.owners.get(id);
     if (!owner) return;
-    for (const [key, entry] of owner.screens) {
-      if (key === track) entry.lease = lease;
-      else if (entry.lease && entry.lease !== lease) {
-        owner.screens.delete(key);
-        entry.shared.release();
-      }
+    const entry = owner.screens.get(track);
+    for (const use of [entry?.screen, entry?.control]) {
+      if (!use) continue;
+      const video = use.shared.stream.getVideoTracks()[0];
+      this.sharing.retain(video);
+      use.established = true;
     }
   }
 
   failedAcquire(id: string | undefined, track: string) {
     const owner = id && this.owners.get(id);
-    const entry = owner && owner.screens.get(track);
-    if (owner && entry && !entry.lease) {
-      owner.screens.delete(track);
-      entry.shared.release();
-    }
+    const entry = owner
+      ? owner.screens.get(track)
+      : undefined;
+    if (
+      owner &&
+      entry?.control &&
+      !entry.control.established
+    )
+      this.removeUse(owner, track, "control");
   }
 
   stop(ids: readonly string[], track: string) {
@@ -114,16 +137,34 @@ export class AutomationScreenShares {
       const owner = this.owners.get(id);
       const entry = owner?.screens.get(track);
       if (!owner || !entry) continue;
-      shared = entry.shared;
-      owner.screens.delete(track);
-      shared.release();
+      shared = (entry.screen ?? entry.control)?.shared;
     }
-    if (!shared)
+    if (!shared || !shared.createdByCaller)
       throw new AutomationError("PERMISSION_DENIED");
+    if (!shared.close())
+      throw new AutomationError("CONTROL_BUSY");
+    for (const owner of this.owners.values()) {
+      this.removeUse(owner, track, "screen");
+      this.removeUse(owner, track, "control");
+    }
     const stopped = shared.stream
       .getVideoTracks()
       .every((t) => t.readyState !== "live");
     return { stopped, released: true, retained: !stopped };
+  }
+
+  private removeUse(
+    owner: Owner,
+    track: string,
+    purpose: keyof ScreenEntry,
+  ) {
+    const entry = owner.screens.get(track);
+    const use = entry?.[purpose];
+    if (!entry || !use) return;
+    delete entry[purpose];
+    if (!entry.screen && !entry.control)
+      owner.screens.delete(track);
+    use.shared.release();
   }
 
   release(id: string | undefined) {
@@ -132,23 +173,15 @@ export class AutomationScreenShares {
     if (!owner) return;
     this.owners.delete(id);
     owner.abort.abort();
-    for (const { shared } of owner.screens.values())
-      shared.release();
+    for (const entry of owner.screens.values()) {
+      entry.screen?.shared.release();
+      entry.control?.shared.release();
+    }
   }
 
-  synchronize(
-    grants: readonly string[],
-    lease: string | null,
-  ) {
-    for (const [id, owner] of this.owners) {
+  synchronize(grants: readonly string[]) {
+    for (const id of this.owners.keys()) {
       if (!grants.includes(id)) this.release(id);
-      else
-        for (const [track, entry] of owner.screens) {
-          if (entry.lease && entry.lease !== lease) {
-            owner.screens.delete(track);
-            entry.shared.release();
-          }
-        }
     }
   }
 

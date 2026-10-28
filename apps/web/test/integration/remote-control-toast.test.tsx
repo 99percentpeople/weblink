@@ -324,6 +324,7 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
             name={active().name}
             emergencyShortcut="ctrl-alt-f8"
             revoke={active().revoke}
+            closeScreen={stop}
           />
         )}
       </Show>
@@ -331,7 +332,7 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   ));
   expect(
     screen.queryByRole("button", {
-      name: "common.action.revoke",
+      name: "remote_control.end",
     }),
   ).toBeNull();
   setController({ name: "Alice", revoke });
@@ -341,11 +342,11 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
     }),
   ).toHaveTextContent("Alice");
   const button = screen.getByRole("button", {
-    name: "common.action.revoke",
+    name: "remote_control.end",
   });
   expect(button).toHaveAttribute(
     "title",
-    "common.action.revoke · Ctrl + Alt + F8",
+    "remote_control.end · Ctrl + Alt + F8",
   );
   fireEvent.click(button);
   fireEvent.click(button);
@@ -354,10 +355,17 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   expect(stop).not.toHaveBeenCalled();
   finish!();
   await waitFor(() => expect(button).not.toBeDisabled());
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  );
+  expect(stop).toHaveBeenCalledOnce();
+  expect(revoke).toHaveBeenCalledOnce();
   setController(undefined);
   expect(
     screen.queryByRole("button", {
-      name: "common.action.revoke",
+      name: "remote_control.end",
     }),
   ).toBeNull();
   expect(

@@ -7,6 +7,7 @@ import {
 } from "vitest";
 import { createScreenSharing } from "@/libs/application/screen-sharing";
 import { AutomationScreenShares } from "@/libs/application/automation/screen-sharing";
+import { RemoteScreenConsent } from "@/libs/application/remote-screen-consent";
 import { createLocalStreamService } from "@/libs/application/local-stream-service";
 import {
   getMeetingAudioSource,
@@ -83,6 +84,263 @@ function setup() {
 }
 const signal = () => new AbortController().signal;
 
+it("keeps manual close ownership with the creator across a third person's control and reuse", async () => {
+  const local = createLocalStreamService();
+  let controller:
+    | { sourceId: string; clientId: string }
+    | undefined;
+  const sharing = createScreenSharing({
+    stream: local.stream,
+    publish: local.replace,
+    controller: () => controller,
+  });
+  const consent = new RemoteScreenConsent();
+  const capture = vi.fn(async () => screen());
+  consent.share = async (signal, clientId) => {
+    const shared = await sharing.start(
+      "monitor",
+      signal,
+      capture,
+      async () => {},
+      true,
+      clientId,
+    );
+    return {
+      sourceId: "monitor",
+      release: shared.release,
+      retain: () =>
+        sharing.retain(shared.stream.getVideoTracks()[0]),
+      canClose: shared.canClose,
+      close: shared.createdByCaller
+        ? shared.close
+        : undefined,
+    };
+  };
+  const acquire = async (client: string) => {
+    const pending = consent.request(
+      client,
+      client,
+      signal(),
+    );
+    await consent.respond(
+      consent.pending()[0].consentId,
+      true,
+    );
+    expect(await pending).toBe("monitor");
+    consent.consume(client, client, "monitor");
+  };
+  await acquire("alice");
+  expect(
+    consent.canClose("alice", "alice", "monitor"),
+  ).toBe(true);
+  await acquire("bob");
+  controller = { sourceId: "monitor", clientId: "bob" };
+  expect(capture).toHaveBeenCalledOnce();
+  expect(consent.closeScreen("bob", "bob", "monitor")).toBe(
+    false,
+  );
+  expect(
+    consent.closeScreen("alice", "alice", "monitor"),
+  ).toBe(false);
+  expect(
+    local.stream()?.getVideoTracks()[0].readyState,
+  ).toBe("live");
+  controller = undefined;
+  expect(
+    consent.closeScreen("alice", "alice", "monitor"),
+  ).toBe(true);
+  expect(local.stream()).toBeNull();
+  consent.close();
+});
+
+it("blocks MCP closure during another controller's turn without transferring ownership to that caller", async () => {
+  const local = createLocalStreamService();
+  let controller:
+    | { sourceId: string; clientId: string }
+    | undefined;
+  const sharing = createScreenSharing({
+    stream: local.stream,
+    publish: local.replace,
+    controller: () => controller,
+  });
+  const automation = new AutomationScreenShares(sharing);
+  const start = (caller: string) =>
+    automation.start(
+      caller,
+      "monitor",
+      signal(),
+      async () => screen(),
+      async () => {},
+      "control",
+      caller,
+    );
+  const a = await start("alice");
+  automation.retain("alice", a.trackId);
+  const b = await start("bob");
+  expect(b.trackId).toBe(a.trackId);
+  controller = { sourceId: "monitor", clientId: "bob" };
+  expect(() => automation.stop(["bob"], b.trackId)).toThrow(
+    "PERMISSION_DENIED",
+  );
+  expect(() =>
+    automation.stop(["alice"], a.trackId),
+  ).toThrow("CONTROL_BUSY");
+  expect(local.stream()).not.toBeNull();
+  controller = { sourceId: "monitor", clientId: "alice" };
+  expect(
+    automation.stop(["alice"], a.trackId).stopped,
+  ).toBe(true);
+  expect(local.stream()).toBeNull();
+});
+
+it("reserves a source to the host when they explicitly share an existing requested screen", async () => {
+  const { local, share } = setup();
+  const original = await share.start(
+    "monitor",
+    signal(),
+    async () => screen(),
+    async () => {},
+    true,
+    "alice",
+  );
+  expect(original.canClose()).toBe(true);
+  const manual = await share.start(
+    "monitor",
+    signal(),
+    async () => screen(),
+  );
+  expect(manual.reused).toBe(true);
+  expect(original.createdByCaller).toBe(false);
+  expect(original.close()).toBe(false);
+  expect(local.stream()).not.toBeNull();
+  share.stop(manual.stream.getVideoTracks()[0]);
+  expect(local.stream()).toBeNull();
+});
+
+it("transfers a successful manual share to the room before the controller disconnects", async () => {
+  const { local, share } = setup();
+  const consent = new RemoteScreenConsent();
+  const stream = screen();
+  consent.share = async (signal) => {
+    const shared = await share.start(
+      "monitor",
+      signal,
+      async () => stream,
+      async () => {},
+      true,
+    );
+    return {
+      sourceId: "monitor",
+      release: shared.release,
+      retain: () =>
+        share.retain(stream.getVideoTracks()[0]),
+    };
+  };
+  const request = consent.request(
+    "alice",
+    "peer",
+    signal(),
+  );
+  await consent.respond(
+    consent.pending()[0].consentId,
+    true,
+  );
+  expect(await request).toBe("monitor");
+  consent.consume("alice", "peer", "monitor");
+  consent.synchronize(null, null);
+  consent.cancelPeer("alice", "peer");
+  consent.close();
+  share.synchronize();
+  expect(local.stream()?.getTracks()).toEqual(
+    stream.getTracks(),
+  );
+  expect(
+    stream
+      .getTracks()
+      .every((track) => track.readyState === "live"),
+  ).toBe(true);
+  share.stop(stream.getVideoTracks()[0]);
+  expect(local.stream()).toBeNull();
+});
+
+it.each(["screen", "control"] as const)(
+  "keeps an established %s picture after control and permission lifetime end until explicit close",
+  async (purpose) => {
+    const { local, share } = setup();
+    const automation = new AutomationScreenShares(share);
+    const stream = screen();
+    const first = await automation.start(
+      "a",
+      "monitor",
+      signal(),
+      async () => stream,
+      async () => {},
+      purpose,
+      "agent",
+    );
+    automation.retain("a", first.trackId);
+    automation.synchronize([]);
+    expect(local.stream()?.getTracks()).toEqual(
+      stream.getTracks(),
+    );
+    const capture = vi.fn(async () => screen());
+    const next = await automation.start(
+      "b",
+      "monitor",
+      signal(),
+      capture,
+      async () => {},
+      purpose,
+      "agent",
+    );
+    expect(next.trackId).toBe(first.trackId);
+    expect(capture).not.toHaveBeenCalled();
+    expect(() =>
+      automation.stop(["a"], first.trackId),
+    ).toThrow("PERMISSION_DENIED");
+    automation.stop(["b"], next.trackId);
+    expect(local.stream()).toBeNull();
+    expect(
+      stream
+        .getTracks()
+        .every((track) => track.readyState === "ended"),
+    ).toBe(true);
+  },
+);
+
+it.each(["screen", "control"] as const)(
+  "cancels a pending %s use while keeping the other established use",
+  async (purpose) => {
+    const { local, share } = setup();
+    const automation = new AutomationScreenShares(share);
+    const first = await automation.start(
+      "a",
+      "monitor",
+      signal(),
+      async () => screen(),
+      async () => {},
+      purpose === "screen" ? "control" : "screen",
+    );
+    automation.retain("a", first.trackId);
+    const abort = new AbortController();
+    await automation.start(
+      "a",
+      "monitor",
+      abort.signal,
+      async () => screen(),
+      async () => {},
+      purpose,
+    );
+    abort.abort();
+    automation.synchronize([]);
+    expect(local.stream()?.getVideoTracks()[0].id).toBe(
+      first.trackId,
+    );
+    local.clear();
+    expect(local.stream()).toBeNull();
+  },
+);
+
 it("cancels a published automation start but preserves explicit user retention", async () => {
   const { local, share } = setup();
   const automation = new AutomationScreenShares(share);
@@ -117,7 +375,7 @@ it("cancels a published automation start but preserves explicit user retention",
   local.dispose();
 });
 
-it("releases only the caller's automation share and preserves a manual publication", async () => {
+it("cannot close a manually published screen by claiming it through automation", async () => {
   const { local, share } = setup();
   const automation = new AutomationScreenShares(share);
   const stream = screen();
@@ -129,6 +387,8 @@ it("releases only the caller's automation share and preserves a manual publicati
       signal(),
       async () => screen(),
       async () => {},
+      "screen",
+      "agent",
     );
   const a = await start("permission-a");
   const b = await start("permission-b");
@@ -136,17 +396,11 @@ it("releases only the caller's automation share and preserves a manual publicati
   expect(() =>
     automation.stop(["foreign"], a.trackId),
   ).toThrow("PERMISSION_DENIED");
-  expect(
+  expect(() =>
     automation.stop(["permission-a"], a.trackId),
-  ).toEqual({
-    stopped: false,
-    released: true,
-    retained: true,
-  });
+  ).toThrow("PERMISSION_DENIED");
   automation.release("permission-b");
-  expect(local.stream()?.getTracks()).toEqual(
-    stream.getTracks(),
-  );
+  expect(local.stream()).not.toBeNull();
   local.dispose();
 });
 
@@ -161,6 +415,8 @@ it("closes an automation-created picture and audio only after its final owner ex
       signal(),
       async () => stream,
       async () => {},
+      "screen",
+      "agent",
     );
   const first = await start("a");
   await start("a");
@@ -179,7 +435,7 @@ it("closes an automation-created picture and audio only after its final owner ex
     expect(track.stop).toHaveBeenCalledOnce();
 });
 
-it("keeps a handed-off temporary screen alive until the new native controller exits", async () => {
+it("keeps an established screen after both automation and manual control exit", async () => {
   const local = createLocalStreamService();
   let controlled: string | undefined;
   const share = createScreenSharing({
@@ -197,23 +453,22 @@ it("keeps a handed-off temporary screen alive until the new native controller ex
     signal(),
     async () => screen(),
     async () => {},
+    "control",
   );
   expect(local.stream()).not.toBeNull();
-  automation.acquired(
-    "a",
-    temporary.trackId,
-    "automation-lease",
-  );
+  automation.retain("a", temporary.trackId);
   controlled = "monitor";
   // Manual handoff has committed before the old automation observes its lease end.
-  automation.synchronize(["a"], null);
+  automation.synchronize(["a"]);
   expect(local.stream()).not.toBeNull();
   controlled = undefined;
   share.synchronize();
+  expect(local.stream()).not.toBeNull();
+  share.stop(temporary.stream.getVideoTracks()[0]);
   expect(local.stream()).toBeNull();
 });
 
-it("releases the old automation monitor on a fresh lease, then cleans up on revocation", async () => {
+it("keeps both shared monitors after switching control and revoking the caller", async () => {
   const { local, share } = setup();
   const automation = new AutomationScreenShares(share);
   const start = (source: string) =>
@@ -223,20 +478,23 @@ it("releases the old automation monitor on a fresh lease, then cleans up on revo
       signal(),
       async () => screen(source),
       async () => {},
+      "control",
     );
   const a = await start("monitor-a");
-  automation.acquired("a", a.trackId, "lease-a");
+  automation.retain("a", a.trackId);
   const b = await start("monitor-b");
-  automation.acquired("a", b.trackId, "lease-b");
+  automation.retain("a", b.trackId);
   expect(
     local
       .stream()
       ?.getVideoTracks()
       .map((t) => t.id),
-  ).toEqual([b.trackId]);
-  automation.synchronize(["a"], "lease-b");
+  ).toEqual([a.trackId, b.trackId]);
+  automation.synchronize(["a"]);
   expect(local.stream()).not.toBeNull();
-  automation.synchronize([], null);
+  automation.synchronize([]);
+  expect(local.stream()).not.toBeNull();
+  local.clear();
   expect(local.stream()).toBeNull();
 });
 
@@ -249,14 +507,16 @@ it("cleans up failed acquisition without releasing an already active share", asy
     signal(),
     async () => screen("a"),
     async () => {},
+    "control",
   );
-  automation.acquired("a", a.trackId, "lease-a");
+  automation.retain("a", a.trackId);
   const b = await automation.start(
     "a",
     "b",
     signal(),
     async () => screen("b"),
     async () => {},
+    "control",
   );
   automation.failedAcquire("a", b.trackId);
   automation.failedAcquire("a", a.trackId);
@@ -267,6 +527,8 @@ it("cleans up failed acquisition without releasing an already active share", asy
       .map((t) => t.id),
   ).toEqual([a.trackId]);
   automation.dispose();
+  expect(local.stream()).not.toBeNull();
+  local.clear();
   expect(local.stream()).toBeNull();
 });
 

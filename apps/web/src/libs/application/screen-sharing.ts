@@ -9,6 +9,9 @@ interface ScreenSharingPort {
   publish(stream: MediaStream): void;
   /** A live native grant also owns its screen, including a completed handoff. */
   controlledSource?(): string | undefined;
+  controller?():
+    | { sourceId: string; clientId: string }
+    | undefined;
 }
 
 export interface SharedScreen {
@@ -16,6 +19,10 @@ export interface SharedScreen {
   sourceId: string;
   reused: boolean;
   stream: MediaStream;
+  /** Reusing a picture never transfers its creator's close permission. */
+  readonly createdByCaller: boolean;
+  canClose(): boolean;
+  close(): boolean;
   /** Releases only this control request's temporary ownership. */
   release(): void;
 }
@@ -24,6 +31,7 @@ interface Publication {
   track: MediaStreamTrack;
   stream: MediaStream;
   persistent: boolean;
+  requesterId?: string;
   owners: Set<symbol>;
 }
 
@@ -74,6 +82,23 @@ export function createScreenSharing(
     const publication = publications.get(track);
     if (publication) publication.persistent = true;
   };
+  const stop = (track: MediaStreamTrack) => {
+    const publication = publications.get(track);
+    if (!publication) return;
+    publications.delete(track);
+    const owned = new Set(publication.stream.getTracks());
+    const current = port.stream();
+    if (
+      current?.getTracks().some((track) => owned.has(track))
+    )
+      port.publish(
+        new MediaStream(
+          current
+            .getTracks()
+            .filter((track) => !owned.has(track)),
+        ),
+      );
+  };
   const synchronize = () => {
     const live = new Set<MediaStreamTrack>(
       port.stream()?.getVideoTracks() ?? [],
@@ -93,16 +118,49 @@ export function createScreenSharing(
     sourceId: string,
     reused: boolean,
     temporary: boolean,
+    requesterId?: string,
   ): SharedScreen => {
-    if (!temporary) publication.persistent = true;
+    if (!temporary) {
+      publication.persistent = true;
+      publication.requesterId = undefined;
+    }
     const owner = Symbol();
     publication.owners.add(owner);
     let released = false;
+    const createdByCaller = () =>
+      !!requesterId &&
+      publication.requesterId === requesterId;
+    const canClose = () => {
+      if (
+        !createdByCaller() ||
+        publications.get(publication.track) !==
+          publication ||
+        publication.track.readyState !== "live"
+      )
+        return false;
+      const control = port.controller?.();
+      return (
+        !control ||
+        control.sourceId !==
+          getNativeScreenPublication(publication.track)
+            ?.sourceId ||
+        control.clientId === requesterId
+      );
+    };
     return {
       trackId: publication.track.id,
       sourceId,
       reused,
       stream: publication.stream,
+      get createdByCaller() {
+        return createdByCaller();
+      },
+      canClose,
+      close: () => {
+        if (!canClose()) return false;
+        stop(publication.track);
+        return true;
+      },
       release: () => {
         if (released) return;
         released = true;
@@ -147,6 +205,7 @@ export function createScreenSharing(
     capture: () => Promise<MediaStream>,
     check: () => Promise<void> = async () => {},
     temporary = false,
+    requesterId?: string,
   ): Promise<SharedScreen> => {
     const request = (
       pending.get(sourceId) ?? Promise.resolve()
@@ -162,6 +221,7 @@ export function createScreenSharing(
             sourceId,
             true,
             temporary,
+            requesterId,
           );
         const stream = await capture();
         const stop = () =>
@@ -179,6 +239,7 @@ export function createScreenSharing(
               sourceId,
               true,
               temporary,
+              requesterId,
             );
           }
           const track = stream
@@ -190,6 +251,9 @@ export function createScreenSharing(
             track,
             stream,
             persistent: !temporary,
+            requesterId: temporary
+              ? requesterId
+              : undefined,
             owners: new Set(),
           };
           registerScreenStream(stream);
@@ -205,6 +269,7 @@ export function createScreenSharing(
             sourceId,
             false,
             temporary,
+            requesterId,
           );
           port.publish(
             new MediaStream([
@@ -229,7 +294,7 @@ export function createScreenSharing(
         pending.delete(sourceId);
     }
   };
-  return { start, retain, synchronize };
+  return { start, retain, stop, synchronize };
 }
 
 export type ScreenSharing = ReturnType<

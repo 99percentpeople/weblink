@@ -18,6 +18,96 @@ const accepts = (
   );
 
 describe("published automation output contracts", () => {
+  it("describes reusable stream handles without requiring added fields from older targets", () => {
+    const legacy = {
+      acquired: true,
+      reused: false,
+      sourceId: "monitor",
+      coordinateSpace: "desktopPhysicalPixels",
+      geometryRevision: "geometry",
+      bounds: {
+        left: 0,
+        top: 0,
+        width: 1920,
+        height: 1080,
+      },
+    };
+    expect(accepts("control.acquire", legacy)).toBe(true);
+    expect(
+      accepts("control.acquire", {
+        ...legacy,
+        trackId: "track",
+      }),
+    ).toBe(true);
+    for (const shareReused of [false, true]) {
+      expect(
+        accepts("control.acquire", {
+          ...legacy,
+          trackId: "track",
+          shareReused,
+        }),
+      ).toBe(true);
+      expect(
+        accepts("screen.start", {
+          trackId: "track",
+          sourceId: "monitor",
+          reused: shareReused,
+        }),
+      ).toBe(true);
+    }
+    expect(
+      accepts("screen.start", {
+        trackId: "track",
+        sourceId: "monitor",
+      }),
+    ).toBe(true);
+    expect(
+      accepts("screen.start", {
+        trackId: "track",
+        sourceId: "monitor",
+        reused: "yes",
+      }),
+    ).toBe(false);
+    expect(
+      accepts("control.acquire", {
+        ...legacy,
+        trackId: "",
+      }),
+    ).toBe(false);
+    expect(
+      accepts("control.acquire", {
+        ...legacy,
+        shareReused: "yes",
+      }),
+    ).toBe(false);
+    expect(
+      accepts("sessions.list", {
+        localTracks: [
+          {
+            id: "track",
+            sourceId: "publication",
+            captureSourceId: "monitor",
+            state: "live",
+            settings: {},
+          },
+        ],
+        peers: [],
+      }),
+    ).toBe(true);
+    expect(
+      accepts("sessions.list", {
+        localTracks: [
+          {
+            id: "track",
+            captureSourceId: 1,
+            state: "live",
+            settings: {},
+          },
+        ],
+        peers: [],
+      }),
+    ).toBe(false);
+  });
   it("validates bounded UIA value reads, post-action observation and event-driven waits", () => {
     const parse = (
       name: string,

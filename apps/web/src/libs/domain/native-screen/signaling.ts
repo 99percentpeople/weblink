@@ -50,10 +50,16 @@ export function parseScreenSignal(
       return value;
     if (
       value.type === "control-request" ||
-      value.type === "control-cancel"
+      value.type === "control-cancel" ||
+      value.type === "control-close"
     )
       return value;
     if (value.type === "control-result") {
+      if (
+        value.closable !== undefined &&
+        value.closable !== true
+      )
+        return;
       if (
         value.sourceId === undefined ||
         (typeof value.sourceId === "string" &&

@@ -1384,6 +1384,7 @@
     "waiting": "승인을 기다리는 중",
     "cancel": "요청 취소",
     "end": "제어 종료",
+    "close_screen": "화면 공유 종료",
     "more_choices": "추가 승인 옵션",
     "allow_remember": "승인 및 허용 목록에 추가",
     "deny_remember": "거부하고 차단 목록에 추가",

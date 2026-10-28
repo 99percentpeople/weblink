@@ -48,6 +48,8 @@ export function automationHandlers(
     signal: AbortSignal,
     check: () => Promise<void>,
     owner?: string,
+    purpose: "screen" | "control" = "screen",
+    requesterId?: string,
   ) => {
     const shared = await shares.start(
       owner,
@@ -72,6 +74,8 @@ export function automationHandlers(
         );
       },
       check,
+      purpose,
+      requesterId,
     );
     const { trackId, reused } = shared;
     return { trackId, sourceId, reused };
@@ -195,12 +199,17 @@ export function automationHandlers(
       case "screen.start": {
         if (!platform.capture || !platform.screenShare)
           throw new AutomationError("UNSUPPORTED");
-        return shareScreen(
+        const result = await shareScreen(
           String(args.sourceId),
           signal,
           check,
           authority?.grantId,
+          "screen",
+          authority?.requesterId,
         );
+        signal.throwIfAborted();
+        shares.retain(authority?.grantId, result.trackId);
+        return result;
       }
       case "screen.stop": {
         const track = localTrack(args.trackId);
@@ -254,36 +263,60 @@ export function automationHandlers(
         return { applied: true, settings };
       }
       case "control.acquire": {
-        const track = localTrack(args.trackId);
-        const capture = getNativeCaptureStatus(track);
-        const sourceId =
-          getNativeScreenPublication(track)?.sourceId;
+        let trackId = args.trackId;
+        let shareReused: boolean | undefined;
         try {
+          if (typeof args.sourceId === "string") {
+            if (!native)
+              throw new AutomationError("UNSUPPORTED");
+            const shared = await shareScreen(
+              args.sourceId,
+              signal,
+              check,
+              authority?.screenGrantId,
+              "control",
+              authority?.requesterId,
+            );
+            trackId = shared.trackId;
+            shareReused = shared.reused;
+          }
+          const track = localTrack(trackId);
+          const capture = getNativeCaptureStatus(track);
+          const sourceId =
+            getNativeScreenPublication(track)?.sourceId;
           if (!native || !capture?.sessionId || !sourceId)
             throw new AutomationError("CAPTURE_REQUIRED");
-          const { controlLeaseId, ...result } =
-            await native({
-              sessionId: capture.sessionId,
-              sourceId,
-            });
-          if (typeof controlLeaseId === "string")
+          await check();
+          signal.throwIfAborted();
+          const {
+            controlLeaseId: _controlLeaseId,
+            ...result
+          } = await native({
+            sessionId: capture.sessionId,
+            sourceId,
+          });
+          signal.throwIfAborted();
+          for (const id of authority?.screenGrantIds ?? [])
+            shares.retain(id, track.id);
+          return {
+            ...result,
+            trackId: track.id,
+            ...(shareReused === undefined
+              ? {}
+              : { shareReused }),
+          };
+        } catch (error) {
+          if (typeof trackId === "string")
             for (const id of authority?.screenGrantIds ??
               [])
-              shares.acquired(id, track.id, controlLeaseId);
-          return result;
-        } catch (error) {
-          for (const id of authority?.screenGrantIds ?? [])
-            shares.failedAcquire(id, track.id);
+              shares.failedAcquire(id, trackId);
           throw error;
         }
       }
       case "control.release": {
         if (!native)
           throw new AutomationError("UNSUPPORTED");
-        const result = await native();
-        for (const id of authority?.screenGrantIds ?? [])
-          shares.release(id);
-        return result;
+        return native();
       }
       case "diagnostics.snapshot":
         return diagnostics.snapshot();

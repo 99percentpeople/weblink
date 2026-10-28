@@ -71,6 +71,7 @@ interface NativeSnapshot {
   server: McpServerConfig;
   serverPending: boolean;
   policiesSuspended?: boolean;
+  peerPoliciesSuspended?: boolean;
   clients: McpTokenSummary[];
   grants: Grant[];
   pending: Approval[];
@@ -291,10 +292,7 @@ export function createAutomation(
       !shareCalls.size &&
       snapshot.screenGrants
     )
-      screenShares.synchronize(
-        snapshot.screenGrants,
-        snapshot.controlLeaseId ?? null,
-      );
+      screenShares.synchronize(snapshot.screenGrants);
     return snapshot;
   };
 
@@ -567,6 +565,9 @@ export function createAutomation(
         request.grantId
           ? {
               grantId: request.grantId,
+              requesterId: request.principal.id,
+              screenGrantId:
+                request.screenGrantId ?? undefined,
               screenGrantIds: request.screenGrantIds ?? [
                 request.grantId,
               ],

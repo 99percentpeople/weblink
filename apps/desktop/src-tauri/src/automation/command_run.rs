@@ -83,6 +83,7 @@ mod tests {
             s.tickets.insert(
                 "ticket".into(),
                 Ticket {
+                    screen_grant: None,
                     principal: p,
                     call: Call {
                         source: None,

@@ -22,7 +22,10 @@ import {
   type Setter,
 } from "solid-js";
 import { toast, Toaster } from "solid-sonner";
-import type { Approval } from "@weblink/automation";
+import type {
+  Approval,
+  AutomationPolicy,
+} from "@weblink/automation";
 import type {
   NotificationAction,
   SystemNotification,
@@ -34,6 +37,11 @@ import { ModalProvider } from "@/components/dialogs/base";
 
 const fixture = vi.hoisted(() => ({
   pending: undefined as Accessor<Approval[]> | undefined,
+  policy: undefined as
+    | Accessor<AutomationPolicy>
+    | undefined,
+  policiesSuspended: false,
+  peerPoliciesSuspended: undefined as boolean | undefined,
   decide: vi.fn(),
   canReceive: vi.fn(),
   enabled: true,
@@ -58,6 +66,9 @@ vi.mock("@/libs/state/app-state-context", () => ({
       decide: fixture.decide,
       snapshot: () => ({
         pending: fixture.pending?.() ?? [],
+        policiesSuspended: fixture.policiesSuspended,
+        peerPoliciesSuspended:
+          fixture.peerPoliciesSuspended,
       }),
     },
   }),
@@ -68,6 +79,13 @@ vi.mock("@/libs/application/session-service", () => ({
 vi.mock("@/libs/state/app-state", () => ({
   appState: {
     options: {
+      get clientConfigs() {
+        return {
+          "paired-device": {
+            automation: fixture.policy?.(),
+          },
+        };
+      },
       notifications: {
         get preview() {
           return fixture.preview;
@@ -79,6 +97,7 @@ vi.mock("@/libs/state/app-state", () => ({
 }));
 
 let setPending: Setter<Approval[]>;
+let setPolicy: Setter<AutomationPolicy>;
 let sequence = 0;
 const request = (
   kind: "peer" | "mcp" = "peer",
@@ -101,6 +120,10 @@ const request = (
 });
 const allowLabel = () => "common.action.allow_session";
 beforeEach(() => {
+  [fixture.policy, setPolicy] =
+    createSignal<AutomationPolicy>({});
+  fixture.policiesSuspended = false;
+  fixture.peerPoliciesSuspended = undefined;
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
   );
@@ -184,6 +207,98 @@ function mount({
     },
   };
 }
+
+it.each(["allow", "deny"] as const)(
+  "does not notify for an obsolete pending request after the policy became %s",
+  async (decision) => {
+    setPolicy({ "shell.execute": decision });
+    const view = mount({ visible: false, native: true });
+    setPending([request()]);
+    await Promise.resolve();
+    expect(view.show).not.toHaveBeenCalled();
+    expect(fixture.decide).not.toHaveBeenCalled();
+  },
+);
+
+it("retracts an already displayed request immediately when always allow is saved", async () => {
+  const view = mount({ visible: false, native: true });
+  const pending = request();
+  setPending([pending]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  setPolicy({ "shell.execute": "allow" });
+  await waitFor(() =>
+    expect(view.dismiss).toHaveBeenCalledWith(
+      `automation-approval:${pending.id}`,
+    ),
+  );
+  view.respond("approve");
+  expect(fixture.decide).not.toHaveBeenCalled();
+});
+
+it("still requests consent when always allow has been suspended by emergency stop", async () => {
+  setPolicy({ "shell.execute": "allow" });
+  fixture.policiesSuspended = true;
+  const view = mount({ visible: false, native: true });
+  setPending([request()]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+});
+
+it("keeps diagnostic consent visible after emergency stop even with OS automation disabled", async () => {
+  fixture.enabled = false;
+  fixture.peerPoliciesSuspended = true;
+  setPolicy({ "diagnostics.read": "allow" });
+  const view = mount({ visible: false, native: true });
+  setPending([
+    {
+      ...request(),
+      scope: "diagnostics.read",
+      tool: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    },
+  ]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+});
+
+it("does not confuse a paused local MCP token with a paused peer policy", async () => {
+  fixture.policiesSuspended = true;
+  fixture.peerPoliciesSuspended = false;
+  setPolicy({ "shell.execute": "allow" });
+  const view = mount({ visible: false, native: true });
+  setPending([request()]);
+  await Promise.resolve();
+  expect(view.show).not.toHaveBeenCalled();
+});
+
+it("keeps the grouped review until both capture and input are allowed", async () => {
+  const view = mount({ visible: false, native: true });
+  const pending = {
+    ...request(),
+    scope: "input.control" as const,
+    tool: "control.acquire",
+    arguments: { target: "local", sourceId: "monitor" },
+  };
+  setPending([pending]);
+  await waitFor(() =>
+    expect(view.show).toHaveBeenCalledOnce(),
+  );
+  setPolicy({ "input.control": "allow" });
+  expect(view.dismiss).not.toHaveBeenCalled();
+  setPolicy({
+    "input.control": "allow",
+    "screen.manage": "allow",
+  });
+  await waitFor(() =>
+    expect(view.dismiss).toHaveBeenCalledWith(
+      `automation-approval:${pending.id}`,
+    ),
+  );
+});
 
 it.each([false, true])(
   "responds through the in-app notification with session consent %s",

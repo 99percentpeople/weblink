@@ -166,7 +166,7 @@
   },
   {
     "name": "sessions.list",
-    "description": "List active streams and connection state on the explicit target. Native local tracks include captureSourceId (the screen.sources device ID) and sourceId (the publication ID); use the track id for control.acquire.",
+    "description": "Inspect active streams and connection state on the explicit target. localTracks.id is a trackId for screen.configure and the existing-stream form of control.acquire. captureSourceId is the screen.sources capture ID; sourceId is an internal publication ID, not a capture ID. To prepare a monitor and acquire control together, pass a monitor capture ID directly to control.acquire.sourceId.",
     "scope": "diagnostics.read",
     "native": false,
     "readOnly": true,
@@ -201,13 +201,15 @@
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Stream track ID; choose state=live for operations and pass as trackId, never as a capture sourceId."
                       },
                       "state": {
                         "type": "string"
                       },
                       "sourceId": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Internal publication ID; not accepted as a native capture source ID."
                       },
                       "settings": {
                         "type": "object",
@@ -236,6 +238,10 @@
                         },
                         "required": [],
                         "additionalProperties": true
+                      },
+                      "captureSourceId": {
+                        "type": "string",
+                        "description": "Native capture ID, matching screen.sources.sources[].id."
                       }
                     },
                     "required": ["id", "state", "settings"],
@@ -347,7 +353,7 @@
   },
   {
     "name": "screen.sources",
-    "description": "List available native capture sources.",
+    "description": "List native monitor and window capture sources and available physical display geometry. For desktop control, choose sources[].kind=monitor and pass its id as sourceId to control.acquire; sharing is prepared automatically. For a screenshot, pass a monitor or window id to control.screenshot. Source discovery does not start sharing or acquire control.",
     "scope": "screen.read",
     "native": true,
     "readOnly": true,
@@ -557,7 +563,7 @@
   },
   {
     "name": "screen.start",
-    "description": "Acquire this caller's temporary use of a native screen share. Reuses the same live source, preserving audio and settings; a new share starts with audio off. Release with screen.stop or control.release. After control.acquire, control exit or monitor replacement also releases this use; permission revocation or peer disconnection releases all its shares. User-retained shares and other active users remain. Returns trackId for control.acquire and reused.",
+    "description": "Start or reuse a room-wide screen share without acquiring control. For desktop input, prefer control.acquire with a monitor sourceId. sourceId is a capture ID from screen.sources. Returns trackId and reused. New shares have audio off; reused shares preserve audio and settings. Successful sharing persists after control release, caller disconnection or permission expiry. Reuse never transfers close permission. Only the original requester can screen.stop a requested picture, while nobody else controls it; a picture shared manually by the host can only be closed by the host.",
     "scope": "screen.manage",
     "native": true,
     "readOnly": false,
@@ -572,7 +578,8 @@
         "sourceId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 128,
+          "description": "Monitor or window capture ID from screen.sources.sources[].id."
         }
       },
       "required": ["target", "sourceId"],
@@ -596,6 +603,10 @@
                 },
                 "sourceId": {
                   "type": "string"
+                },
+                "reused": {
+                  "type": "boolean",
+                  "description": "True if an existing live screen publication was reused. Older targets may omit this field."
                 }
               },
               "required": ["trackId", "sourceId"],
@@ -667,7 +678,7 @@
   },
   {
     "name": "screen.stop",
-    "description": "Release only this caller's use of a track obtained through screen.start. Does not stop a user's retained share, another caller's use or a live control grant. Returns released=true and stopped=true only if the picture ended; retained=true means another owner still needs it. A track not acquired by this caller is rejected.",
+    "description": "Close a room-wide picture originally opened by this caller through screen.start or control.acquire(sourceId), using its trackId. Stops audio and control transport for all viewers. Host-shared pictures and pictures opened by another caller return PERMISSION_DENIED; reuse and control handoff never transfer close permission. Returns CONTROL_BUSY while another caller controls this picture; retry after they release control. After reconnecting, the original caller must claim its existing source again with screen.start. Use control.release to end input while keeping the picture. released/stopped confirm closure; legacy targets may return retained=true.",
     "scope": "screen.manage",
     "native": false,
     "readOnly": false,
@@ -774,7 +785,7 @@
   },
   {
     "name": "screen.configure",
-    "description": "Update a running stream; does not change persistent preferences.",
+    "description": "Update a running stream using trackId returned by control.acquire, screen.start or sessions.list.localTracks[].id. Supply all video limits; this changes the current stream, not persistent preferences. sourceId capture IDs and publication IDs are not track IDs. Use screen.settings.update for saved preferences.",
     "scope": "screen.configure",
     "native": false,
     "readOnly": false,
@@ -1598,7 +1609,7 @@
   },
   {
     "name": "control.acquire",
-    "description": "Acquire control of a live native monitor stream. New leases default to desktop input: call control.pointer/key/text directly without bindWindow or accessibility focus; keys/text go to the current foreground application and pointer coordinates are physical desktop pixels. Reuses the same verified device's manual grant when its connection and capture match (reused=true), otherwise acquires exclusive automation control. Repeated acquisition of the same source preserves the lease and optional window binding. An exclusive automation owner can acquire another monitor to replace its lease. Human input ends a borrowed lease; automation must explicitly acquire again. Returns sourceId, physical bounds and geometryRevision for pointer operations.",
+    "description": "Acquire desktop control with a monitor sourceId from screen.sources; sharing starts or is reused automatically. Alternatively pass trackId for an already live native monitor. Supply exactly one ID. sourceId requires screen.manage and input.control; new shares have audio off and reused shares retain settings. Returns trackId for screen.configure, plus sourceId, bounds and geometryRevision for pointer input. shareReused describes screen reuse and is present only for sourceId calls; reused describes borrowing the same device's manual control grant. Call control.pointer/key/text directly, then control.release to end input while keeping the picture. Sharing persists after caller disconnection. Reuse and control handoff never transfer close permission; screen.stop only closes a picture opened by this caller while nobody else controls it. Repeated acquisition preserves the lease and optional window binding; an exclusive owner can switch monitors. Failure releases the unused temporary share.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
@@ -1613,10 +1624,27 @@
         "trackId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 128,
+          "description": "Existing live native monitor track ID from sessions.list.localTracks[].id or screen.start. Does not start or retain a new screen share. Mutually exclusive with sourceId."
+        },
+        "sourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Capture ID of a kind=monitor entry in screen.sources.sources[]. Prepares sharing and control in one call. Mutually exclusive with trackId; do not pass a publication ID."
         }
       },
-      "required": ["target", "trackId"],
+      "required": ["target"],
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["trackId"]
+        },
+        {
+          "type": "object",
+          "required": ["sourceId"]
+        }
+      ],
       "additionalProperties": false
     },
     "outputSchema": {
@@ -1637,7 +1665,8 @@
                   "enum": ["desktopPhysicalPixels"]
                 },
                 "sourceId": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Native monitor capture ID for control.pointer and control.screenshot; not a publication ID."
                 },
                 "geometryRevision": {
                   "type": "string"
@@ -1695,7 +1724,17 @@
                   "enum": [true]
                 },
                 "reused": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Whether this lease borrows the same verified device's manual control grant; does not describe screen reuse."
+                },
+                "trackId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Acquired live stream track ID for screen.configure. Older targets may omit this field."
+                },
+                "shareReused": {
+                  "type": "boolean",
+                  "description": "Whether sourceId acquisition reused an existing screen publication. Omitted for trackId calls and older targets; independent of reused."
                 }
               },
               "required": [
@@ -1893,7 +1932,7 @@
   },
   {
     "name": "control.release",
-    "description": "Release this caller's input lease, held inputs and temporary screen uses. A reused manual control grant, user-retained sharing and other callers' shares remain active.",
+    "description": "Release this caller's input lease and held inputs while keeping shared pictures. Sharing created by either screen.start or control.acquire persists after control release or caller disconnection. Use screen.stop to explicitly close the room-wide picture. A borrowed manual control grant remains active.",
     "scope": "input.control",
     "native": true,
     "readOnly": false,
