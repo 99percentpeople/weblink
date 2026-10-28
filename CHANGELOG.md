@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.3] - Unreleased
+
+Weblink 1.3.3 improves Windows shortcut forwarding, unifies screen-sharing and control lifetimes, and makes MCP automation discovery and accessibility workflows more reliable.
+
+### Remote control and screen sharing
+
+- **Windows system shortcuts:** restore reliable forwarding of ordinary keys, Win and Alt+Tab while suppressing the corresponding local shortcuts when system-key forwarding is active. Keep capture working after switching away from Weblink and returning.
+- **Human control takes priority:** approve and validate a manual takeover before replacing an automation-owned grant. Rejected, cancelled or expired requests leave the current control intact. Human input ends automation borrowing the same manual grant; automation must explicitly acquire a new lease to continue.
+- **Control across monitors:** allow an authorized controller to switch to another shared monitor after validating the new target. Failed switches retain the previous control, and viewing a different screen alone does not move input authorization.
+- **One share per source:** reuse existing native captures for manual control and MCP instead of opening duplicate screens. Preserve the existing capture and audio settings. Ending control releases only its associated temporary share use; user-started sharing, local recording and other active users keep the screen available.
+- **Stable session lifetimes:** keep acquired remote control active when unrelated local microphone, camera or screen streams change. Bind cleanup to the controlled source and session lifetime.
+- **Consistent control indicators:** publish the controller type and active automation state to room observers. Use consistent labels and icons for manual control, exclusive automation and automation borrowing manual control, while keeping takeover eligibility tied to the host's capabilities and permissions.
+
+### MCP and accessibility
+
+- **Clearer device discovery:** report runtime, application version and supported tools separately from automation enablement and permissions, so clients can identify usable targets and explain unavailable capabilities.
+- **Richer Windows accessibility:** add bounded state, value and text reads, event-driven condition waits and optional observations after actions. Preserve a confirmed action's outcome when a later observation fails, with structured recovery information to avoid replaying an action that already succeeded.
+- **Smaller screenshot responses:** return PNG data once as MCP image content and retain coordinate and image metadata in the structured result.
+- **Backend boundaries:** unify capability reporting, separate accessibility operations from native event handling, and keep Windows input conversion in the Windows backend. Existing Windows behavior is retained; this release does not add other operating-system backends.
+
+### Messaging, connections and releases
+
+- **Room chat recovery:** recover room-message channels after handshake timeouts so online peers can resume group messaging without leaving the input disabled.
+- **Connection errors:** validate desktop signaling URLs and report connection failures without mislabeling them as browser permission errors.
+- **Faster releases:** keep correctness tests on pull requests and the `public` branch, validate release metadata on tags, and avoid repeating the full test suites during production packaging. Deploy the marketing website independently when its sources or shared dependencies change.
+
 ## [1.3.2] - 2026-10-26
 
 Weblink 1.3.2 adds movable video controls, improves audio capture settings, and completes shared interface and Windows installer translations.
