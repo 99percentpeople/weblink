@@ -47,21 +47,24 @@ fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches
 
 // Synchronously drain a synthetic frame in tests that inspect converted pixels.
 // Production awaits GPU completion events without waiting in a graphics call.
+// capture_step owns the watchdog for each submitted readback. A separate deadline
+// started before that call would also time shader/device initialization, and could
+// expire on a loaded CI runner before the first GPU copy has even been submitted.
 impl MediaSession {
     pub(super) fn flush(self: &Arc<Self>) -> Result<()> {
         let preview = self.subscribe_preview(true, |_| true)?;
-        preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let mut work = self.capture_step(true)?;
-        while work.pending.is_some() || work.dirty {
-            if Instant::now() >= deadline {
-                return Err("Synthetic readback did not complete".into());
+        loop {
+            preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
+            let work = self.capture_step(true)?;
+            if work.pending.is_none() {
+                return if work.dirty {
+                    Err("Synthetic source was not admitted for readback".into())
+                } else {
+                    Ok(())
+                };
             }
             std::thread::sleep(Duration::from_millis(1));
-            preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
-            work = self.capture_step(true)?;
         }
-        Ok(())
     }
 }
 
