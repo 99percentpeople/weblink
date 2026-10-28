@@ -21,6 +21,9 @@ import { MeetingStage } from "@/routes/home/components/meeting-stage";
 import type { MeetingSource } from "@/routes/home/components/meeting-sources";
 
 const fixture = vi.hoisted(() => ({
+  screenControl: undefined as
+    | (EventTarget & { state(): "active"; cancel(): void })
+    | undefined,
   update: undefined as (() => void) | undefined,
   animations: [] as {
     element: HTMLElement;
@@ -36,7 +39,10 @@ vi.mock("@/libs/state/app-state-context", () => ({
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     getRemoteControl: () => undefined,
-    getScreenControl: () => undefined,
+    getScreenControl: (clientId: string) =>
+      clientId === "peer"
+        ? fixture.screenControl
+        : undefined,
   },
 }));
 vi.mock("@/libs/state/audio-player-context", () => ({
@@ -118,6 +124,7 @@ vi.mock("motion", () => ({
   ),
 }));
 beforeEach(() => {
+  fixture.screenControl = undefined;
   fixture.update = undefined;
   fixture.animations.length = 0;
   vi.stubGlobal("matchMedia", () => ({
@@ -201,6 +208,35 @@ function setup(pinned: boolean, compact = true) {
 }
 
 describe("meeting source exit ownership", () => {
+  it("keeps remote control when unrelated local sources change", () => {
+    const cancel = vi.fn();
+    fixture.screenControl = Object.assign(
+      new EventTarget(),
+      {
+        state: () => "active" as const,
+        cancel,
+      },
+    );
+    const f = setup(true, false);
+    expect(cancel).not.toHaveBeenCalled();
+    f.setSources([{ ...f.self }, { ...f.peer }]);
+    expect(cancel).not.toHaveBeenCalled();
+    const localScreen = {
+      ...source("local-screen"),
+      local: true,
+    };
+    f.setSources([
+      { ...f.self },
+      { ...f.peer },
+      localScreen,
+    ]);
+    commitLayout();
+    expect(cancel).not.toHaveBeenCalled();
+    f.setSources([{ ...f.self }, { ...f.peer }]);
+    commitLayout();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "keeps existing media attached when unrelated sources join, update and leave (featured=%s)",
     (featured) => {
