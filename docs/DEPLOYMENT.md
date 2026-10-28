@@ -191,11 +191,14 @@ and secure WebSocket deployment all work most reliably in a secure context.
 
 ### Cloudflare Pages releases from Git tags
 
-The [CI workflow](../.github/workflows/ci.yml) is the single gate for both
-development and production publishing. Stable tags such as `v1.0.0` run the same
-`Checks` job as branch pushes: release metadata validation against `apps/web/package.json`, type-checking, unit
-tests and integration tests. Only after `Checks` succeeds does the
-`deploy-production` job call [web-production.yml](../.github/workflows/web-production.yml)
+The [CI workflow](../.github/workflows/ci.yml) separates validation from release
+packaging. Pull requests and application pushes to `public` run `Checks`
+(type-checking, unit/integration tests, desktop adapter tests and browser
+regressions), followed by native tests in the desktop development job.
+Stable tags such as `v1.0.0` run only `Validate release metadata`, checking
+the version in `apps/web/package.json` and dated changelog notes without
+installing workspace dependencies. After that validation succeeds, the
+`deploy-production` job calls [web-production.yml](../.github/workflows/web-production.yml)
 to build the production bundle and upload `apps/web/dist/`. The parallel
 [desktop production workflow](../.github/workflows/desktop-production.yml)
 builds both a Windows NSIS installer and a portable EXE ZIP as separate artifacts.
@@ -203,8 +206,13 @@ See [desktop downloads](DESKTOP.md#run-and-build) for publishing these files to 
 Prerelease tags such as `v1.1.0-beta.1` do not match the workflow trigger and
 therefore do not publish to production.
 
-Tests are not repeated in the deployment job. Production deployments are
-serialized, while a failed `Checks` job prevents the build and upload entirely.
+Release tags do not rerun the frontend, native or signaling-server test suites.
+Create releases from commits validated by the branch CI; the tag workflow does
+not query or wait for that earlier run. The production desktop job compiles the
+shipping executable and installer without building full-LTO test binaries.
+Build configuration, updater signing, installer signatures and release metadata
+are still checked. Production web deployments are serialized, and failed release
+metadata validation prevents both production jobs from starting.
 Bun, Node's major version, and Wrangler are explicitly selected; application
 dependencies use the frozen lockfile.
 
@@ -268,15 +276,16 @@ After completing the setup above (replace the example version as needed):
 ```sh
 bun scripts/release-metadata.mjs v1.3.0
 git push origin public
+# Wait for this commit's branch CI (including desktop native tests) to pass.
 git tag -a v1.3.0 -m "Weblink 1.3.0"
 git push origin v1.3.0
 ```
 
 For subsequent releases, replace `v1.3.0` with the matching version. Inspect the
 tag-triggered **CI** Actions run and its **Deploy production release** job before
-treating the release as deployed. A failed `Checks` job prevents the production
-build and upload. A failed deployment can be retried through the existing Actions
-run; do not move a published tag to another commit. To roll back, select a
+treating the release as deployed. A failed release metadata validation prevents
+the production build and upload. A failed deployment can be retried through the
+existing Actions run; do not move a published tag to another commit. To roll back, select a
 previous successful production deployment in the Pages dashboard.
 
 For desktop downloads, create a GitHub Release for the same tag after the
@@ -289,9 +298,23 @@ packages. Mark the stable release as Latest so the marketing site's download
 button opens it. The workflow prepares these files but does not publish the
 GitHub Release itself.
 
-The same stable tag also calls `www-production.yml` to deploy `apps/www/dist`
-to the separate `weblink-www` Pages project (production branch `public`). Its
-custom domain is `www.webl.ink`, with a proxied CNAME to `weblink-www.pages.dev`.
+### Independent marketing website deployment
+
+[www-production.yml](../.github/workflows/www-production.yml) checks and builds
+the marketing site when `apps/www/**`, its shared `packages/theme/**` or
+`packages/locale/**` dependencies, or that workflow change. Pull requests only
+check the site; matching pushes to `public` deploy the resulting artifact to the
+separate `weblink-www` Pages project (production branch `public`). Production
+builds and uploads are serialized, and deployment reuses the checked build.
+Application release tags and application-only changes do not redeploy `www`.
+The site does not read the application version; `version.json` records its own
+commit and ref. Root lockfile-only changes do not trigger a site deployment;
+use the workflow's manual dispatch on `public` when such a dependency update or
+an external configuration change needs a rebuild. A push changing only the site
+or its workflow skips the application CI; PR `Checks` remains available for
+branch protection.
+
+Its custom domain is `www.webl.ink`, with a proxied CNAME to `weblink-www.pages.dev`.
 The job verifies the deployed commit through the domain's uncached `version.json`.
 The application remains on `webl.ink` in the existing `weblink` project. Custom
 domain binding and DNS are configured once in Cloudflare, not changed by CI.

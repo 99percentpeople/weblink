@@ -29,11 +29,6 @@ jobs:
           bun-version: 1.4.2
       - name: Install Rust
         run: rustup toolchain install
-      - name: Check loopback HTTP test fixture
-        run: |
-          rustc --edition=2021 --test apps/desktop/src-tauri/src/updates/test_http.rs -o "$env:RUNNER_TEMP/weblink-http-tests.exe"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & "$env:RUNNER_TEMP/weblink-http-tests.exe"
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: windows-production-release
@@ -45,12 +40,10 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: bun scripts/desktop-updater.mjs config .tmp/tauri-updater.conf.json
-      # Shared TypeScript checks and tests already passed in the caller's Checks job.
-      - run: cargo fmt --all --check
-      # Production-mode tests embed the frontend and use the CLI's Cargo features.
+      # PR/public CI owns TypeScript/native tests and formatting. Release builds
+      # compile only the shipping executable, avoiding the full-LTO test binaries.
       - name: Build desktop frontend
         run: bun run --cwd apps/web build:desktop
-      - run: cargo test --workspace --locked --release --features tauri/custom-protocol
       - name: Build Windows executable and installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

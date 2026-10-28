@@ -149,8 +149,14 @@ Windows 画面是微软公开的演示素材，通过浏览器标签页共享：
 输出目录设置为 `apps/www/dist`。本项目独立于现有 Web 应用的部署流程。
 
 正式站点为 https://www.webl.ink，对应独立的 Cloudflare Pages 项目
-`weblink-www`（生产分支 `public`）。稳定版本标签 `vX.Y.Z` 的 CI 检查通过后，
-`www-production.yml` 部署宣传站，并通过域名上的 `version.json` 核对提交。
+`weblink-www`（生产分支 `public`）。`www-production.yml` 独立处理宣传站：
+`apps/www/**`、共享的 `packages/theme/**`、`packages/locale/**` 或该工作流
+更新时，PR 执行类型检查与构建，推送到 `public` 后自动部署同一份构建产物。
+正式应用版本标签和仅涉及应用的修改不会重新部署宣传站。
+`version.json` 使用宣传站的提交和分支标识，不再读取应用版本号。
+仅更新根锁文件不会触发自动部署；需要刷新此类依赖或部署配置时，可在
+Actions 中对 `public` 手动运行该工作流。部署完成后仍通过域名上的
+`version.json` 核对提交。
 应用入口 https://webl.ink 继续使用原有的 `weblink` 项目。
 `www.webl.ink` 在该项目中绑定为自定义域名，DNS 使用开启代理的 CNAME
 指向 `weblink-www.pages.dev`。常规发布只更新站点文件，不修改 DNS。

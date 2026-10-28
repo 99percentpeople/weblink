@@ -7,6 +7,9 @@ on:
       - public
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+    paths-ignore:
+      - "apps/www/**"
+      - ".github/workflows/www-production.yml"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +22,8 @@ concurrency:
 jobs:
   checks:
     name: Checks
+    # Full correctness checks belong to PRs/public, not the release tag again.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -41,15 +46,8 @@ jobs:
         with:
           node-version: 24
 
-      - name: Verify release version and notes
-        if: github.ref_type == 'tag'
-        run: bun scripts/release-metadata.mjs "$GITHUB_REF_NAME"
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Check and build marketing website
-        run: bun run build:www
 
       - name: Type-check web and desktop
         run: |
@@ -74,6 +72,21 @@ jobs:
           dbus-run-session -- node apps/web/scripts/run-browser-check.mjs --conversations
           dbus-run-session -- node apps/web/scripts/run-messaging-check.mjs
 
+  release-validation:
+    name: Validate release metadata
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      # This validator uses only built-ins; no workspace install is needed.
+      - run: bun scripts/release-metadata.mjs "$GITHUB_REF_NAME"
+
   desktop-dev:
     name: Desktop development build
     needs: checks
@@ -94,7 +107,7 @@ jobs:
 
   deploy-production:
     name: Deploy production release
-    needs: checks
+    needs: release-validation
     if: >-
       github.repository == '99percentpeople/weblink' &&
       github.event_name == 'push' &&
@@ -105,22 +118,11 @@ jobs:
 
   desktop-production:
     name: Desktop production build
-    needs: checks
+    needs: release-validation
     if: >-
       github.repository == '99percentpeople/weblink' &&
       github.event_name == 'push' &&
       github.ref_type == 'tag' &&
       github.event.deleted != true
     uses: ./.github/workflows/desktop-production.yml
-    secrets: inherit
-
-  deploy-www:
-    name: Deploy marketing website
-    needs: checks
-    if: >-
-      github.repository == '99percentpeople/weblink' &&
-      github.event_name == 'push' &&
-      github.ref_type == 'tag' &&
-      github.event.deleted != true
-    uses: ./.github/workflows/www-production.yml
     secrets: inherit

@@ -1,24 +1,36 @@
 name: Marketing production
 
 on:
-  workflow_call:
+  pull_request:
+    paths:
+      - "apps/www/**"
+      - "packages/theme/**"
+      - "packages/locale/**"
+      - ".github/workflows/www-production.yml"
+  push:
+    branches:
+      - public
+    paths:
+      - "apps/www/**"
+      - "packages/theme/**"
+      - "packages/locale/**"
+      - ".github/workflows/www-production.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Serialize public builds through deployment so an older build cannot publish
+# after a newer one. Superseded PR checks can be cancelled immediately.
+concurrency:
+  group: www-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  deploy:
-    name: Deploy www.webl.ink
+  build:
+    name: Check and build marketing website
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: production
-      url: https://www.webl.ink
-    concurrency:
-      group: cloudflare-pages-www-production
-      cancel-in-progress: false
-    env:
-      PAGES_PROJECT_NAME: weblink-www
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
@@ -35,13 +47,46 @@ jobs:
         run: |
           bun run build:www
           bun -e '
-            const { version } = await Bun.file("apps/web/package.json").json();
             await Bun.write("apps/www/dist/version.json", JSON.stringify({
-              site: "www", version, commit: process.env.GITHUB_SHA,
-              tag: process.env.GITHUB_REF_NAME
+              site: "www", commit: process.env.GITHUB_SHA,
+              ref: process.env.GITHUB_REF_NAME
             }) + "\n");
           '
-      - name: Deploy marketing release
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request'
+        with:
+          name: weblink-www
+          path: apps/www/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy www.webl.ink
+    needs: build
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.ref == 'refs/heads/public' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://www.webl.ink
+    env:
+      PAGES_PROJECT_NAME: weblink-www
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: weblink-www
+          path: apps/www/dist
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Deploy marketing website
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
@@ -49,7 +94,7 @@ jobs:
             --project-name "$PAGES_PROJECT_NAME" \
             --branch public \
             --commit-hash "$GITHUB_SHA" \
-            --commit-message "Release $GITHUB_REF_NAME"
+            --commit-message "Update www $GITHUB_SHA"
       - name: Verify marketing domain
         run: |
           bun -e '
@@ -62,7 +107,7 @@ jobs:
                 if (response.ok) {
                   const info = await response.json();
                   if (info.site === "www" && info.commit === expected) {
-                    console.log(`Verified www ${info.version} (${info.commit})`);
+                    console.log(`Verified www (${info.commit})`);
                     process.exit(0);
                   }
                 }

@@ -90,12 +90,17 @@ CI selects it before checks so `structuredClone(File)` preserves file metadata
 in fake IndexedDB. Real Chromium migration coverage verifies the browser contract.
 The shared Checks job runs web/desktop TypeScript checks,
 desktop adapter tests, and Chromium cache migration, conversation storage and private messaging
-regressions once. Web deployment and the Windows development build depend on
+regressions once. Development web deployment and the Windows development build depend on
 that job. `web-dev.yml`, `web-production.yml`, `desktop-dev.yml`, and
 `desktop-production.yml` are reusable workflows called by `ci.yml`; development
 runs on `public` pushes, desktop development also validates pull requests, and
-production runs on stable version tags. Windows runs Rust formatting and tests
-once in the same profile as its executable or installer build.
+production runs on stable version tags. The Windows development job runs Rust
+formatting and native tests before building its executable. Stable tag releases
+validate release metadata and build production artifacts without rerunning these
+suites or compiling full-LTO test binaries; validate the commit in branch CI first.
+The independent `www-production.yml` checks and builds the marketing site for
+changes to the site or its shared theme/locale packages, deploying only from
+`public`. It is not called by application release tags.
 The development drag/drop check runs the exact test executable reported by
 Cargo's build metadata, without starting another Cargo build.
 
@@ -104,8 +109,8 @@ cross-platform checks. Re-run unchanged layers only when failures or changes
 justify it. The updater's loopback HTTP fixture is a standard-library-only Rust
 module at `apps/desktop/src-tauri/src/updates/test_http.rs` (repository-relative).
 It can run with `rustc --test` without compiling Tauri or the media crates.
-Windows CI checks it before the native build; Cargo also includes it in the
-normal suite. Socket tests explicitly control blocking mode, handle fragmented
+Windows development CI checks it before the native build; Cargo also includes
+it in the normal suite. Socket tests explicitly control blocking mode, handle fragmented
 requests, and use bounded I/O. HTTP clients for local fixtures disable proxies
 without mutating process-wide proxy settings.
 

@@ -22,7 +22,7 @@ jobs:
       VITE_TURN_SERVERS: ${{ secrets.VITE_TURN_SERVERS }}
 
     steps:
-      - name: Check out tested release
+      - name: Check out release
         uses: actions/checkout@v5
         with:
           submodules: recursive
