@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.3] - Unreleased
+## [1.3.3] - 2026-10-28
 
 Weblink 1.3.3 improves Windows shortcut forwarding, unifies screen-sharing and control lifetimes, and makes MCP automation discovery and accessibility workflows more reliable.
 
