@@ -384,7 +384,7 @@ function RemoteSharedFiles(props: {
           }
         >
           <div
-            class="text-muted-foreground flex items-center gap-2 px-3 py-2
+            class="text-muted-foreground flex items-center gap-3 px-2 py-2
               text-xs"
           >
             <Checkbox
@@ -392,6 +392,10 @@ function RemoteSharedFiles(props: {
                 !!selectableRows().length &&
                 selected().length ===
                   selectableRows().length
+              }
+              indeterminate={
+                selected().length > 0 &&
+                selected().length < selectableRows().length
               }
               disabled={!selectableRows().length}
               onChange={(checked) =>
@@ -403,7 +407,7 @@ function RemoteSharedFiles(props: {
                     : [],
                 )
               }
-              class="flex items-center gap-2"
+              class="relative flex items-center gap-3"
             >
               <CheckboxControl />
               <CheckboxLabel>

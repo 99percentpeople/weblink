@@ -721,6 +721,39 @@ describe("sidebar shared directory", () => {
       { id: "file-00.txt" },
     ]);
   });
+  it("reflects partial selection and toggles all selectable files on the current page", async () => {
+    cacheFirstFile();
+    mount("b");
+    const selectAll = await screen.findByRole("checkbox", {
+      name: "shared_files.select_all",
+    });
+    const cached = screen.getByRole("checkbox", {
+      name: "file-00.txt",
+    });
+    const first = screen.getByRole("checkbox", {
+      name: "file-01.txt",
+    });
+    const second = screen.getByRole("checkbox", {
+      name: "file-02.txt",
+    });
+    expect(selectAll).not.toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    fireEvent.click(first);
+    expect(selectAll).toBePartiallyChecked();
+    fireEvent.click(selectAll);
+    expect(selectAll).toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    expect(first).toBeChecked();
+    expect(second).toBeChecked();
+    expect(cached).not.toBeChecked();
+    expect(cached).toBeDisabled();
+    fireEvent.click(selectAll);
+    expect(selectAll).not.toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+    expect(first).not.toBeChecked();
+    expect(second).not.toBeChecked();
+    expect(download).not.toHaveBeenCalled();
+  });
   it("distinguishes unsupported, disabled and disconnected directories and reloads on reconnect", async () => {
     const view = mount("b");
     await screen.findByTitle("file-00.txt");

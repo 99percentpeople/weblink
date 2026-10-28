@@ -72,6 +72,7 @@ export function SharedFileRow(props: {
       )}
     >
       <Checkbox
+        class="relative shrink-0"
         checked={props.selected}
         disabled={!props.selectable}
         onChange={props.onSelect}
