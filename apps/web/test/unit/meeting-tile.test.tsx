@@ -86,8 +86,8 @@ vi.mock("@/i18n", () => ({
           ? "You"
           : key,
 }));
-// Test tile media/control lifetimes with actions exposed, independently of
-// the mobile menu presentation. Keep the real action registration and cleanup.
+// Keep menus in desktop mode for media/control lifetime tests. Tests still
+// open the real menus before interacting with their registered actions.
 vi.mock(
   "@/routes/home/components/meeting-tile-actions",
   async (importOriginal) => {
@@ -237,6 +237,15 @@ afterEach(() => {
   Reflect.deleteProperty(window.screen, "orientation");
 });
 
+function openActions() {
+  for (const trigger of screen.queryAllByRole("button", {
+    name: "meeting.source_actions",
+  })) {
+    if (trigger.getAttribute("aria-expanded") !== "true")
+      fireEvent.click(trigger);
+  }
+}
+
 function setup(main = true) {
   const [local, setLocal] = createSignal(true);
   const [kind, setKind] = createSignal("screen");
@@ -267,6 +276,7 @@ function setup(main = true) {
   display.requestFullscreen = vi.fn(async () =>
     activateFullscreen(display),
   );
+  openActions();
   return {
     ...view,
     video,
@@ -749,6 +759,7 @@ it("reflects shared member mute state and delegates audio changes to its owner",
       onToggleAudio={toggle}
     />
   ));
+  openActions();
   fireEvent.click(
     screen.getByRole("button", {
       name: "common.action.mute",
@@ -788,6 +799,7 @@ describe("local screen preview cover", () => {
     view.setPinned(false);
     view.setPinned(true);
     expect(cover()).toBeNull();
+    openActions();
     fireEvent.click(
       screen.getByRole("button", {
         name: "common.action.fullscreen",
@@ -1109,6 +1121,7 @@ it("keeps non-fullscreen keyboard input alive when IME collapses the meeting lay
   ));
   const video = document.querySelector("video");
   const editor = screen.getByRole("textbox");
+  openActions();
   fireEvent.click(
     screen.getByRole("button", {
       name: "remote_control.keyboard_show",
@@ -1222,6 +1235,7 @@ it.each([false, true])(
       }),
     ).toBeNull();
     control.setAvailable(true);
+    openActions();
     fireEvent.click(
       screen.getByRole("button", {
         name: "remote_control.request",
@@ -1283,6 +1297,7 @@ it("synchronizes the screen peer clipboard without adding action buttons", () =>
       pinned
     />
   ));
+  openActions();
   expect(
     screen.getByRole("button", {
       name: "remote_control.end",
@@ -1407,6 +1422,7 @@ it("delegates recording to its application owner and disables other sources unti
       />
     </MeetingMediaContext.Provider>
   ));
+  openActions();
   await waitFor(() =>
     expect(
       screen.getAllByRole("button", {
