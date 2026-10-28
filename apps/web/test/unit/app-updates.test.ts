@@ -117,6 +117,7 @@ it("serializes installs, tracks progress, and permits retry after signature fail
   const updates = setup(native);
   await updates.check();
   const install = updates.install();
+  expect(updates.percent()).toBeUndefined();
   await updates.install();
   await updates.check();
   expect(native.install).toHaveBeenCalledTimes(1);
@@ -127,6 +128,18 @@ it("serializes installs, tracks progress, and permits retry after signature fail
     total: 100,
   });
   expect(updates.percent()).toBe(50);
+  onProgress({
+    phase: "downloading",
+    downloaded: 100,
+    total: 100,
+  });
+  expect(updates.percent()).toBe(100);
+  onProgress({
+    phase: "installing",
+    downloaded: 100,
+    total: 100,
+  });
+  expect(updates.percent()).toBeUndefined();
   request.reject(new Error("Invalid signature"));
   await install;
   expect(updates.error()).toBe("install");

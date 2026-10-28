@@ -41,7 +41,8 @@ export function createAppUpdates(native: NativeUpdates) {
   };
   const percent = () => {
     const value = progress();
-    return value?.total
+    // Downloaded bytes do not measure installer preparation or installation.
+    return value?.phase === "downloading" && value.total
       ? Math.min(
           100,
           Math.floor(

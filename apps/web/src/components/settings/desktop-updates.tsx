@@ -6,8 +6,7 @@ import { appState } from "@/libs/state/app-state";
 import { setAppOptions } from "@/options";
 import { SettingSwitch } from "./setting-controls";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Spinner } from "@/components/common/spinner";
+import { ProgressCircle } from "@/components/ui/progress-circle";
 import { t } from "@/i18n";
 import { SettingHeading } from "./setting-layout";
 
@@ -44,6 +43,10 @@ export function DesktopUpdates(props: {
     check,
     install,
   } = props.updates;
+  const installStatus = () =>
+    progress()?.phase === "installing"
+      ? t("setting.updates.installing")
+      : t("setting.updates.downloading");
 
   return (
     <div class="space-y-3">
@@ -71,7 +74,11 @@ export function DesktopUpdates(props: {
             when={pending() === "check"}
             fallback={<RefreshCw class="size-4" />}
           >
-            <Spinner size="sm" aria-hidden="true" />
+            <ProgressCircle
+              class="size-4"
+              indeterminate
+              aria-hidden="true"
+            />
           </Show>
           {t("setting.updates.check")}
         </Button>
@@ -111,15 +118,22 @@ export function DesktopUpdates(props: {
           )}
         </Show>
         <Show when={pending() === "install"}>
-          <p>
-            {progress()?.phase === "installing"
-              ? t("setting.updates.installing")
-              : t("setting.updates.downloading")}
-            <Show when={percent() !== undefined}>
-              {" "}
-              {percent()}%
-            </Show>
-          </p>
+          <div class="flex items-center gap-3">
+            <ProgressCircle
+              value={percent()}
+              indeterminate={percent() === undefined}
+              aria-label={installStatus()}
+            />
+            <p>
+              {installStatus()}
+              <Show when={percent() !== undefined}>
+                {" "}
+                <span class="tabular-nums">
+                  {percent()}%
+                </span>
+              </Show>
+            </p>
+          </div>
         </Show>
       </div>
       <Show when={error()}>
@@ -128,18 +142,6 @@ export function DesktopUpdates(props: {
             ? t("setting.updates.check_failed")
             : t("setting.updates.install_failed")}
         </p>
-      </Show>
-      <Show
-        when={
-          pending() === "install" &&
-          progress()?.phase === "downloading"
-        }
-      >
-        <Progress
-          value={percent() ?? 0}
-          indeterminate={percent() === undefined}
-          aria-label={t("setting.updates.downloading")}
-        />
       </Show>
       <Show when={update()}>
         {(available) => (

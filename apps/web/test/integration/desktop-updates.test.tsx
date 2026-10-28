@@ -6,8 +6,13 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
+import type {
+  NativeUpdateProgress,
+  NativeUpdates,
+} from "@weblink/platform";
 import { DesktopUpdates } from "@/components/settings/desktop-updates";
 import { createAppUpdates } from "@/libs/state/create-app-updates";
 import { resolveStoredAppOptions } from "@/libs/state/stored-app-options";
@@ -83,4 +88,109 @@ it("preserves a disabled startup check and migrates old settings to the default"
     resolveStoredAppOptions({ autoCheckUpdates: "false" })
       .autoCheckUpdates,
   ).toBe(true);
+});
+
+it("shows indeterminate progress while preparing, reports download progress, and resets after failure", async () => {
+  let onProgress!: (value: NativeUpdateProgress) => void;
+  let failInstall!: (error: Error) => void;
+  const native: NativeUpdates = {
+    check: vi.fn().mockResolvedValue({
+      status: "available",
+      update: {
+        version: "1.2.0",
+        notes: null,
+        canInstall: true,
+        downloadKind: "installer",
+        downloadUrl: "https://example.com/setup.exe",
+      },
+    }),
+    install: vi.fn((_version, receive) => {
+      onProgress = receive;
+      return new Promise<void>((_resolve, reject) => {
+        failInstall = reject;
+      });
+    }),
+  };
+  render(() => (
+    <DesktopUpdates
+      updates={createAppUpdates(native)}
+      automatic={true}
+      onAutomaticChange={() => {}}
+    />
+  ));
+  const check = screen.getByRole("button", {
+    name: "setting.updates.check",
+  });
+  fireEvent.click(check);
+  expect(check).toBeDisabled();
+  expect(
+    screen.getByText("setting.updates.checking"),
+  ).toBeInTheDocument();
+  const install = await screen.findByRole("button", {
+    name: "setting.updates.install",
+  });
+  fireEvent.click(install);
+  expect(check).toBeDisabled();
+  expect(install).toBeDisabled();
+  const ring = screen.getByRole("progressbar", {
+    name: "setting.updates.downloading",
+  });
+  expect(ring).not.toHaveAttribute("aria-valuenow");
+  expect(screen.queryByText(/^\d+%$/)).toBeNull();
+
+  for (const total of [null, 0]) {
+    onProgress({
+      phase: "downloading",
+      downloaded: 50,
+      total,
+    });
+    expect(ring).not.toHaveAttribute("aria-valuenow");
+    expect(screen.queryByText(/^\d+%$/)).toBeNull();
+  }
+  for (const downloaded of [0, 50, 100]) {
+    onProgress({
+      phase: "downloading",
+      downloaded,
+      total: 100,
+    });
+    expect(ring).toHaveAttribute(
+      "aria-valuenow",
+      String(downloaded),
+    );
+    expect(
+      screen.getByText(`${downloaded}%`),
+    ).toBeInTheDocument();
+  }
+  onProgress({
+    phase: "installing",
+    downloaded: 100,
+    total: 100,
+  });
+  expect(
+    screen.getByRole("progressbar", {
+      name: "setting.updates.installing",
+    }),
+  ).toBe(ring);
+  expect(ring).not.toHaveAttribute("aria-valuenow");
+  expect(screen.queryByText(/^\d+%$/)).toBeNull();
+
+  failInstall(new Error("Installer failed"));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "setting.updates.install_failed",
+    ),
+  );
+  expect(screen.queryByRole("progressbar")).toBeNull();
+  expect(check).not.toBeDisabled();
+  expect(install).not.toBeDisabled();
+
+  fireEvent.click(install);
+  expect(native.install).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(
+    screen.getByRole("progressbar"),
+  ).not.toHaveAttribute("aria-valuenow");
+  expect(screen.queryByText(/^\d+%$/)).toBeNull();
+  failInstall(new Error("Retry failed"));
+  await screen.findByRole("alert");
 });

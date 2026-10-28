@@ -8,6 +8,7 @@ import {
   Square,
 } from "lucide-solid";
 import { t } from "@/i18n";
+import { ProgressCircle } from "@/components/ui/progress-circle";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import createTransferSpeed from "@/libs/hooks/transfer-speed";
 
@@ -69,45 +70,12 @@ export function FileTransferIndicator(props: {
       data-slot="file-transfer-indicator"
     >
       <Show when={showRing()}>
-        <svg
-          class="pointer-events-none absolute inset-0 size-full -rotate-90"
-          classList={{
-            "animate-spin": indeterminate(),
-          }}
-          viewBox="0 0 44 44"
-          role="progressbar"
+        <ProgressCircle
+          class="absolute inset-0 size-full"
+          value={percent()}
+          indeterminate={indeterminate()}
           aria-label={t("tasks.progress")}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={
-            indeterminate() ? undefined : percent()
-          }
-        >
-          <circle
-            cx="22"
-            cy="22"
-            r="19"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            class="opacity-15"
-          />
-          <circle
-            cx="22"
-            cy="22"
-            r="19"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="3"
-            stroke-linecap="round"
-            pathLength="100"
-            stroke-dasharray="100"
-            stroke-dashoffset={
-              100 - (indeterminate() ? 25 : percent())
-            }
-            class="transition-[stroke-dashoffset] duration-200"
-          />
-        </svg>
+        />
       </Show>
       <Show
         when={props.action}
