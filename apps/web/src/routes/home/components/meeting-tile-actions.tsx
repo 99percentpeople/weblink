@@ -50,7 +50,11 @@ export function MeetingTileActions(
     props.portalMount ?? panelMount()?.ownerDocument.body;
   let hoverBlocked = false;
   let hoverTimer: number | undefined;
-  const assistive = () => props.floating !== false;
+  // Source metadata refreshes can rerun the prop getter without changing mode.
+  // Only an actual mode change should dismiss an open menu.
+  const assistive = createMemo(
+    () => props.floating !== false,
+  );
   const compact = () => props.compact || touch();
   const cancelHoverDismiss = () => {
     container?.ownerDocument.defaultView?.clearTimeout(

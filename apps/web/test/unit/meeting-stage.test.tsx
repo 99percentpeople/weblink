@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import {
   cleanup,
+  fireEvent,
   render,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import {
   batch,
@@ -208,6 +210,52 @@ function setup(pinned: boolean, compact = true) {
 }
 
 describe("meeting source exit ownership", () => {
+  it.each([false, true])(
+    "keeps the action menu open across source metadata refreshes (featured=%s)",
+    (featured) => {
+      const f = setup(featured, false);
+      const trigger = within(f.peerTile).getByRole(
+        "button",
+        { name: "meeting.source_actions" },
+      );
+      fireEvent.click(trigger);
+      const menu = document.getElementById(
+        trigger.getAttribute("aria-controls")!,
+      )!;
+      const action = within(menu).getByRole("button", {
+        name: featured ? "meeting.unpin" : "meeting.pin",
+      });
+      action.focus();
+      expect(trigger).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+
+      f.setSources([{ ...f.self }, { ...f.peer }]);
+      expect(f.tile("peer")).toBe(f.peerTile);
+      expect(trigger).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+      expect(menu).toHaveAttribute("aria-hidden", "false");
+      expect(document.activeElement).toBe(action);
+
+      f.setSources([
+        { ...f.self, name: "Updated self" },
+        { ...f.peer, name: "Updated peer" },
+      ]);
+      expect(f.peerTile).toHaveAttribute(
+        "aria-label",
+        "Updated peer",
+      );
+      expect(trigger).toHaveAttribute(
+        "aria-expanded",
+        "true",
+      );
+      expect(document.activeElement).toBe(action);
+    },
+  );
+
   it("keeps remote control when unrelated local sources change", () => {
     const cancel = vi.fn();
     fixture.screenControl = Object.assign(
