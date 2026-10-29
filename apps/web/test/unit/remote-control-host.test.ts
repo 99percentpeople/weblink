@@ -166,14 +166,16 @@ it("advertises automation to third parties without allowing them to take a borro
   host.close();
 });
 
-it("preserves a manual control share after native control changes until host cleanup", async () => {
+it("retains a manual control picture and releases its temporary lease once across native control changes", async () => {
   const { host, emit, api } = setup();
   const release = vi.fn();
+  const retain = vi.fn();
   host.start();
   await flush();
   host.screen.share = async () => ({
     sourceId: "screen-1",
     release,
+    retain,
   });
   const request = host.requestScreen(
     "alice",
@@ -211,7 +213,8 @@ it("preserves a manual control share after native control changes until host cle
     ],
   });
   await flush();
-  expect(release).not.toHaveBeenCalled();
+  expect(retain).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
   emit({
     ...controlled,
     pending: [
@@ -225,14 +228,16 @@ it("preserves a manual control share after native control changes until host cle
   });
   await flush();
   await host.approve("switch", true);
-  expect(release).not.toHaveBeenCalled();
+  expect(retain).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
   emit({
     ...controlled,
     sourceId: "screen-2",
     grantId: "new",
   });
   await flush();
-  expect(release).not.toHaveBeenCalled();
+  expect(retain).toHaveBeenCalledOnce();
+  expect(release).toHaveBeenCalledOnce();
   host.close();
   expect(release).toHaveBeenCalledOnce();
 });

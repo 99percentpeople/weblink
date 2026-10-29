@@ -296,12 +296,12 @@ the controlling peer disconnecting does not close an established picture. Pendin
 cancellation, failed acquisition and approval expiry release only unestablished
 uses. Cleanup from an old grant cannot stop an established or replacement share.
 
-End control / control.release releases input. Close screen / screen.stop explicitly
-stops the selected source for all room viewers, including its audio and control
-transport. A picture shared manually by the host can only be closed by the host.
-A picture opened for a remote request can also be closed by its original requester,
-except while another caller controls that picture. Reusing a picture or handing off
-control never transfers close permission. MCP screen.stop returns PERMISSION_DENIED
+End control / control.release releases input. The manual controller has no Close
+screen action; the sharing device closes the picture locally. MCP screen.stop
+explicitly stops a source opened by that automation caller for all room viewers,
+including its audio and control transport, except while another caller controls it.
+Reusing a picture or handing off control never transfers close permission.
+MCP screen.stop returns PERMISSION_DENIED
 for an unclaimed track or a picture belonging to the host or another requester, and
 CONTROL_BUSY while another caller controls the picture. After reconnecting, the
 original requester must claim its existing source with screen.start before stopping

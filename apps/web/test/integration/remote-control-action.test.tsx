@@ -68,7 +68,7 @@ it("disables the control action while busy and enables it after release", () => 
   expect(control.cancel).toHaveBeenCalledOnce();
 });
 
-it("separates ending control from closing the picture and keeps close available while viewing", () => {
+it("only ends control and lets the viewer request it again without a close-screen action", () => {
   const [state, setState] =
     createSignal<PointerState>("active");
   const control = Object.assign(new EventTarget(), {
@@ -76,12 +76,10 @@ it("separates ending control from closing the picture and keeps close available 
     request: vi.fn(),
     cancel: vi.fn(() => setState("viewing")),
   });
-  const close = vi.fn();
   render(() => (
     <RemoteControlAction
       control={control}
       state={state()}
-      onCloseScreen={close}
     />
   ));
   fireEvent.click(
@@ -90,17 +88,20 @@ it("separates ending control from closing the picture and keeps close available 
     }),
   );
   expect(control.cancel).toHaveBeenCalledOnce();
-  expect(close).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  ).toBeNull();
   fireEvent.click(
     screen.getByRole("button", {
       name: "remote_control.request",
     }),
   );
   expect(control.request).toHaveBeenCalledOnce();
-  fireEvent.click(
-    screen.getByRole("button", {
+  expect(
+    screen.queryByRole("button", {
       name: "remote_control.close_screen",
     }),
-  );
-  expect(close).toHaveBeenCalledOnce();
+  ).toBeNull();
 });

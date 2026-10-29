@@ -72,10 +72,7 @@ import { MeetingSharingStatus } from "./components/meeting-sharing-status";
 import { NativePipBar } from "./components/native-pip-bar";
 import { MeetingControlStatus } from "./components/meeting-control-status";
 import { MeetingRecordingStatus } from "./components/meeting-recording-status";
-import {
-  createControlState,
-  createScreenCloseAction,
-} from "./components/remote-control-action";
+import { createControlState } from "./components/remote-control-action";
 import { RemoteInputToggles } from "./components/remote-input-toggles";
 import { MeetingPipPlaceholder } from "./components/meeting-pip-placeholder";
 import { MeetingChatPanel } from "./components/meeting-chat-panel";
@@ -203,20 +200,6 @@ export default function Home() {
         : undefined)
     );
   });
-  const closeOutgoingScreen = createScreenCloseAction(
-    () => {
-      const source = meeting.selected();
-      return source && !source.local
-        ? source.participantId
-        : undefined;
-    },
-    () => {
-      const source = meeting.selected();
-      return source && !source.local && source.track
-        ? sessionService.getRemoteControl(source.track)
-        : undefined;
-    },
-  );
   const closeControlledScreen = createMemo(() => {
     const status = sessionService.remoteControl.status();
     if (
@@ -779,7 +762,6 @@ export default function Home() {
                       revoke={() =>
                         outgoingControl.control()?.cancel()
                       }
-                      closeScreen={closeOutgoingScreen()}
                     >
                       <RemoteInputToggles
                         controls={sources().flatMap(

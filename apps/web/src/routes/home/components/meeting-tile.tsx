@@ -3,7 +3,6 @@ import { isAutomationControl } from "@/components/common/control-indicator";
 import { appState } from "@/libs/state/app-state";
 import {
   createVideoRemoteControl,
-  createScreenCloseAction,
   createControlState,
   RemoteControlAction,
 } from "./remote-control-action";
@@ -429,10 +428,6 @@ function TileActions(props: {
   const { videoRef, videoTrack, audioTracks } =
     useVideoDisplay();
   const videoControl = createVideoRemoteControl();
-  const closeRemoteScreen = createScreenCloseAction(
-    () => (!props.local ? props.clientId : undefined),
-    videoControl.control,
-  );
   const remote = createControlState(
     () =>
       videoControl.control() ??
@@ -677,7 +672,6 @@ function TileActions(props: {
               <RemoteControlAction
                 control={control()}
                 state={remote.state()}
-                onCloseScreen={closeRemoteScreen()}
                 onRequest={
                   videoControl.control()
                     ? activate

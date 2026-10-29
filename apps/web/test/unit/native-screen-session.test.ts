@@ -86,9 +86,7 @@ const deferred = <T>() => {
   return { promise, resolve };
 };
 
-it("closes only the approved request's room-wide source while permission and ownership remain valid", async () => {
-  let allowed = true;
-  let owned = true;
+it("ignores legacy remote-close messages and keeps the requested source published until the host stops it", async () => {
   const port = {
     loadIceServers: async () => [],
     relayOnly: () => false,
@@ -96,10 +94,6 @@ it("closes only the approved request's room-wide source while permission and own
     error: vi.fn(),
     controlCapabilities: { host: true, request: true },
     requestScreen: vi.fn(async () => "approved-source"),
-    acceptsControlRequests: () => allowed,
-    canCloseScreen: (source: string) =>
-      owned && source === "approved-source",
-    closeScreen: vi.fn(),
     cancelScreenRequest: vi.fn(),
   };
   const session = new NativeScreenSession(port);
@@ -126,34 +120,37 @@ it("closes only the approved request's room-wide source while permission and own
     type: "control-result",
     id: "request",
     sourceId: "approved-source",
-    closable: true,
   });
-  channel.receive({
-    type: "control-close",
-    id: "other-request",
-    sourceId: "approved-source",
-  });
-  allowed = false;
-  channel.receive({ type: "control-close", id: "request" });
-  allowed = true;
-  owned = false;
-  channel.receive({ type: "control-close", id: "request" });
-  expect(port.closeScreen).not.toHaveBeenCalled();
-  owned = true;
-  channel.receive({
-    type: "control-close",
-    id: "request",
-    sourceId: "unrelated-source",
-  });
-  expect(port.closeScreen).toHaveBeenCalledExactlyOnceWith(
-    "approved-source",
+  const source = publication("approved-source");
+  session.setPublication(source);
+  await flush();
+  const offer = channel.sent.find(
+    (signal) => signal.type === "offer",
   );
-  channel.receive({ type: "control-close", id: "request" });
-  expect(port.closeScreen).toHaveBeenCalledOnce();
+  expect(offer).toBeDefined();
+  port.cancelScreenRequest.mockClear();
+  const legacy = { type: "control-close", id: "request" };
+  expect(
+    parseScreenSignal(JSON.stringify(legacy)),
+  ).toBeUndefined();
+  channel.receive(legacy);
+  channel.receive({ ...legacy, id: offer.id });
+  await flush();
+  expect(port.cancelScreenRequest).not.toHaveBeenCalled();
+  expect(source.closePeer).not.toHaveBeenCalled();
+  expect(
+    channel.sent.some((signal) => signal.type === "stop"),
+  ).toBe(false);
+  session.setPublication();
+  await flush();
+  expect(source.closePeer).toHaveBeenCalledExactlyOnceWith(
+    offer.id,
+  );
+  expect(channel.sent.at(-1)).toEqual({
+    type: "stop",
+    id: offer.id,
+  });
   session.reset();
-  expect(port.cancelScreenRequest).toHaveBeenLastCalledWith(
-    true,
-  );
 });
 const publication = (
   sourceId = "selected-source",

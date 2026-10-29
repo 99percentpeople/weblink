@@ -94,7 +94,11 @@ export function MeetingControlStatus(props: {
           </Show>
         </button>
       </Show>
-      <Show when={props.closeScreen}>
+      <Show
+        when={
+          props.side !== "controller" && props.closeScreen
+        }
+      >
         <span
           class="meeting-status-divider"
           aria-hidden="true"

@@ -375,6 +375,31 @@ it("keeps host control actions independent of sharing and prevents duplicate rev
   ).toBeVisible();
 });
 
+it("only exposes ending control on the controller status", () => {
+  const revoke = vi.fn();
+  const close = vi.fn();
+  render(() => (
+    <MeetingControlStatus
+      name="Host"
+      side="controller"
+      revoke={revoke}
+      closeScreen={close}
+    />
+  ));
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "remote_control.end",
+    }),
+  );
+  expect(revoke).toHaveBeenCalledOnce();
+  expect(close).not.toHaveBeenCalled();
+});
+
 it("toggles shared audio from the status icon and preserves availability and busy guards", async () => {
   const [audio, setAudio] = createSignal(false);
   const [available, setAvailable] = createSignal(true);

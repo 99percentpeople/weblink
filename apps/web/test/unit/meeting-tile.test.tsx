@@ -1214,7 +1214,7 @@ it("keeps one remote control action across request, cancellation, active control
   view.unmount();
 });
 
-it("keeps the screen-close action after ending control and reacquires through the same picture", () => {
+it("keeps the picture after ending control and reacquires without a remote-close action", () => {
   class Control extends EventTarget {
     gamepadSlots = () => 0;
     value = "viewing";
@@ -1261,7 +1261,6 @@ it("keeps the screen-close action after ending control and reacquires through th
     type: "control-result",
     id,
     sourceId: "source",
-    closable: true,
   });
   request.attach("source", fixture.control);
   control.update("active");
@@ -1272,10 +1271,11 @@ it("keeps the screen-close action after ending control and reacquires through th
   );
   expect(control.cancel).toHaveBeenCalledOnce();
   expect(send).toHaveBeenCalledOnce();
-  const close = screen.getByRole("button", {
-    name: "remote_control.close_screen",
-  });
-  expect(close).toBeEnabled();
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  ).toBeNull();
   fireEvent.click(
     screen.getByRole("button", {
       name: "remote_control.request",
@@ -1283,12 +1283,13 @@ it("keeps the screen-close action after ending control and reacquires through th
   );
   expect(control.request).toHaveBeenCalledTimes(2);
   control.update("active");
-  fireEvent.click(close);
-  expect(control.cancel).toHaveBeenCalledTimes(2);
-  expect(send).toHaveBeenLastCalledWith({
-    type: "control-close",
-    id,
-  });
+  expect(
+    screen.queryByRole("button", {
+      name: "remote_control.close_screen",
+    }),
+  ).toBeNull();
+  expect(control.cancel).toHaveBeenCalledOnce();
+  expect(send).toHaveBeenCalledOnce();
 });
 
 it.each([false, true])(

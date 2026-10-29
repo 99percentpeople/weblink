@@ -44,8 +44,6 @@ interface ScreenSessionPort {
   /** Synchronous permission check, including before discovery has completed. */
   acceptsControlRequests?(): boolean;
   cancelScreenRequest?(disconnect?: boolean): void;
-  canCloseScreen?(sourceId: string): boolean;
-  closeScreen?(sourceId: string): void;
   /** Omitted until the corresponding control implementation is ready. */
   controlCapabilities?: ControlCapabilities;
   loadControlCapabilities?(): Promise<ControlCapabilities>;
@@ -102,7 +100,6 @@ export class NativeScreenSession {
   private screenRequest?: {
     id: string;
     abort: AbortController;
-    sourceId?: string;
   };
   private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
@@ -386,10 +383,7 @@ export class NativeScreenSession {
       if (!preserve) this.incoming.delete(incoming.id);
       if (!preserve) this.views.delete(incoming.sourceId);
       if (incoming.control)
-        this.screenControl.detach(
-          incoming.control,
-          preserve,
-        );
+        this.screenControl.detach(incoming.control);
       incoming.control?.close();
       incoming.receiver?.close();
       if (preserve) {
@@ -540,19 +534,6 @@ export class NativeScreenSession {
       }
       return;
     }
-    if (value.type === "control-close") {
-      const request = this.screenRequest;
-      if (
-        request?.id === value.id &&
-        request.sourceId &&
-        this.port.acceptsControlRequests?.() !== false &&
-        this.port.canCloseScreen?.(request.sourceId)
-      ) {
-        this.port.closeScreen?.(request.sourceId);
-        this.screenRequest = undefined;
-      }
-      return;
-    }
     if (value.type === "control-request") {
       if (this.screenRequest?.id === value.id) return;
       this.screenRequest?.abort.abort();
@@ -578,15 +559,10 @@ export class NativeScreenSession {
         !request.abort.signal.aborted &&
         this.port.acceptsControlRequests?.() !== false
       ) {
-        request.sourceId = sourceId;
         this.send({
           type: "control-result",
           id: value.id,
           ...(sourceId ? { sourceId } : {}),
-          ...(sourceId &&
-          this.port.canCloseScreen?.(sourceId)
-            ? { closable: true as const }
-            : {}),
         });
       }
       return;
@@ -688,7 +664,7 @@ export class NativeScreenSession {
       view.error = terminal ? "codec" : "connection";
       incoming.retired = true;
       if (incoming.control)
-        this.screenControl.detach(incoming.control, true);
+        this.screenControl.detach(incoming.control);
       incoming.control?.close();
       incoming.receiver?.close();
       incoming.control = undefined;

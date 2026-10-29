@@ -156,7 +156,6 @@ export function createMeetingMedia({
   );
   const shareDefaultScreen = async (
     signal: AbortSignal,
-    clientId: string,
   ) => {
     const existing = state
       .localStream()
@@ -203,7 +202,6 @@ export function createMeetingMedia({
           );
       },
       true,
-      clientId,
     );
     const track = shared.stream.getVideoTracks()[0];
     const sourceId =
@@ -216,10 +214,6 @@ export function createMeetingMedia({
       sourceId,
       release: shared.release,
       retain: () => state.screenSharing.retain(track),
-      canClose: shared.canClose,
-      close: shared.createdByCaller
-        ? shared.close
-        : undefined,
     };
   };
   sessionService.remoteControl.screen.share =

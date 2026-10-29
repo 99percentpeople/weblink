@@ -14,8 +14,6 @@ export interface ControlScreenShare {
   release(): void;
   /** Transfer a successful share to the room's lifetime. */
   retain?(): void;
-  canClose?(): boolean;
-  close?(): boolean | void;
 }
 
 /** Consent queues independently; only the selected request reserves capture and handoff. */
@@ -51,13 +49,6 @@ export class RemoteScreenConsent {
     generation: string;
     active: boolean;
   };
-  private readonly retained = new Map<
-    string,
-    ControlScreenShare & {
-      clientId: string;
-      generation: string;
-    }
-  >();
   share?: (
     signal: AbortSignal,
     clientId: string,
@@ -213,15 +204,6 @@ export class RemoteScreenConsent {
   }
   cancelPeer(clientId: string, generation: string) {
     this.cancelRequest(clientId, generation);
-    for (const [source, share] of this.retained) {
-      if (
-        share.clientId !== clientId ||
-        share.generation !== generation
-      )
-        continue;
-      this.retained.delete(source);
-      share.release();
-    }
   }
   cancelRequest(clientId: string, generation: string) {
     for (const request of this.requests.values()) {
@@ -243,11 +225,6 @@ export class RemoteScreenConsent {
       this.releaseShared();
   }
   cancelClient(clientId: string) {
-    for (const [source, share] of this.retained) {
-      if (share.clientId !== clientId) continue;
-      this.retained.delete(source);
-      share.release();
-    }
     for (const request of this.requests.values()) {
       if (request.clientId === clientId)
         request.abort.abort();
@@ -270,56 +247,6 @@ export class RemoteScreenConsent {
       shared.active = true;
     if (shared.active) this.retainShared();
   }
-  canClose(
-    clientId: string,
-    generation: string,
-    sourceId: string,
-  ) {
-    const share = this.ownedShare(
-      clientId,
-      generation,
-      sourceId,
-    );
-    return !!share?.close && share.canClose?.() !== false;
-  }
-  closeScreen(
-    clientId: string,
-    generation: string,
-    sourceId: string,
-  ) {
-    const share = this.ownedShare(
-      clientId,
-      generation,
-      sourceId,
-    );
-    if (
-      !share?.close ||
-      share.canClose?.() === false ||
-      share.close() === false
-    )
-      return false;
-    const retained = this.retained.get(sourceId);
-    this.retained.delete(sourceId);
-    if (this.shared === share) {
-      this.shared = undefined;
-      this.clearApproval();
-    }
-    share.release();
-    if (retained !== share) retained?.release();
-    return true;
-  }
-  private ownedShare(
-    clientId: string,
-    generation: string,
-    sourceId: string,
-  ) {
-    return [this.shared, this.retained.get(sourceId)].find(
-      (share) =>
-        share?.sourceId === sourceId &&
-        share.clientId === clientId &&
-        share.generation === generation,
-    );
-  }
   cancelPending() {
     for (const request of this.requests.values())
       request.abort.abort();
@@ -328,22 +255,12 @@ export class RemoteScreenConsent {
   close() {
     this.cancelPending();
     this.releaseShared();
-    for (const share of this.retained.values())
-      share.release();
-    this.retained.clear();
   }
   private retainShared() {
     const share = this.shared;
     if (!share?.active) return;
     share.retain?.();
-    this.shared = undefined;
-    const previous = this.retained.get(share.sourceId);
-    if (previous?.close && !share.close) {
-      share.release();
-      return;
-    }
-    this.retained.set(share.sourceId, share);
-    previous?.release();
+    this.releaseShared();
   }
   private releaseShared() {
     const shared = this.shared;

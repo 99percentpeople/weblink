@@ -1386,18 +1386,14 @@ An existing share keeps its audio and capture settings. Successful manual contro
 requests, MCP screen.start and source-based control.acquire transfer their capture
 to the room. End control releases input; leaving or losing permission to control
 does not stop the picture. Close screen stops that source for the entire room.
-A picture shared manually by the host can only be closed by the host. A picture
-opened for a remote request can also be closed by its original requester, except
-while another caller controls that picture. Reuse and control handoff never transfer
-close permission. Manual control and MCP use the same ownership and occupancy check.
-Updated hosts return control-result.closable to the original requester, who can send
-control-close with the approved request ID. The host checks that ID, current
-permissions, peer generation and controller before stopping its recorded source.
-Other viewers and older hosts do not expose this action; the requester hides it
-while another caller controls the picture. Pending cancellation and approval expiry
-still release captures that never completed the handoff. The sharing device can
-close a retained picture after its original controller leaves. See AUTOMATION.md
-for tool authorization and close results.
+Manual remote control exposes only End control. Closing the picture is a local
+action on the sharing device, including pictures opened for a remote request.
+The controller can reacquire input through the retained picture after ending
+control or rejoining. The native screen channel does not advertise close permission
+and ignores legacy control-close messages. Successful handoff retains capture for
+the room and releases the temporary request lease; no peer close grant is retained.
+Pending cancellation and approval expiry still release captures that never completed
+the handoff. See AUTOMATION.md for the separate MCP screen.stop authorization.
 
 Capture shutdown notifies all native senders before closing their transports.
 Receivers allow a short transport-close grace period for the room's explicit stop

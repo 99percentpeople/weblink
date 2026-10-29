@@ -84,42 +84,32 @@ function setup() {
 }
 const signal = () => new AbortController().signal;
 
-it("keeps manual close ownership with the creator across a third person's control and reuse", async () => {
-  const local = createLocalStreamService();
-  let controller:
-    | { sourceId: string; clientId: string }
-    | undefined;
-  const sharing = createScreenSharing({
-    stream: local.stream,
-    publish: local.replace,
-    controller: () => controller,
-  });
+it("keeps a requested picture through control end, requester rejoin and third-party reuse until the host closes it", async () => {
+  const { local, share: sharing } = setup();
   const consent = new RemoteScreenConsent();
   const capture = vi.fn(async () => screen());
-  consent.share = async (signal, clientId) => {
+  consent.share = async (signal) => {
     const shared = await sharing.start(
       "monitor",
       signal,
       capture,
       async () => {},
       true,
-      clientId,
     );
     return {
       sourceId: "monitor",
       release: shared.release,
       retain: () =>
         sharing.retain(shared.stream.getVideoTracks()[0]),
-      canClose: shared.canClose,
-      close: shared.createdByCaller
-        ? shared.close
-        : undefined,
     };
   };
-  const acquire = async (client: string) => {
+  const acquire = async (
+    client: string,
+    generation: string,
+  ) => {
     const pending = consent.request(
       client,
-      client,
+      generation,
       signal(),
     );
     await consent.respond(
@@ -127,30 +117,27 @@ it("keeps manual close ownership with the creator across a third person's contro
       true,
     );
     expect(await pending).toBe("monitor");
-    consent.consume(client, client, "monitor");
+    expect(
+      consent.consume(client, generation, "monitor"),
+    ).toBe(true);
   };
-  await acquire("alice");
-  expect(
-    consent.canClose("alice", "alice", "monitor"),
-  ).toBe(true);
-  await acquire("bob");
-  controller = { sourceId: "monitor", clientId: "bob" };
-  expect(capture).toHaveBeenCalledOnce();
-  expect(consent.closeScreen("bob", "bob", "monitor")).toBe(
-    false,
-  );
-  expect(
-    consent.closeScreen("alice", "alice", "monitor"),
-  ).toBe(false);
-  expect(
-    local.stream()?.getVideoTracks()[0].readyState,
-  ).toBe("live");
-  controller = undefined;
-  expect(
-    consent.closeScreen("alice", "alice", "monitor"),
-  ).toBe(true);
-  expect(local.stream()).toBeNull();
+  await acquire("alice", "first");
+  const track = local.stream()!.getVideoTracks()[0];
+  consent.synchronize(null, null);
+  consent.cancelPeer("alice", "first");
+  sharing.synchronize();
+  expect(local.stream()!.getVideoTracks()[0]).toBe(track);
+  expect(track.readyState).toBe("live");
+  await acquire("alice", "rejoined");
+  await acquire("bob", "third-party");
   consent.close();
+  sharing.synchronize();
+  expect(capture).toHaveBeenCalledOnce();
+  expect(local.stream()!.getVideoTracks()[0]).toBe(track);
+  expect(track.readyState).toBe("live");
+  sharing.stop(track);
+  expect(local.stream()).toBeNull();
+  expect(track.readyState).toBe("ended");
 });
 
 it("blocks MCP closure during another controller's turn without transferring ownership to that caller", async () => {

@@ -27,25 +27,6 @@ export function createVideoRemoteControl() {
   return createControlState(control);
 }
 
-export function createScreenCloseAction(
-  clientId: Accessor<string | undefined>,
-  pointer: Accessor<RemotePointer | undefined>,
-) {
-  const screen = createControlState(() => {
-    const id = clientId();
-    return id
-      ? sessionService.getScreenControl(id)
-      : undefined;
-  });
-  return createMemo(() => {
-    screen.revision();
-    const request = screen.control();
-    const control = pointer();
-    return control && request?.canClose(control)
-      ? () => request.closeScreen(control)
-      : undefined;
-  });
-}
 type ControlAction = Pick<
   RemotePointer,
   | "state"
@@ -59,12 +40,10 @@ export function createControlState<T extends ControlAction>(
 ) {
   const [state, setState] =
     createSignal<PointerState>("unavailable");
-  const [revision, setRevision] = createSignal(0);
   createEffect(() => {
     const c = control();
     const update = () => {
       setState(c?.state() ?? "unavailable");
-      setRevision((value) => value + 1);
     };
     update();
     c?.addEventListener("change", update);
@@ -72,14 +51,13 @@ export function createControlState<T extends ControlAction>(
       c?.removeEventListener("change", update),
     );
   });
-  return { control, state, revision };
+  return { control, state };
 }
 
 export function RemoteControlAction(props: {
   control: ControlAction;
   state: PointerState;
   onRequest?(request: () => void): void;
-  onCloseScreen?(): void;
 }) {
   const controlling = () =>
     props.state === "active" ||
@@ -97,57 +75,46 @@ export function RemoteControlAction(props: {
               : "remote_control.request",
     );
   return (
-    <>
-      <MeetingTileAction
-        label={label()}
-        active={controlling()}
-        order={0}
-        disabled={
-          props.state === "unavailable" ||
-          props.state === "busy"
+    <MeetingTileAction
+      label={label()}
+      active={controlling()}
+      order={0}
+      disabled={
+        props.state === "unavailable" ||
+        props.state === "busy"
+      }
+      onAction={() => {
+        if (props.state === "viewing") {
+          const control = props.control;
+          const request = () => {
+            if (
+              props.control === control &&
+              control.state() === "viewing"
+            )
+              control.request();
+          };
+          if (props.onRequest) props.onRequest(request);
+          else request();
+        } else if (
+          props.state !== "unavailable" &&
+          props.state !== "busy"
+        )
+          props.control.cancel();
+      }}
+    >
+      <Show
+        when={props.state === "requesting"}
+        fallback={
+          <Show
+            when={controlling()}
+            fallback={<MousePointer2 />}
+          >
+            <Square />
+          </Show>
         }
-        onAction={() => {
-          if (props.state === "viewing") {
-            const control = props.control;
-            const request = () => {
-              if (
-                props.control === control &&
-                control.state() === "viewing"
-              )
-                control.request();
-            };
-            if (props.onRequest) props.onRequest(request);
-            else request();
-          } else if (
-            props.state !== "unavailable" &&
-            props.state !== "busy"
-          )
-            props.control.cancel();
-        }}
       >
-        <Show
-          when={props.state === "requesting"}
-          fallback={
-            <Show
-              when={controlling()}
-              fallback={<MousePointer2 />}
-            >
-              <Square />
-            </Show>
-          }
-        >
-          <X />
-        </Show>
-      </MeetingTileAction>
-      <Show when={props.onCloseScreen}>
-        <MeetingTileAction
-          label={t("remote_control.close_screen")}
-          order={1}
-          onAction={() => props.onCloseScreen?.()}
-        >
-          <X />
-        </MeetingTileAction>
+        <X />
       </Show>
-    </>
+    </MeetingTileAction>
   );
 }
