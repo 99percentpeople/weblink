@@ -256,7 +256,8 @@ impl Encoder {
             ("nvencAsync", 1),
             ("lowLatency", 1),
             ("bFrames", 0),
-            ("gopFrames", self.configuration.fps * 2),
+            // NVENC_INFINITE_GOPLENGTH: IDRs are requested by consumers.
+            ("gopFrames", u32::MAX),
             (
                 "bufferBytes",
                 self.configuration

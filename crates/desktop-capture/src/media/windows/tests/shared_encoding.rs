@@ -1,5 +1,42 @@
 use super::*;
 
+// ICE setup and bandwidth convergence happen while capture keeps running in the
+// application. Keep the fixture live too, including the recording consumer.
+async fn streaming<T>(
+    media: &Arc<MediaSession>,
+    recording_active: bool,
+    operation: impl std::future::Future<Output = T>,
+) -> T {
+    tokio::select! {
+        result = operation => result,
+        _ = async {
+            loop { recording::frames(media, 30).await; }
+        } => unreachable!(),
+        _ = async {
+            loop { drain(media.clone()).await; }
+        }, if recording_active => unreachable!(),
+    }
+}
+
+async fn wait_for_shared(media: &Arc<MediaSession>, recording_active: bool) {
+    // Each connection estimates bandwidth independently. A new viewer may
+    // temporarily need a lower bucket before it can reuse the existing encoder.
+    let result = streaming(media, recording_active, async {
+        tokio::time::timeout(Duration::from_secs(8), async {
+            while media.hardware.active().len() != 1 {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+    })
+    .await;
+    assert!(
+        result.is_ok(),
+        "Viewers did not converge to a shared encoder: {:?}",
+        media.hardware.statistics()
+    );
+}
+
 #[test]
 #[ignore = "Requires a Windows H.264 hardware encoder"]
 fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
@@ -19,9 +56,14 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
             ..Default::default()
         })
         .unwrap();
-        let first = connect(&media, "first", false).await.unwrap();
-        let second = connect(&media, "second", false).await.unwrap();
+        let first = streaming(&media, false, connect(&media, "first", false))
+            .await
+            .unwrap();
+        let second = streaming(&media, false, connect(&media, "second", false))
+            .await
+            .unwrap();
         recording::frames(&media, 45).await;
+        wait_for_shared(&media, false).await;
         let original = media.hardware.encoder("second").unwrap();
         let before = decoded(&first).await;
         let update = |width, height, fps| {
@@ -65,6 +107,7 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
             .any(|s| s.width == 640 && s.height == 360));
         let (result, _) = tokio::join!(update(640, 360, 30), recording::frames(&media, 45));
         result.unwrap().unwrap();
+        wait_for_shared(&media, false).await;
         assert!(Arc::ptr_eq(
             &original,
             &media.hardware.encoder("first").unwrap()
@@ -119,14 +162,19 @@ fn shared_encoder_survives_viewer_churn_and_recording_owns_the_last_lease() {
             ..Default::default()
         })
         .unwrap();
-        let first = connect(&media, "first", false).await.unwrap();
+        let first = streaming(&media, false, connect(&media, "first", false))
+            .await
+            .unwrap();
         recording::frames(&media, 45).await;
         let before = decoded(&first).await;
         assert!(before > 5);
-        let second = connect(&media, "second", false).await.unwrap();
+        let second = streaming(&media, false, connect(&media, "second", false))
+            .await
+            .unwrap();
         recording::frames(&media, 60).await;
         assert!(decoded(&first).await > before + 10);
         assert!(decoded(&second).await > 10);
+        wait_for_shared(&media, false).await;
         assert_eq!(media.hardware.active().len(), 1);
         assert!(Arc::ptr_eq(
             &media.hardware.encoder("first").unwrap(),
@@ -139,6 +187,7 @@ fn shared_encoder_survives_viewer_churn_and_recording_owns_the_last_lease() {
         media.control_recording("shared", true, 1).unwrap();
         let (_, packets) = tokio::join!(recording::frames(&media, 35), drain(media.clone()));
         assert!(packets > 10);
+        wait_for_shared(&media, true).await;
         assert_eq!(media.hardware.active().len(), 1);
         let before = decoded(&second).await;
         media.close_peer("first");
@@ -165,12 +214,13 @@ fn shared_encoder_survives_viewer_churn_and_recording_owns_the_last_lease() {
             "Live bitrate changes must preserve the recording tap"
         );
         assert_eq!(media.pipeline_stats().encoders[0].group_id, group_id);
-        // Keep draining while ICE gathering connects a returning viewer.
-        let (third, _) = tokio::join!(connect(&media, "third", false), drain(media.clone()));
-        let third = third.unwrap();
+        let third = streaming(&media, true, connect(&media, "third", false))
+            .await
+            .unwrap();
         let (_, packets) = tokio::join!(recording::frames(&media, 35), drain(media.clone()));
         assert!(packets > 10);
         assert!(decoded(&third).await > 10);
+        wait_for_shared(&media, true).await;
         assert_eq!(media.hardware.active().len(), 1);
         media.close_recording("shared");
         let before = decoded(&third).await;

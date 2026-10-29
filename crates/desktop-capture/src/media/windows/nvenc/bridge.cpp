@@ -155,7 +155,10 @@ struct Session {
               tuning, &preset), "Query interactive preset");
         config = preset.presetCfg;
         config.profileGUID = options.codec == 1 ? NV_ENC_H264_PROFILE_BASELINE_GUID : NV_ENC_HEVC_PROFILE_MAIN_GUID;
-        config.gopLength = options.fps * 2;
+        // Screen sharing already requests IDRs for startup, late joins, loss
+        // recovery and recording. Periodic IDRs spend the single-frame VBV
+        // budget on the entire desktop and cause recurring quality pulses.
+        config.gopLength = NVENC_INFINITE_GOPLENGTH;
         config.frameIntervalP = 1;
         config.frameFieldMode = NV_ENC_PARAMS_FRAME_FIELD_MODE_FRAME;
         auto& rate = config.rcParams;

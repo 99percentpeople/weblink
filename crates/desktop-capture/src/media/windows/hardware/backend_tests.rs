@@ -132,6 +132,47 @@ fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i
 
 #[test]
 #[ignore = "Requires NVIDIA NVENC H.264 and H.265"]
+fn nvenc_uses_only_requested_keyframes_across_bitrate_changes() {
+    let image = Image::new();
+    let captured = image.captured();
+    for (id, codec) in [(nvenc::H264, Codec::H264), (nvenc::HEVC, Codec::Hevc)] {
+        let mut converter =
+            gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+        let surface = converter
+            .convert(&captured, &MediaOptions::default())
+            .unwrap()
+            .unwrap();
+        let mut selection = Selection::new(id.into(), false);
+        let mut encoder = selection
+            .open_with(
+                configuration(codec),
+                Arc::new(|| {}),
+                Some(&image.device),
+                nvenc::Encoder::open,
+            )
+            .unwrap();
+        assert_eq!(selection.report.as_ref().unwrap().encoder, id);
+        // Six seconds at 30 FPS spans several old two-second GOP boundaries.
+        // PLI/recording requests must still produce an immediate recovery IDR.
+        for frame in 0..180 {
+            if frame == 45 {
+                encoder.set_bitrate(750_000).unwrap();
+            }
+            if frame == 95 {
+                encoder.request_keyframe().unwrap();
+            }
+            let packet = encode(&mut encoder, surface.clone(), frame * 1_000_000 / 30);
+            assert_eq!(
+                packet.keyframe,
+                frame == 0 || frame == 95,
+                "{id}: unexpected keyframe state at frame {frame}"
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "Requires NVIDIA NVENC H.264 and H.265"]
 fn nvenc_presets_accept_concurrent_shared_surfaces_and_bitrate_changes() {
     use crate::media::preset::EncodingPreset;
     let image = Image::new();

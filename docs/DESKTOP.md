@@ -826,6 +826,10 @@ keeps at most four inputs in flight; it unmaps each texture before releasing its
 lease. A dedicated completion-event waiter only wakes the shared worker, which
 copies the compressed output and publishes transport before the bounded recording
 queue. Recording writes never run in that waiter or the encode worker.
+NVENC uses an infinite GOP with on-demand IDRs, retaining the single-frame VBV
+budget without periodic full-picture quality pulses. Startup, new consumers,
+receiver keyframe feedback and recording start/resume still request recovery
+IDRs with parameter sets. Bitrate-only changes do not reset the GOP.
 The NVENC registration cache remains bounded to eight entries even when shared
 inputs originate from different conversion pools. It retires only the least
 recently used idle registration; pending input mappings are never evicted.
