@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.4] - 2026-10-29
+
+Weblink 1.3.4 adds saved receiver video-quality settings, simplifies screen-sharing and control lifetimes, and improves streaming stability, video controls and desktop update progress.
+
+### Receiver video quality
+
+- **Saved receive preferences:** add Receive video quality below Video quality in Settings → Media. Set resolution, frame rate and bitrate limits for all incoming video, remember them across sessions, and show the effective limits for each active source. Resolution and bitrate follow the sender by default; frame rate defaults to Auto.
+- **Automatic frame-rate limits:** use the receiver's display presentation cadence to limit the requested frame rate. Stabilize browser calibration so intermittent slow callbacks do not repeatedly switch between 60 and 120 FPS or leave a high-refresh display stuck at 60 FPS. Manual frame-rate choices remain available.
+- **Consistent settings:** use selection lists for resolution and frame rate and a slider for bitrate. Desktop choices account for available display capabilities; browsers retain the standard lists when that information is unavailable.
+- **Independent viewer quality:** apply each receiver's preferences within the sender's source and configured limits, supporting browser video and native screen streams. Adjust the viewer's outgoing encoding without changing the shared capture or other viewers' requested quality. Older peers continue streaming without receiver-side quality controls.
+
+### Screen sharing, remote control and MCP
+
+- **Keep the picture after control ends:** manual and MCP control now leave an established screen share available to the room after release or controller disconnection. Viewers can continue watching and request control again. Remove the manual controller's remote Close screen action; the sharing device stops its picture locally.
+- **Acquire sharing and control together:** `control.acquire` accepts a monitor `sourceId` to start or reuse sharing and acquire input in one call. Check both sharing and input permissions together, with at most one approval request. Existing `trackId` calls remain supported, and failed acquisition preserves previously established sharing.
+- **Respect remembered permissions:** honor existing automation allow decisions and remove obsolete approval notifications after policy changes. Deny policies and emergency suspension remain enforced.
+- **Clean stream shutdown:** notify receivers before closing native transports so an intentional stop does not briefly appear as an interrupted connection.
+
+### Streaming and interface fixes
+
+- **Steadier NVIDIA screen encoding:** replace periodic NVENC H.264/H.265 keyframes with on-demand keyframes to avoid recurring full-picture recompression and its quality pulses. Startup, new viewers, recovery requests and recording start/resume still request keyframes.
+- **Stable video menus:** preserve open action menus when screen metadata refreshes without replacing the source. Fully hide collapsed action buttons so their contents do not remain around the floating control dot.
+- **Clearer desktop updates:** use a consistent circular progress indicator. Show loading while preparing or installing, and download progress when known, instead of displaying a premature 100% state.
+- **Aligned file selection:** align Select all with individual file checkboxes in the remote shared-file list.
+
+### Maintenance
+
+- Stabilize native capture and shared-encoder tests around asynchronous readback and bandwidth convergence. Keep frames and recording reads flowing during connection setup, and update meeting tests to open action menus before interacting with their controls.
+
 ## [1.3.3] - 2026-10-28
 
 Weblink 1.3.3 improves Windows shortcut forwarding, unifies screen-sharing and control lifetimes, and makes MCP automation discovery and accessibility workflows more reliable.
