@@ -1,4 +1,19 @@
 {
+  "video_quality": {
+    "source": "当前接收画面",
+    "title": "接收画质",
+    "description": "统一应用于当前及之后接收的画面，并保存在本机。每路画面仍受共享方上限限制，不影响其他观看者。",
+    "resolution": "分辨率",
+    "follow_resolution": "跟随发送方分辨率",
+    "auto": "自动",
+    "framerate": "帧率",
+    "bitrate": "码率上限",
+    "follow_bitrate": "跟随发送方码率上限",
+    "applied": "生效上限：{{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "调整中…",
+    "failed": "调整失败，已保留之前的画质。",
+    "unavailable": "画面暂时不可用"
+  },
   "device_trust": {
     "connection_warning": "设备验证异常：{{name}}",
     "permissions_disabled": "连接已保留，所有权限已关闭。",

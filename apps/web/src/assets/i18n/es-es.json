@@ -4,6 +4,21 @@
     "description": "La página que buscas no existe. Ruta: {{path}}",
     "home": "Ir al inicio"
   },
+  "video_quality": {
+    "source": "Vídeos recibidos",
+    "title": "Calidad de recepción",
+    "description": "Se guarda en este dispositivo y se aplica a todos los vídeos recibidos, actuales y futuros. Se respetan los límites de cada emisor sin afectar a otros espectadores.",
+    "resolution": "Resolución",
+    "follow_resolution": "Seguir la resolución del emisor",
+    "auto": "Automático",
+    "framerate": "Tasa de fotogramas",
+    "bitrate": "Límite de tasa de bits",
+    "follow_bitrate": "Seguir el límite de tasa de bits del emisor",
+    "applied": "Límite efectivo: {{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "Ajustando…",
+    "failed": "No se pudo aplicar. Se conserva la calidad anterior.",
+    "unavailable": "Vídeo no disponible temporalmente"
+  },
   "tasks": {
     "error_details": "Detalles del error",
     "pause": "Pausar",

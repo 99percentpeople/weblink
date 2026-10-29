@@ -4,6 +4,21 @@
     "description": "Die gesuchte Seite existiert nicht, Pfad: {{path}}",
     "home": "Gehen Sie zu Startseite"
   },
+  "video_quality": {
+    "source": "Empfangene Videos",
+    "title": "Empfangsqualität",
+    "description": "Wird auf diesem Gerät gespeichert und auf alle aktuellen und zukünftigen empfangenen Videos angewendet. Die Grenzen des Senders gelten weiterhin; andere Zuschauer sind nicht betroffen.",
+    "resolution": "Auflösung",
+    "follow_resolution": "Auflösung des Senders übernehmen",
+    "auto": "Automatisch",
+    "framerate": "Bildrate",
+    "bitrate": "Bitratenlimit",
+    "follow_bitrate": "Bitratenlimit des Senders übernehmen",
+    "applied": "Wirksame Grenze: {{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "Wird angepasst…",
+    "failed": "Anpassung fehlgeschlagen. Die bisherige Qualität bleibt erhalten.",
+    "unavailable": "Bild derzeit nicht verfügbar"
+  },
   "tasks": {
     "error_details": "Fehlerdetails",
     "pause": "Pause",

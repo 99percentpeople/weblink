@@ -221,6 +221,7 @@ pub fn run() {
             capture::capture_share_start,
             capture::capture_set_audio_enabled,
             capture::capture_update_video_settings,
+            capture::capture_update_peer_video_settings,
             capture::capture_video_stats,
             capture::capture_pipeline_stats,
             preview::capture_preview_open,

@@ -6,6 +6,7 @@ import { normalizeTransferConcurrency } from "../application/transfer/transfer-q
 import { resolveApplicationOptions } from "../domain/application-options";
 import { sanitizeTurnServers } from "../domain/ice-server";
 import { resolveNotificationOptions } from "../domain/notification-options";
+import { resolveReceiveVideoQuality } from "../domain/video-quality";
 import { resolveRemoteFileLimit } from "../domain/protocol/remote-file-limits";
 import { resolveRemoteGamepadOptions } from "../domain/remote-control/gamepad-options";
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
@@ -74,6 +75,9 @@ export function resolveStoredAppOptions(
   );
   options.recordingContainer = resolveRecordingContainer(
     options.recordingContainer,
+  );
+  options.receiveVideoQuality = resolveReceiveVideoQuality(
+    options.receiveVideoQuality,
   );
   options.nativeEncoderPresets = resolveEncoderPresets(
     options.nativeEncoderPresets,

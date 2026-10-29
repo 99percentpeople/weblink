@@ -302,6 +302,21 @@ pub async fn capture_set_audio_enabled(
 }
 
 #[tauri::command]
+pub async fn capture_update_peer_video_settings(
+    service: State<'_, Service>,
+    session_id: String,
+    peer_id: String,
+    settings: weblink_desktop_capture::media::VideoSettings,
+) -> Result<(), String> {
+    run(service, move |service| {
+        service
+            .media(session_id)?
+            .update_peer_video_settings(&peer_id, settings)
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn capture_update_video_settings(
     service: State<'_, Service>,
     session_id: String,

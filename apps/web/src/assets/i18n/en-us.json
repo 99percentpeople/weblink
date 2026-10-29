@@ -1,4 +1,19 @@
 {
+  "video_quality": {
+    "source": "Incoming videos",
+    "title": "Receive quality",
+    "description": "Saved on this device and applied to all current and future incoming videos. Each publisher’s limits still apply; other viewers are unaffected.",
+    "resolution": "Resolution",
+    "follow_resolution": "Follow sender resolution",
+    "auto": "Auto",
+    "framerate": "Frame rate",
+    "bitrate": "Bitrate limit",
+    "follow_bitrate": "Follow sender bitrate limit",
+    "applied": "Effective limit: {{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "Adjusting…",
+    "failed": "Could not apply. The previous quality is retained.",
+    "unavailable": "Video is currently unavailable"
+  },
   "device_trust": {
     "connection_warning": "Device verification failed: {{name}}",
     "permissions_disabled": "The connection remains open. All permissions are disabled.",

@@ -167,6 +167,8 @@ fn gpu_color_rotation_and_all_cursor_shapes_match_cpu_composition() {
                     else {
                         unreachable!()
                     };
+                    let reference =
+                        crate::media::windows::hardware::Frame::nv12(&reference, size.0, size.1);
                     assert_eq!(actual.len(), reference.len());
                     let difference = actual
                         .iter()

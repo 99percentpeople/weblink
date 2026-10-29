@@ -16,6 +16,7 @@ import { useAppState } from "@/libs/state/app-state-context";
 import AudioSettings from "./audio-settings";
 import BrowserEncodingSettings from "./browser-encoding-settings";
 import VideoCaptureSettings from "./video-capture-settings";
+import { ReceivedVideoSettings } from "./received-video-settings";
 import NativeMediaSettings from "./native-media-settings";
 import type { RecordingContainer } from "@/libs/application/recording-options";
 
@@ -79,6 +80,7 @@ export default function MeetingSettings() {
           )
         }
       />
+      <ReceivedVideoSettings />
       <BrowserEncodingSettings />
       <AudioSettings />
       <Show when={native() !== null}>

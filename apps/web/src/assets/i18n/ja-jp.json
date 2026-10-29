@@ -4,6 +4,21 @@
     "description": "お探しのページは存在しません。パス：{{path}}",
     "home": "ホームに戻る"
   },
+  "video_quality": {
+    "source": "受信中の映像",
+    "title": "受信画質",
+    "description": "この端末に保存され、現在および今後受信するすべての映像に適用されます。各配信者の上限が優先され、他の視聴者には影響しません。",
+    "resolution": "解像度",
+    "follow_resolution": "送信側の解像度に合わせる",
+    "auto": "自動",
+    "framerate": "フレームレート",
+    "bitrate": "ビットレート上限",
+    "follow_bitrate": "送信側のビットレート上限に合わせる",
+    "applied": "適用上限：{{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "調整中…",
+    "failed": "適用できませんでした。以前の画質を維持します。",
+    "unavailable": "映像を一時的に利用できません"
+  },
   "tasks": {
     "error_details": "エラーの詳細",
     "pause": "一時停止",

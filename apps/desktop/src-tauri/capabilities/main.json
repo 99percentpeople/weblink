@@ -113,6 +113,7 @@
     "allow-capture-share-start",
     "allow-capture-set-audio-enabled",
     "allow-capture-update-video-settings",
+    "allow-capture-update-peer-video-settings",
     "allow-capture-video-stats",
     "allow-capture-pipeline-stats",
     "allow-capture-preview-open",

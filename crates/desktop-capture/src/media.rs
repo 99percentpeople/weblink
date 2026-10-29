@@ -205,6 +205,17 @@ pub struct VideoSettings {
     pub degradation_preference: String,
 }
 impl VideoSettings {
+    /// Receiver settings can only lower the publisher's limits.
+    pub fn bounded(&self, ceiling: &MediaOptions) -> crate::Result<MediaOptions> {
+        self.apply(ceiling)?;
+        Ok(MediaOptions {
+            max_width: self.max_width.min(ceiling.max_width),
+            max_height: self.max_height.min(ceiling.max_height),
+            frame_rate: self.frame_rate.min(ceiling.frame_rate),
+            max_bitrate: self.max_bitrate.min(ceiling.max_bitrate),
+            ..ceiling.clone()
+        })
+    }
     pub fn apply(&self, current: &MediaOptions) -> crate::Result<MediaOptions> {
         let options = MediaOptions {
             max_width: self.max_width,
@@ -446,6 +457,9 @@ impl MediaSession {
     }
     pub fn close(&self) {}
     pub fn set_audio_enabled(&self, _: bool) {}
+    pub fn update_peer_video_settings(&self, _: &str, _: VideoSettings) -> crate::Result<()> {
+        Err("Native screen sharing currently requires Windows".into())
+    }
     pub fn update_video_settings(&self, _: VideoSettings) -> crate::Result<()> {
         Err("Native screen sharing currently requires Windows".into())
     }

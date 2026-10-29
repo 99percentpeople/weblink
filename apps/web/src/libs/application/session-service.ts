@@ -1,4 +1,10 @@
 import { scopes } from "@weblink/automation";
+import {
+  VideoQualityPeer,
+  type VideoQualityControl,
+} from "../domain/video-quality";
+import { observeDisplayFrameRate } from "../domain/display-frame-rate";
+import { nativeScreenOptions } from "./meeting-video-settings";
 import type { NativeAutomationPeer } from "@weblink/platform";
 import { PeerTrustService } from "./peer-trust";
 import { bootstrapMessage } from "../domain/device-identity/access";
@@ -65,7 +71,53 @@ export interface SessionServiceOptions {
   loadIceServers?: () => Promise<RTCIceServer[]>;
 }
 
+export interface ReceivedVideoQuality {
+  clientId: string;
+  kind: "screen" | "camera" | "video";
+  control: VideoQualityControl;
+}
+
 export class SessionService {
+  private readonly videoQuality = new Map<
+    PeerSession,
+    VideoQualityPeer
+  >();
+  private readonly qualityRevision = createSignal(0);
+  private displayCadence?: AbortController;
+  private displayFrameRate?: number;
+  getReceivedVideoQualities(): ReceivedVideoQuality[] {
+    this.qualityRevision[0]();
+    return [...this.videoQuality].flatMap(
+      ([session, quality]) =>
+        quality.receivers().map((control) => ({
+          clientId: session.targetClientId,
+          kind: control.source.locator.startsWith("native:")
+            ? ("screen" as const)
+            : (appState.session.clientViewData[
+                session.targetClientId
+              ]?.videoSources?.find(
+                (source) =>
+                  `browser:${source.mid}` ===
+                  control.source.locator,
+              )?.kind ?? "video"),
+          control,
+        })),
+    );
+  }
+  videoBitrateLimit(
+    session: PeerSession,
+    track: MediaStreamTrack | null,
+  ): number {
+    const limit =
+      track &&
+      this.videoQuality
+        .get(session)
+        ?.senderBitrate(`browser:${track.id}`);
+    return Math.min(
+      appState.options.videoMaxBitrate,
+      limit || appState.options.videoMaxBitrate,
+    );
+  }
   readonly trust = new PeerTrustService({
     quarantine: (id) =>
       setClientConfig(id, {
@@ -591,6 +643,50 @@ export class SessionService {
         console.error("Native screen connection", error),
     });
     this.nativeScreens.set(session, native);
+    const quality = new VideoQualityPeer({
+      sources: () =>
+        this.canShareScreen(client.clientId) &&
+        this.canReceive(client.clientId)
+          ? [
+              ...native.qualitySources(),
+              ...session.qualitySources(
+                nativeScreenOptions(appState.options),
+              ),
+            ]
+          : [],
+      apply: (source, preference) => {
+        if (
+          !this.canShareScreen(client.clientId) ||
+          !this.canReceive(client.clientId)
+        )
+          return Promise.reject(
+            new Error("Screen permission revoked"),
+          );
+        return source.id.startsWith("native:")
+          ? native.applyQuality(source, preference)
+          : session.applyQuality(source, preference);
+      },
+    });
+    this.videoQuality.set(session, quality);
+    quality.addEventListener(
+      "change",
+      () => this.qualityRevision[1]((n) => n + 1),
+      { signal: controller.signal },
+    );
+    if (!this.displayCadence) {
+      this.displayCadence = new AbortController();
+      observeDisplayFrameRate((fps) => {
+        this.displayFrameRate = fps;
+        for (const peer of this.videoQuality.values())
+          peer.setRefreshRate(fps);
+      }, this.displayCadence.signal);
+    }
+    if (this.displayFrameRate)
+      quality.setRefreshRate(this.displayFrameRate);
+    const bindMedia = (channel: RTCDataChannel) => {
+      native.bind(channel);
+      quality.bind(channel);
+    };
     const disposeTrust = this.trust.bind(session);
     const disposeCapabilities = this.capabilities.bind(
       session,
@@ -606,6 +702,11 @@ export class SessionService {
       },
     );
     const disposePolicy = createRoot((dispose) => {
+      createEffect(() =>
+        quality.setPreference({
+          ...appState.options.receiveVideoQuality,
+        }),
+      );
       createEffect(() =>
         this.capabilities.refresh(session),
       );
@@ -627,8 +728,10 @@ export class SessionService {
             );
           this.applySessionStream(session);
           session.refreshAccess();
-          if (!this.canReceive(client.clientId))
+          if (!this.canReceive(client.clientId)) {
             native.reset();
+            quality.dispose();
+          }
           queueMicrotask(() => openNative());
         });
       });
@@ -688,6 +791,7 @@ export class SessionService {
       ) {
         opening = false;
         native.reset();
+        quality.disconnect();
         return;
       }
       if (
@@ -701,7 +805,7 @@ export class SessionService {
         return;
       opening = true;
       try {
-        native.bind(
+        bindMedia(
           session.peerConnection.createDataChannel(
             NATIVE_SCREEN_CHANNEL,
             {
@@ -725,7 +829,7 @@ export class SessionService {
           detail.label === NATIVE_SCREEN_CHANNEL &&
           detail.protocol === NATIVE_SCREEN_CHANNEL
         )
-          native.bind(detail);
+          bindMedia(detail);
       },
       { signal: controller.signal },
     );
@@ -735,6 +839,7 @@ export class SessionService {
         opening = false;
         mainChannelReady = false;
         native.reset();
+        quality.disconnect();
         controlGeneration = createUuid();
       },
       { signal: controller.signal },
@@ -747,6 +852,7 @@ export class SessionService {
         else {
           opening = false;
           native.reset();
+          quality.disconnect();
           controlGeneration = createUuid();
         }
       },
@@ -761,6 +867,14 @@ export class SessionService {
         this.requestedStreams.delete(session);
         mainChannelReady = false;
         native.dispose();
+        quality.dispose();
+        this.videoQuality.delete(session);
+        this.qualityRevision[1]((n) => n + 1);
+        if (!this.videoQuality.size) {
+          this.displayCadence?.abort();
+          this.displayCadence = undefined;
+          this.displayFrameRate = undefined;
+        }
         controlGeneration = createUuid();
         this.nativeScreens.delete(session);
       },
@@ -810,6 +924,10 @@ export class SessionService {
             case "video": {
               const videoParameters = changeVideoEncoding(
                 sender.getParameters(),
+                this.videoBitrateLimit(
+                  session,
+                  sender.track,
+                ),
               );
               if (videoParameters) {
                 sender
@@ -1043,6 +1161,10 @@ export function createSessionService() {
                   const videoParameters =
                     changeVideoEncoding(
                       sender.getParameters(),
+                      sessionService.videoBitrateLimit(
+                        session,
+                        sender.track,
+                      ),
                     );
                   if (videoParameters) {
                     sender
@@ -1080,6 +1202,7 @@ function changeAudioEncoding(
 
 function changeVideoEncoding(
   parameters: RTCRtpSendParameters,
+  maxBitrate = appState.options.videoMaxBitrate,
 ): RTCRtpSendParameters | null {
   parameters.degradationPreference =
     appState.options.degradationPreference ?? "balanced";
@@ -1088,7 +1211,7 @@ function changeVideoEncoding(
   }
   const encoding = parameters.encodings[0] ?? {};
   encoding.active = true;
-  encoding.maxBitrate = appState.options.videoMaxBitrate;
+  encoding.maxBitrate = maxBitrate;
   encoding.priority = "high";
   encoding.networkPriority = "high";
   return parameters;

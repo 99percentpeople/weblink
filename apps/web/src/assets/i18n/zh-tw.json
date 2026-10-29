@@ -1,4 +1,19 @@
 {
+  "video_quality": {
+    "source": "目前接收畫面",
+    "title": "接收畫質",
+    "description": "統一套用於目前及之後接收的畫面，並儲存在本機。各畫面仍受分享方上限限制，不影響其他觀看者。",
+    "resolution": "解析度",
+    "follow_resolution": "跟隨傳送方解析度",
+    "auto": "自動",
+    "framerate": "影格率",
+    "bitrate": "位元率上限",
+    "follow_bitrate": "跟隨傳送方位元速率上限",
+    "applied": "生效上限：{{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "調整中…",
+    "failed": "調整失敗，已保留先前的畫質。",
+    "unavailable": "畫面暫時無法使用"
+  },
   "tasks": {
     "error_details": "錯誤詳情",
     "pause": "暫停",

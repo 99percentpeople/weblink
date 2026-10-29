@@ -10,6 +10,7 @@ use super::super::{
 };
 use super::mf::transform;
 use crate::damage::Damage;
+use crate::media::cadence::CaptureCadence;
 use crate::media::latency::{
     CodecControl, Distribution, EncoderPipelineStats, HardwareEncoderSelection,
 };
@@ -17,6 +18,7 @@ use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
 use crate::media::webrtc::clock_us;
 use crate::Result;
 pub use backend::detect;
+use libwebrtc::video_frame::native::VideoFrameBufferExt;
 use libwebrtc::{
     native::yuv_helper::i420_to_nv12,
     video_frame::{EncodedFrameType, EncodedVideoFrame, I420Buffer, VideoBuffer},
@@ -40,8 +42,9 @@ pub struct Frame {
     ready_at: Instant,
     damage: Damage,
 }
+#[derive(Clone)]
 enum Input {
-    Memory(Vec<u8>),
+    Memory(Arc<I420Buffer>),
     Texture(Arc<gpu::Captured>),
 }
 impl Frame {
@@ -68,6 +71,38 @@ impl Frame {
         }
     }
     pub fn from_i420(buffer: &I420Buffer, captured_at: Option<Instant>) -> Self {
+        Self {
+            input: Input::Memory(Arc::new(buffer.to_i420())),
+            width: buffer.width(),
+            height: buffer.height(),
+            damage: Damage::default(),
+            captured_at,
+            ready_at: Instant::now(),
+        }
+    }
+    fn scaled(&self, options: &MediaOptions) -> Self {
+        let (width, height) = match &self.input {
+            Input::Texture(texture) => texture.size(),
+            Input::Memory(buffer) => (buffer.width(), buffer.height()),
+        };
+        let (width, height) = options.dimensions(width, height);
+        Self {
+            input: self.input.clone(),
+            width,
+            height,
+            damage: match &self.input {
+                Input::Texture(texture) => texture.damage((width, height)),
+                _ => Damage::default(),
+            },
+            captured_at: self.captured_at,
+            ready_at: self.ready_at,
+        }
+    }
+    fn nv12(buffer: &I420Buffer, width: u32, height: u32) -> Vec<u8> {
+        let mut buffer = buffer.to_i420();
+        if (buffer.width(), buffer.height()) != (width, height) {
+            buffer = buffer.scale(width as i32, height as i32);
+        }
         let (width, height) = (buffer.width() as usize, buffer.height() as usize);
         // MediaOptions::dimensions normalizes capture output for NV12.
         assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
@@ -91,14 +126,7 @@ impl Frame {
             width as i32,
             height as i32,
         );
-        Self {
-            input: Input::Memory(bytes),
-            damage: Damage::default(),
-            width: width as u32,
-            height: height as u32,
-            captured_at,
-            ready_at: Instant::now(),
-        }
+        bytes
     }
 }
 
@@ -419,8 +447,12 @@ fn run(
         BitrateController::new(options.max_bitrate as u32)
     };
     let mut frame_budget = FrameBudget::new(rate_control.current());
-    // Capture owns the FPS cap. Do not add a second, independently phased clock
-    // or feed libwebrtc's observed static FPS back into capture cadence.
+    // Each profile admits at its own cap while capture retains the publisher's
+    // ceiling. Retain the newest frame until its deadline, including static tails.
+    let mut cadence = CaptureCadence::new(
+        Duration::from_secs_f64(1.0 / options.frame_rate as f64),
+        started,
+    );
     let weak_work = Arc::downgrade(&work);
     let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
         if let Some(work) = weak_work.upgrade() {
@@ -472,17 +504,28 @@ fn run(
                     keyframe = true;
                 }
                 options = next;
+                cadence.set_interval(
+                    Duration::from_secs_f64(1.0 / options.frame_rate as f64),
+                    Instant::now(),
+                );
             }
             if let Some(frame) = next_input
                 .filter(|frame| frame.device().is_none() || !fallback.cpu.load(Ordering::Acquire))
             {
+                let scaled = frame.scaled(&options);
+                let resized = (frame.width, frame.height) != (scaled.width, scaled.height);
+                let frame = Arc::new(scaled);
                 if latest
                     .as_ref()
                     .is_some_and(|old| (old.width, old.height) != (frame.width, frame.height))
                 {
                     damage = Damage::default();
                 }
-                damage.merge(&next_damage);
+                if resized {
+                    damage = Damage::default();
+                } else {
+                    damage.merge(&next_damage);
+                }
                 if latest.replace(frame).is_some() {
                     statistics
                         .lock()
@@ -669,6 +712,15 @@ fn run(
                 }
             }
             if active.ready() {
+                if latest.is_some() && !keyframe && !cadence.ready(Instant::now()) {
+                    continue_wait(
+                        &work,
+                        &rate_control,
+                        started,
+                        Some(cadence.remaining(Instant::now())),
+                    );
+                    continue;
+                }
                 if let Some(frame) = latest.take() {
                     // MF drivers can exceed their accepted bitrate target. Skip raw
                     // inputs before encoding so the emitted reference chain stays intact.
@@ -687,7 +739,11 @@ fn run(
                     let timestamp = timeline.timestamp(frame.captured_at, frame.ready_at);
                     let input_at = Instant::now();
                     let input = match &frame.input {
-                        Input::Memory(bytes) => active.input(bytes, timestamp, damage.rects()),
+                        Input::Memory(buffer) => active.input(
+                            &Frame::nv12(buffer, frame.width, frame.height),
+                            timestamp,
+                            damage.rects(),
+                        ),
                         Input::Texture(texture) => {
                             match converter.as_mut().unwrap().convert(texture, &options) {
                                 Ok(Some(surface)) => {
@@ -736,6 +792,7 @@ fn run(
                         continue;
                     }
                     timeline.accepted(timestamp);
+                    cadence.complete(Some(input_at));
                     damage.take();
                     if active.take_controls_changed() {
                         statistics
@@ -1077,6 +1134,7 @@ mod tests {
             media.peers.lock().unwrap().insert(
                 "reconnecting".into(),
                 MediaPeer {
+                    limits: None,
                     _factory: media.factory.clone(),
                     encoding: MediaOptions::default(),
                     connection: connection.clone(),
@@ -1188,7 +1246,10 @@ mod tests {
         let Input::Memory(bytes) = frame.input else {
             panic!("expected memory input")
         };
-        assert_eq!(bytes, [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 11, 21]);
+        assert_eq!(
+            Frame::nv12(&bytes, 4, 2),
+            [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 11, 21]
+        );
     }
 
     #[test]

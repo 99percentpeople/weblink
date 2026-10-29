@@ -603,6 +603,11 @@ export interface NativeScreenShare {
     sessionId: string,
     settings: NativeVideoSettings,
   ): Promise<void>;
+  updatePeerVideoSettings?(
+    sessionId: string,
+    peerId: string,
+    settings: NativeVideoSettings,
+  ): Promise<void>;
   setAudioEnabled?(
     sessionId: string,
     enabled: boolean,

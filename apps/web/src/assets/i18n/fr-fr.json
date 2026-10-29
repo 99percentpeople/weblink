@@ -4,6 +4,21 @@
     "description": "La page que vous recherchez n'existe pas, chemin : {{path}}",
     "home": "Aller à la maison"
   },
+  "video_quality": {
+    "source": "Vidéos reçues",
+    "title": "Qualité de réception",
+    "description": "Enregistré sur cet appareil et appliqué à toutes les vidéos reçues, actuelles et futures. Les limites de chaque diffuseur restent applicables, sans affecter les autres spectateurs.",
+    "resolution": "Résolution",
+    "follow_resolution": "Suivre la résolution de l’émetteur",
+    "auto": "Automatique",
+    "framerate": "Fréquence d’images",
+    "bitrate": "Débit maximal",
+    "follow_bitrate": "Suivre la limite de débit de l’émetteur",
+    "applied": "Limite effective : {{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "Ajustement en cours…",
+    "failed": "Échec de l’ajustement. La qualité précédente est conservée.",
+    "unavailable": "Vidéo temporairement indisponible"
+  },
   "tasks": {
     "error_details": "Détails de l'erreur",
     "pause": "Pause",

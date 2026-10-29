@@ -8,6 +8,15 @@ import {
 } from "./rtp-encoded-media";
 import type { EncodedVideoSource } from "./encoded-video";
 import { recordingMediaSources } from "./recording-media-sources";
+import {
+  browserQualitySource,
+  applyBrowserVideoQuality,
+} from "./browser-video-quality";
+import type {
+  VideoQualityLimits,
+  VideoQualityPreference,
+  VideoQualitySource,
+} from "./video-quality";
 
 export interface SessionMediaCodecOptions {
   preferredVideoCodec: string | null;
@@ -48,6 +57,37 @@ export interface PeerSessionMediaOptions {
 }
 
 export class PeerSessionMediaController {
+  qualitySources(
+    limits: VideoQualityLimits,
+  ): VideoQualitySource[] {
+    const transceivers =
+      this.options.getPeerConnection()?.getTransceivers() ??
+      [];
+    return [...this.senders].flatMap(([track, sender]) => {
+      const mid = transceivers.find(
+        (t) => t.sender === sender,
+      )?.mid;
+      return track.kind === "video" &&
+        track.readyState !== "ended" &&
+        mid != null
+        ? [browserQualitySource(track, mid, limits)]
+        : [];
+    });
+  }
+  async applyQuality(
+    source: VideoQualitySource,
+    preference: VideoQualityPreference,
+  ): Promise<VideoQualityLimits> {
+    const entry = [...this.senders].find(
+      ([track]) => `browser:${track.id}` === source.id,
+    );
+    if (!entry) throw new Error("Video source stopped");
+    return applyBrowserVideoQuality(
+      entry[1],
+      source,
+      preference,
+    );
+  }
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private streamStateNotified = false;

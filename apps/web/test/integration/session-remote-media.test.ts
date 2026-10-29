@@ -12,6 +12,12 @@ import { setClientConfig } from "@/options";
 import type { PeerTrust } from "@/libs/application/peer-trust";
 import { reconcile } from "solid-js/store";
 import { SessionService } from "@/libs/application/session-service";
+import { NATIVE_SCREEN_CHANNEL } from "@/libs/domain/native-screen/session";
+import type {
+  PeerSession,
+  PeerSessionEventMap,
+} from "@/libs/domain/session";
+import type { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { ClientService } from "@/libs/domain/client";
 import type { SignalingService } from "@/libs/domain/signaling";
 import {
@@ -131,6 +137,136 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+it("applies saved receive defaults to new peers and broadcasts edits to existing incoming videos", async () => {
+  vi.useFakeTimers();
+  const service = new SessionService({
+    loadIceServers: async () => [],
+  });
+  vi.spyOn(service, "canReceive").mockReturnValue(true);
+  vi.spyOn(service, "canShareScreen").mockReturnValue(
+    false,
+  );
+  service.setClientService({
+    info: { clientId: "local", createdAt: 1 },
+    createSender: (targetClientId: string) => ({
+      clientId: "local",
+      targetClientId,
+      status: "connected",
+      sendSignal: async () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      close: () => {},
+    }),
+    removeSender: vi.fn(),
+    addEventListener: vi.fn(),
+    close: vi.fn(),
+  } as unknown as ClientService);
+  class Channel extends EventTarget {
+    label = NATIVE_SCREEN_CHANNEL;
+    protocol = NATIVE_SCREEN_CHANNEL;
+    readyState = "open";
+    bufferedAmount = 0;
+    sent: Array<{ type: string; preference?: unknown }> =
+      [];
+    send(value: string) {
+      this.sent.push(JSON.parse(value));
+    }
+    close() {
+      this.readyState = "closed";
+      this.dispatchEvent(new Event("close"));
+    }
+    advertise() {
+      this.dispatchEvent(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            type: "quality-sources",
+            sources: [
+              {
+                id: "native:screen",
+                locator: "native:screen",
+                transport: "peer",
+                limits: {
+                  maxWidth: 1920,
+                  maxHeight: 1080,
+                  frameRate: 165,
+                  maxBitrate: 20_000_000,
+                },
+              },
+            ],
+          }),
+        }),
+      );
+    }
+  }
+  const connect = async (id: string) => {
+    const session: PeerSession = await service.addClient({
+      clientId: id,
+      createdAt: 2,
+      name: id,
+      avatar: null,
+    });
+    const channel = new Channel();
+    (
+      session as unknown as Pick<
+        MultiEventEmitter<PeerSessionEventMap>,
+        "dispatchEvent"
+      >
+    ).dispatchEvent(
+      "channel",
+      channel as unknown as RTCDataChannel,
+    );
+    channel.advertise();
+    return channel;
+  };
+  try {
+    setAppState(
+      "options",
+      "receiveVideoQuality",
+      reconcile({ height: 720, fps: 120 }),
+    );
+    const first = await connect("quality-first");
+    await vi.advanceTimersByTimeAsync(150);
+    expect(first.sent.at(-1)).toMatchObject({
+      type: "quality-request",
+      preference: { height: 720, fps: 120 },
+    });
+    setAppState(
+      "options",
+      "receiveVideoQuality",
+      "fps",
+      90,
+    );
+    const second = await connect("quality-second");
+    await vi.advanceTimersByTimeAsync(150);
+    for (const channel of [first, second])
+      expect(channel.sent.at(-1)).toMatchObject({
+        type: "quality-request",
+        preference: { height: 720, fps: 90 },
+      });
+    expect(
+      service.getReceivedVideoQualities(),
+    ).toHaveLength(2);
+    setAppState(
+      "options",
+      "receiveVideoQuality",
+      reconcile({}),
+    );
+    await vi.advanceTimersByTimeAsync(150);
+    for (const channel of [first, second])
+      expect(channel.sent.at(-1)?.preference).toEqual({});
+    service.destoryAllSession();
+    expect(service.getReceivedVideoQualities()).toEqual([]);
+  } finally {
+    service.destoryAllSession();
+    setAppState(
+      "options",
+      "receiveVideoQuality",
+      reconcile({}),
+    );
+    vi.useRealTimers();
+  }
 });
 
 describe("remote media presentation across peer recovery", () => {

@@ -1,5 +1,6 @@
 import type { AutomationPolicy } from "@weblink/automation";
 import type { NativeEncodingPreset } from "@weblink/platform";
+import type { ReceiveVideoQuality } from "../domain/video-quality";
 import {
   defaultNotificationOptions,
   type NotificationOptions,
@@ -159,6 +160,7 @@ export type AppOption = {
   roomConfigs: Record<string, RoomConfig | undefined>;
 
   // Stream
+  receiveVideoQuality: ReceiveVideoQuality;
   videoResolution:
     | "480p"
     | "720p"
@@ -292,6 +294,7 @@ export const getDefaultAppOptions = (): AppOption => {
     maxFileSize: 1024 * 1024 * 1024, // 1GB
     degradationPreference: "balanced",
     videoResolution: "1080p",
+    receiveVideoQuality: {},
     videoFrameRate: 30,
     nativeScreenCodec: null,
     nativeAudioCodec: null,

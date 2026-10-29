@@ -158,6 +158,16 @@ export const platform: PlatformRuntime = {
       invoke<
         import("@weblink/platform").NativeVideoStats[]
       >("capture_video_stats", { sessionId, peerId }),
+    updatePeerVideoSettings: (
+      sessionId,
+      peerId,
+      settings,
+    ) =>
+      invoke<void>("capture_update_peer_video_settings", {
+        sessionId,
+        peerId,
+        settings,
+      }),
     updateVideoSettings: (sessionId, settings) =>
       invoke<void>("capture_update_video_settings", {
         sessionId,

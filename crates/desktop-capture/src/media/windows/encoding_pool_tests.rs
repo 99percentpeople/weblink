@@ -1,4 +1,47 @@
 use super::*;
+#[test]
+fn failed_viewer_profile_keeps_the_original_encoder_and_other_consumers() {
+    let pool = Arc::new(Pool::default());
+    let viewer = acquire(&pool, "viewer", false);
+    let other = acquire(&pool, "other", false);
+    let recording = acquire(&pool, "recording", true);
+    let original = viewer.encoder().unwrap();
+    let output = viewer.output.as_ref().unwrap().clone();
+    let worker_pool = pool.clone();
+    let worker = std::thread::spawn(move || {
+        worker_pool.update_peer(
+            "viewer",
+            &VideoSettings {
+                max_width: 320,
+                max_height: 180,
+                frame_rate: 15,
+                max_bitrate: 200_000,
+                degradation_preference: "balanced".into(),
+            },
+            &options(),
+        )
+    });
+    let started = std::time::Instant::now();
+    while !worker.is_finished() && started.elapsed() < std::time::Duration::from_secs(5) {
+        for (id, encoder) in pool.active() {
+            if id.starts_with("warming:") {
+                encoder.submit(Arc::new(hardware::Frame::from_i420(
+                    &libwebrtc::video_frame::I420Buffer::new_black(320, 180),
+                    None,
+                )));
+            }
+        }
+        assert!(pool.take_failed_peers().is_empty());
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(worker.join().unwrap().is_err());
+    assert!(Arc::ptr_eq(&original, &viewer.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&original, &other.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&original, &recording.encoder().unwrap()));
+    assert!(Arc::ptr_eq(&output, viewer.output.as_ref().unwrap()));
+    assert_eq!(pool.active().len(), 1);
+    pool.close();
+}
 fn options() -> MediaOptions {
     MediaOptions {
         codec: Some("video/h264".into()),

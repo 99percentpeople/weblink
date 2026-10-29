@@ -107,6 +107,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     encoded: None,
                     _factory: media.factory.clone(),
                     encoding: media.options.lock().unwrap().clone(),
+                    limits: None,
                     connection: pc,
                     gathering: gathering.clone(),
                     preview: false,
@@ -536,6 +537,65 @@ fn updates_live_senders_and_keeps_preview_quality_and_session_identity() {
                 degradation_preference: "balanced".into()
             })
             .is_err());
+    });
+}
+
+#[test]
+fn viewer_quality_is_bounded_and_survives_publisher_settings_without_changing_other_peers() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let media = MediaSession::new(MediaOptions {
+            encoder: "software".into(),
+            codec: Some("video/vp8".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let _first = connect(&media, "first", false).await.unwrap();
+        let _second = connect(&media, "second", false).await.unwrap();
+        let request = VideoSettings {
+            max_width: 640,
+            max_height: 360,
+            frame_rate: 15,
+            max_bitrate: 500_000,
+            degradation_preference: "balanced".into(),
+        };
+        media
+            .update_peer_video_settings("first", request.clone())
+            .unwrap();
+        let read = |id: &str| {
+            media.peers.lock().unwrap()[id]
+                .connection
+                .senders()
+                .remove(0)
+                .parameters()
+                .encodings
+                .remove(0)
+        };
+        assert_eq!(read("first").max_framerate, Some(15.0));
+        assert_eq!(read("second").max_framerate, Some(30.0));
+        assert_eq!(media.options.lock().unwrap().frame_rate, 30);
+        media
+            .update_video_settings(VideoSettings {
+                frame_rate: 10,
+                max_bitrate: 300_000,
+                ..request.clone()
+            })
+            .unwrap();
+        assert_eq!(read("first").max_framerate, Some(10.0));
+        assert_eq!(read("first").max_bitrate, Some(300_000));
+        media
+            .update_video_settings(VideoSettings {
+                frame_rate: 60,
+                max_bitrate: 2_000_000,
+                ..request.clone()
+            })
+            .unwrap();
+        assert_eq!(read("first").max_framerate, Some(15.0));
+        assert_eq!(read("first").max_bitrate, Some(500_000));
+        assert_eq!(read("second").max_framerate, Some(60.0));
+        media.close_peer("first");
+        assert!(media.update_peer_video_settings("first", request).is_err());
+        assert!(media.peers.lock().unwrap().contains_key("second"));
+        media.close();
     });
 }
 

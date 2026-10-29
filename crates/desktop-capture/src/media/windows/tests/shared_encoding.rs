@@ -1,5 +1,79 @@
 use super::*;
 
+#[test]
+#[ignore = "Requires a Windows H.264 hardware encoder"]
+fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let hardware = mf::detect()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.codecs.contains(&"video/h264".into()))
+            .unwrap();
+        let media = MediaSession::new(MediaOptions {
+            encoder: hardware.id,
+            codec: Some("video/h264".into()),
+            frame_rate: 30,
+            max_width: 640,
+            max_height: 360,
+            max_bitrate: 300_000,
+            ..Default::default()
+        })
+        .unwrap();
+        let first = connect(&media, "first", false).await.unwrap();
+        let second = connect(&media, "second", false).await.unwrap();
+        recording::frames(&media, 45).await;
+        let original = media.hardware.encoder("second").unwrap();
+        let before = decoded(&first).await;
+        let update = |width, height, fps| {
+            let media = media.clone();
+            tokio::task::spawn_blocking(move || {
+                media.update_peer_video_settings(
+                    "first",
+                    VideoSettings {
+                        max_width: width,
+                        max_height: height,
+                        frame_rate: fps,
+                        max_bitrate: 300_000,
+                        degradation_preference: "balanced".into(),
+                    },
+                )
+            })
+        };
+        let (result, _) = tokio::join!(update(320, 180, 15), recording::frames(&media, 60));
+        result.unwrap().unwrap();
+        assert!(decoded(&first).await > before + 5);
+        assert!(decoded(&second).await > 10);
+        assert!(Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("second").unwrap()
+        ));
+        assert!(!Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("first").unwrap()
+        ));
+        assert!(media
+            .stats("first")
+            .await
+            .unwrap()
+            .iter()
+            .any(|s| s.width == 320 && s.height == 180));
+        assert!(media
+            .stats("second")
+            .await
+            .unwrap()
+            .iter()
+            .any(|s| s.width == 640 && s.height == 360));
+        let (result, _) = tokio::join!(update(640, 360, 30), recording::frames(&media, 45));
+        result.unwrap().unwrap();
+        assert!(Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("first").unwrap()
+        ));
+        assert_eq!(media.peers.lock().unwrap().len(), 2);
+        media.close();
+    });
+}
+
 async fn drain(media: Arc<MediaSession>) -> usize {
     let started = Instant::now();
     let mut packets = 0;

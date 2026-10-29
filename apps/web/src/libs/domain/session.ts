@@ -244,6 +244,17 @@ export class PeerSession {
   get clientId() {
     return this.sender.clientId;
   }
+  qualitySources(
+    limits: import("./video-quality").VideoQualityLimits,
+  ) {
+    return this.media.qualitySources(limits);
+  }
+  applyQuality(
+    source: import("./video-quality").VideoQualitySource,
+    preference: import("./video-quality").VideoQualityPreference,
+  ) {
+    return this.media.applyQuality(source, preference);
+  }
 
   get targetClientId() {
     return this.sender.targetClientId;

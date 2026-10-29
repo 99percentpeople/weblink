@@ -120,6 +120,7 @@ fn main() {
             "capture_share_start",
             "capture_set_audio_enabled",
             "capture_update_video_settings",
+            "capture_update_peer_video_settings",
             "capture_video_stats",
             "capture_pipeline_stats",
             "capture_preview_open",

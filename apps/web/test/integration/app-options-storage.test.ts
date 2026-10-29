@@ -104,6 +104,50 @@ it("migrates session playback suppression to a persistent preference", async () 
   expect(saved().suppressLocalAudioPlayback).toBe(false);
 });
 
+it("persists receive defaults without persisting transient display measurements or changing sender settings", async () => {
+  store({
+    receiveVideoQuality: {
+      height: 720,
+      fps: 120,
+      bitrate: 4_000_000,
+      refreshRate: 60,
+      obsolete: true,
+    },
+    videoFrameRate: 165,
+    videoResolution: "1440p",
+  });
+  const { appState } = await boot();
+  expect(appState.options.receiveVideoQuality).toEqual({
+    height: 720,
+    fps: 120,
+    bitrate: 4_000_000,
+  });
+  expect(saved().receiveVideoQuality).toEqual(
+    appState.options.receiveVideoQuality,
+  );
+  const { setAppOptions } = await import("@/options");
+  setAppOptions("receiveVideoQuality", "fps", undefined);
+  expect(saved().receiveVideoQuality).toEqual({
+    height: 720,
+    bitrate: 4_000_000,
+  });
+  expect(appState.options.videoFrameRate).toBe(165);
+  expect(appState.options.videoResolution).toBe("1440p");
+});
+
+it("discards invalid saved receive limits", async () => {
+  store({
+    receiveVideoQuality: {
+      height: -1,
+      fps: "120",
+      bitrate: 1e15,
+    },
+  });
+  const { appState } = await boot();
+  expect(appState.options.receiveVideoQuality).toEqual({});
+  expect(saved().receiveVideoQuality).toEqual({});
+});
+
 it("prefers the saved playback setting over the legacy session setting", async () => {
   sessionStorage.setItem(
     "mediaConstraints",

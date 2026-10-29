@@ -1,4 +1,9 @@
 import { ScreenControlRequest } from "./control-request";
+import {
+  resolveVideoQuality,
+  type VideoQualitySource,
+  type VideoQualityPreference,
+} from "../video-quality";
 import type { PeerCapabilities } from "../protocol/capabilities";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
@@ -68,6 +73,29 @@ type Incoming = {
 /** Authenticated control channel; each source owns its media connection and retries.
  * Peer capabilities are supplied by the shared message-channel exchange. */
 export class NativeScreenSession {
+  qualitySources(): VideoQualitySource[] {
+    return [...this.publications.values()].flatMap(
+      (sender) => {
+        const source = sender.qualitySource();
+        return source ? [source] : [];
+      },
+    );
+  }
+  async applyQuality(
+    source: VideoQualitySource,
+    preference: VideoQualityPreference,
+  ) {
+    const sender = this.publications.get(
+      source.id.slice("native:".length),
+    );
+    if (!sender) throw new Error("Video source stopped");
+    const applied = resolveVideoQuality(
+      source.limits,
+      preference,
+    );
+    await sender.applyQuality(source, applied);
+    return applied;
+  }
   readonly screenControl = new ScreenControlRequest(
     (value) => this.send(value),
   );

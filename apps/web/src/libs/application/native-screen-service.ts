@@ -190,7 +190,52 @@ export async function createNativeScreenStream(
       options,
     );
     if (closed) throw new Error("Native screen closed");
+    let videoLimits = {
+      maxWidth: options?.maxWidth ?? 1920,
+      maxHeight: options?.maxHeight ?? 1080,
+      frameRate: options?.frameRate ?? 30,
+      maxBitrate: options?.maxBitrate ?? 25 * 1024 * 1024,
+    };
     const publication: NativeScreenPublication = {
+      videoLimits: share.updatePeerVideoSettings
+        ? () => {
+            const width =
+              lastStatus.width ||
+              lastStatus.source?.width ||
+              videoLimits.maxWidth;
+            const height =
+              lastStatus.height ||
+              lastStatus.source?.height ||
+              videoLimits.maxHeight;
+            const scale = Math.min(
+              1,
+              videoLimits.maxWidth / width,
+              videoLimits.maxHeight / height,
+            );
+            return {
+              ...videoLimits,
+              maxWidth: Math.max(
+                2,
+                Math.floor((width * scale) / 2) * 2,
+              ),
+              maxHeight: Math.max(
+                2,
+                Math.floor((height * scale) / 2) * 2,
+              ),
+            };
+          }
+        : undefined,
+      updatePeerVideoSettings: share.updatePeerVideoSettings
+        ? async (peer, settings) => {
+            if (closed)
+              throw new Error("Native screen closed");
+            await share.updatePeerVideoSettings!(
+              id,
+              peer,
+              settings,
+            );
+          }
+        : undefined,
       closing: closing.signal,
       getRecordingSources: () => {
         const recording = codecs.recording();
@@ -274,8 +319,15 @@ export async function createNativeScreenStream(
         ];
       },
       updateVideoSettings: async (settings) => {
-        if (!closed)
+        if (!closed) {
           await share.updateVideoSettings(id, settings);
+          videoLimits = {
+            maxWidth: settings.maxWidth,
+            maxHeight: settings.maxHeight,
+            frameRate: settings.frameRate,
+            maxBitrate: settings.maxBitrate,
+          };
+        }
       },
       setAudioEnabled: (enabled) => {
         const update = audioQueue.then(async () => {

@@ -4,6 +4,21 @@
     "description": "찾고 있는 페이지가 존재하지 않습니다. 경로: {{path}}",
     "home": "홈으로 이동"
   },
+  "video_quality": {
+    "source": "수신 중인 영상",
+    "title": "수신 화질",
+    "description": "이 기기에 저장되어 현재 및 앞으로 수신하는 모든 영상에 적용됩니다. 각 송신자의 상한이 적용되며 다른 시청자에게는 영향을 주지 않습니다.",
+    "resolution": "해상도",
+    "follow_resolution": "송신자 해상도 따르기",
+    "auto": "자동",
+    "framerate": "프레임 속도",
+    "bitrate": "비트레이트 상한",
+    "follow_bitrate": "송신자 비트레이트 상한 따르기",
+    "applied": "적용 상한: {{width}} × {{height}} · {{fps}} FPS",
+    "adjusting": "조정 중…",
+    "failed": "적용하지 못했습니다. 이전 화질을 유지합니다.",
+    "unavailable": "영상을 일시적으로 사용할 수 없습니다"
+  },
   "tasks": {
     "error_details": "오류 세부정보",
     "pause": "정지시키다",

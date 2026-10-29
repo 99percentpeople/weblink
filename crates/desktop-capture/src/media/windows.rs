@@ -78,6 +78,7 @@ pub struct MediaSession {
     readback_requested: Arc<AtomicBool>,
     readback_buffers: usize,
     options: Mutex<MediaOptions>,
+    settings_update: Mutex<()>,
     notify: Arc<tokio::sync::Notify>,
     error: Mutex<Option<String>>,
     changed: Arc<crate::lifecycle::Subscription>,
@@ -92,6 +93,7 @@ struct MediaPeer {
     // Keep the factory that supplied this peer's codec implementation alive.
     _factory: PeerConnectionFactory,
     encoding: MediaOptions,
+    limits: Option<VideoSettings>,
     connection: PeerConnection,
     gathering: Arc<ice::Gathering>,
     preview: bool,
@@ -310,6 +312,7 @@ impl MediaSession {
             readback_requested: Arc::new(AtomicBool::new(false)),
             readback_buffers: options.readback_buffers as usize,
             options: Mutex::new(options),
+            settings_update: Mutex::new(()),
             notify,
             error: Mutex::new(None),
             changed,
@@ -330,6 +333,14 @@ impl MediaSession {
     }
 
     pub fn update_video_settings(&self, settings: VideoSettings) -> Result<()> {
+        let _update = self
+            .settings_update
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let source_size = {
+            let readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
+            readback.rotation.dimensions(readback.size)
+        };
         // Serialize peer registration and settings writes, including rollback.
         let mut current = self.options.lock().unwrap_or_else(|e| e.into_inner());
         if self.closed.load(Ordering::Acquire) {
@@ -338,10 +349,27 @@ impl MediaSession {
         let next = settings.apply(&current)?;
         let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
         for peer in peers.values() {
-            if let Err(error) = Self::configure_peer(peer, &next) {
+            let effective = match &peer.limits {
+                Some(limits) => limits.bounded(&next)?,
+                None => next.clone(),
+            };
+            if let Err(error) = Self::configure_peer(
+                peer,
+                &effective,
+                next.dimensions(source_size.0, source_size.1),
+            ) {
                 // Preserve the last accepted settings if any sender rejects the update.
                 for peer in peers.values() {
-                    let _ = Self::configure_peer(peer, &current);
+                    let effective = peer
+                        .limits
+                        .as_ref()
+                        .and_then(|limits| limits.bounded(&current).ok())
+                        .unwrap_or_else(|| current.clone());
+                    let _ = Self::configure_peer(
+                        peer,
+                        &effective,
+                        current.dimensions(source_size.0, source_size.1),
+                    );
                 }
                 return Err(error);
             }
@@ -367,7 +395,58 @@ impl MediaSession {
         Ok(())
     }
 
-    fn configure_peer(peer: &MediaPeer, options: &MediaOptions) -> Result<()> {
+    pub fn update_peer_video_settings(&self, id: &str, settings: VideoSettings) -> Result<()> {
+        let _update = self
+            .settings_update
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let source_size = {
+            let readback = self.readback.lock().unwrap_or_else(|e| e.into_inner());
+            readback.rotation.dimensions(readback.size)
+        };
+        let current = self
+            .options
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if self.closed.load(Ordering::Acquire) {
+            return Err("Native screen is no longer active".into());
+        }
+        let next = settings.bounded(&current)?;
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let peer = peers
+            .get_mut(id)
+            .filter(|p| !p.preview && p.recording.is_none())
+            .ok_or("Video receiver no longer active")?;
+        let previous = match &peer.limits {
+            Some(limits) => limits.bounded(&current)?,
+            None => current.clone(),
+        };
+        let capture_size = current.dimensions(source_size.0, source_size.1);
+        Self::configure_peer(peer, &next, capture_size)?;
+        let encoded = peer.encoded.is_some();
+        drop(peers);
+        if encoded {
+            if let Err(error) = self.hardware.update_peer(id, &settings, &current) {
+                if let Some(peer) = self.peers.lock().unwrap_or_else(|e| e.into_inner()).get(id) {
+                    let _ = Self::configure_peer(peer, &previous, capture_size);
+                }
+                return Err(error);
+            }
+        }
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        let peer = peers.get_mut(id).ok_or("Video receiver no longer active")?;
+        peer.limits = Some(settings);
+        drop(peers);
+        self.wake_capture();
+        Ok(())
+    }
+
+    fn configure_peer(
+        peer: &MediaPeer,
+        options: &MediaOptions,
+        capture_size: (u32, u32),
+    ) -> Result<()> {
         for sender in peer.connection.senders() {
             if !matches!(sender.track(), Some(MediaStreamTrack::Video(_))) {
                 continue;
@@ -376,6 +455,13 @@ impl MediaSession {
             for encoding in &mut parameters.encodings {
                 encoding.max_bitrate = Some(options.max_bitrate);
                 encoding.max_framerate = Some(options.frame_rate as f64);
+                if peer.raw_video {
+                    encoding.scale_resolution_down_by = Some(
+                        (capture_size.0 as f64 / options.max_width as f64)
+                            .max(capture_size.1 as f64 / options.max_height as f64)
+                            .max(1.0),
+                    );
+                }
             }
             parameters.set_degradation_preference(Self::degradation_preference(
                 options,
@@ -1051,6 +1137,7 @@ impl MediaSession {
                     MediaPeer {
                         _factory: factory.clone(),
                         encoding: options.clone(),
+                        limits: None,
                         connection: pc.clone(),
                         gathering: gathering.clone(),
                         preview,

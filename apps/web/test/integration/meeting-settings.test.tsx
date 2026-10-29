@@ -7,6 +7,8 @@ import { createAppSettings } from "@/libs/state/create-app-settings";
 import type { AppPermissions } from "@/libs/state/create-app-permissions";
 import type { JSX } from "solid-js";
 import type { NativeEncoder } from "@weblink/platform";
+import type { ReceivedVideoQuality } from "@/libs/application/session-service";
+import { VideoQualityControl } from "@/libs/domain/video-quality";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import {
@@ -22,6 +24,7 @@ import {
   render as renderView,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import { createSignal, Show, Suspense } from "solid-js";
 import { reconcile } from "solid-js/store";
@@ -45,6 +48,14 @@ const native = vi.hoisted(() => ({
   kind: "desktop",
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+const [receivedSources, setReceivedSources] = createSignal<
+  ReceivedVideoQuality[]
+>([]);
+vi.mock("@/libs/application/session-service", () => ({
+  sessionService: {
+    getReceivedVideoQualities: () => receivedSources(),
+  },
+}));
 vi.mock("@/libs/platform/runtime", () => ({
   platform: {
     get kind() {
@@ -81,6 +92,7 @@ vi.mock("@/libs/application/ice-server-service", () => ({
   serverTurnCredentialsUrl: null,
 }));
 beforeEach(() => {
+  setReceivedSources([]);
   native.enabled = true;
   native.kind = "desktop";
   native.sources.mockResolvedValue([]);
@@ -189,6 +201,204 @@ const choose = async (name: string, value: string) => {
   });
   fireEvent.click(option);
 };
+it("saves receive defaults offline and preserves the editor and outgoing capture settings during incoming updates", async () => {
+  native.kind = "browser";
+  const outgoing = {
+    height: appState.options.videoResolution,
+    fps: appState.options.videoFrameRate,
+    bitrate: appState.options.videoMaxBitrate,
+  };
+  const first = render(() => <MeetingSettings />);
+  await choose("video_quality.framerate", "120 FPS");
+  await choose("video_quality.resolution", "720p");
+  const bitrate = within(
+    screen.getByRole("region", {
+      name: "video_quality.title",
+    }),
+  ).getByRole("slider", { value: { now: 0 } });
+  fireEvent.keyDown(bitrate, { key: "ArrowRight" });
+  expect(appState.options.receiveVideoQuality).toEqual({
+    height: 720,
+    fps: 120,
+    bitrate: 128 * 1024,
+  });
+  const control = new VideoQualityControl(
+    {
+      id: "screen",
+      locator: "native:screen",
+      transport: "peer",
+      limits: {
+        maxWidth: 1920,
+        maxHeight: 1080,
+        frameRate: 60,
+        maxBitrate: 20_000_000,
+      },
+    },
+    () => {},
+  );
+  control.available = true;
+  const source: ReceivedVideoQuality = {
+    clientId: "Alice",
+    kind: "screen",
+    control,
+  };
+  setReceivedSources([source]);
+  const fps = screen.getByRole("button", {
+    name: /video_quality.framerate/,
+  });
+  fireEvent.keyDown(fps, { key: "ArrowDown" });
+  const option = await screen.findByRole("option", {
+    name: "90 FPS",
+  });
+  setReceivedSources([{ ...source }]);
+  control.pending = true;
+  control.changed();
+  control.pending = false;
+  control.applied = {
+    ...control.source.limits,
+    maxWidth: 1280,
+    maxHeight: 720,
+  };
+  control.changed();
+  expect(
+    screen.getByRole("option", { name: "90 FPS" }),
+  ).toBe(option);
+  fireEvent.click(option);
+  expect(appState.options.receiveVideoQuality.fps).toBe(90);
+  const receiving = within(
+    screen.getByRole("region", {
+      name: "video_quality.title",
+    }),
+  );
+  expect(receiving.getByRole("status")).toHaveTextContent(
+    "video_quality.applied",
+  );
+  setReceivedSources([]);
+  expect(
+    receiving.queryByRole("status"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", {
+      name: /video_quality.framerate/,
+    }),
+  ).toBe(fps);
+  first.unmount();
+  render(() => <MeetingSettings />);
+  expect(
+    screen.getByRole("button", {
+      name: /video_quality.framerate/,
+    }),
+  ).toHaveTextContent("90 FPS");
+  await choose(
+    "video_quality.framerate",
+    "video_quality.auto",
+  );
+  expect(
+    appState.options.receiveVideoQuality.fps,
+  ).toBeUndefined();
+  expect(appState.options.receiveVideoQuality.height).toBe(
+    720,
+  );
+  expect(appState.options.receiveVideoQuality.bitrate).toBe(
+    128 * 1024,
+  );
+  expect(
+    screen.getByRole("button", {
+      name: /video_quality.framerate/,
+    }),
+  ).toHaveTextContent("video_quality.auto");
+  expect({
+    height: appState.options.videoResolution,
+    fps: appState.options.videoFrameRate,
+    bitrate: appState.options.videoMaxBitrate,
+  }).toEqual(outgoing);
+});
+it("uses desktop display rates and screen-sized resolution choices for receiving", async () => {
+  native.capabilities.mockResolvedValue({
+    runtime: "desktop",
+    displayRefreshRates: [75],
+    nativeScreenCapture: true,
+  });
+  native.sources.mockResolvedValue([
+    {
+      id: "monitor",
+      kind: "monitor",
+      name: "Display",
+      width: 1920,
+      height: 1080,
+    },
+    {
+      id: "window",
+      kind: "window",
+      name: "Large window",
+      width: 3840,
+      height: 2160,
+    },
+  ]);
+  render(() => <MeetingSettings />);
+  await choose("video_quality.framerate", "75 FPS");
+  const fps = screen.getByRole("button", {
+    name: /video_quality.framerate/,
+  });
+  fireEvent.keyDown(fps, { key: "ArrowDown" });
+  expect(
+    screen.queryByRole("option", { name: "120 FPS" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("option", {
+      name: "video_quality.auto",
+    }),
+  );
+  await choose("video_quality.resolution", "1080p");
+  fireEvent.keyDown(
+    screen.getByRole("button", {
+      name: /video_quality.resolution/,
+    }),
+    { key: "ArrowDown" },
+  );
+  expect(
+    screen.queryByRole("option", { name: "1440p" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: "2160p" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("option", {
+      name: "video_quality.follow_resolution",
+    }),
+  );
+});
+
+it("keeps receive fallback lists when display data is missing and restores the publisher bitrate limit from the slider", async () => {
+  native.capabilities.mockResolvedValue({
+    runtime: "desktop",
+    displayRefreshRates: [],
+    nativeScreenCapture: true,
+  });
+  render(() => <MeetingSettings />);
+  await choose("video_quality.framerate", "240 FPS");
+  await choose("video_quality.resolution", "2160p");
+  const slider = within(
+    screen.getByRole("region", {
+      name: "video_quality.title",
+    }),
+  ).getByRole("slider", { value: { now: 0 } });
+  slider.focus();
+  fireEvent.keyDown(slider, { key: "End" });
+  expect(appState.options.receiveVideoQuality.bitrate).toBe(
+    150 * 1024 * 1024,
+  );
+  fireEvent.keyDown(slider, { key: "Home" });
+  expect(
+    appState.options.receiveVideoQuality.bitrate,
+  ).toBeUndefined();
+  expect(appState.options.receiveVideoQuality.fps).toBe(
+    240,
+  );
+  expect(appState.options.receiveVideoQuality.height).toBe(
+    2160,
+  );
+});
 it("updates capture settings while preserving the existing bitrate and browser preferences", async () => {
   setAppState("options", {
     videoMaxBitrate: 8_000_000,

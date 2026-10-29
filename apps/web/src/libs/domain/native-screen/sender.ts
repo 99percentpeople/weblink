@@ -12,6 +12,11 @@ import type { ScreenSignal } from "./signaling";
 import type { MediaDecodeCapabilities } from "../protocol/media-codecs";
 
 export interface NativeScreenPublication {
+  videoLimits?(): import("../video-quality").VideoQualityLimits;
+  updatePeerVideoSettings?(
+    peerId: string,
+    settings: NativeVideoSettings,
+  ): Promise<void>;
   getRecordingSources?(): readonly import("../encoded-video").EncodedMediaSource[];
   openRecording?(
     signal: AbortSignal,
@@ -84,6 +89,37 @@ const MAX_RETRIES = 3;
 
 /** One publication's native transports; capture remains owned by the caller. */
 export class NativeScreenSender {
+  qualitySource():
+    | import("../video-quality").VideoQualitySource
+    | undefined {
+    if (
+      !this.publication.videoLimits ||
+      !this.publication.updatePeerVideoSettings
+    )
+      return;
+    return {
+      id: `native:${this.publication.sourceId}`,
+      locator: `native:${this.publication.sourceId}`,
+      transport: this.outgoing?.answerApplied
+        ? this.outgoing.id
+        : "",
+      limits: this.publication.videoLimits(),
+    };
+  }
+  async applyQuality(
+    source: import("../video-quality").VideoQualitySource,
+    settings: import("../video-quality").VideoQualityLimits,
+  ): Promise<void> {
+    if (
+      this.outgoing?.id !== source.transport ||
+      !this.publication.updatePeerVideoSettings
+    )
+      throw new Error("Video transport changed");
+    await this.publication.updatePeerVideoSettings(
+      source.transport,
+      { ...settings, degradationPreference: "balanced" },
+    );
+  }
   private outgoing?: Outgoing;
   // The receiver retains this card during backoff or an unfinished replacement.
   // Only an announced replacement or an explicit stop can retire its identity.

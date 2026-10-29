@@ -2140,6 +2140,39 @@ Set `WEBLINK_CONTROL_TEST_TOUCH=1` for its native touch assertions; the browser
 driver must exercise multitouch, movement, lift and cancellation. The receiver
 checks `WM_POINTER*` messages and `PT_TOUCH`, not inferred mouse events.
 
+## Receiver video quality
+
+Each viewer can lower the resolution, frame-rate and bitrate limits of its own
+streams in Settings → Media → Receive quality. These receive defaults are saved
+locally, apply to current and future incoming publications, and remain separate
+from local capture settings. Each incoming video shows its effective limits.
+Publisher settings remain the ceiling. This does not require input control and
+never changes capture consent,
+room visibility, other viewers or local recording. Defaults follow the publisher's
+resolution and bandwidth adaptation; automatic FPS additionally follows stable
+foreground presentation cadence on the receiving display. Background scheduling
+gaps and video-content FPS are not display-refresh measurements.
+The browser keeps the highest consistently confirmed cadence for the current
+screen geometry and scale, rather than lowering the limit when animation
+callbacks slow down. Visibility changes retain that calibration; a change in
+screen geometry or scale starts a new one. Browsers cannot distinguish monitors
+with identical exposed screen properties using this fallback, so a manual FPS
+limit remains available.
+
+Quality discovery, requests and replies share the authenticated desktop-media
+channel. A source advertises its bounds and current transport identity; requests
+are bounded, coalesced and checked against that transport. Older peers that do not
+advertise bounds ignore receive defaults. Requests and effective limits belong
+to each publication; reconnecting or starting another publication reuses the
+viewer's saved receive defaults.
+
+Browser senders adjust only their RTP encoding parameters. Native hardware
+consumers with matching profiles share an encoder; changed profiles warm before
+replacing the viewer's output, retaining the old output on failure. Scaling and
+frame admission happen per encoding group; input-control coordinates remain
+normalized against the source display. Frame-rate limits are maxima, not a
+promise that static content or a constrained network will produce that many frames.
+
 ## Windows acceptance
 
 On a Windows device verify install/start/relaunch, About version, room join,
