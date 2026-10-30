@@ -4,6 +4,7 @@ import { nativeNotifications } from "./notifications";
 import { nativeFileSystem } from "./filesystem";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { createNativeScreenReceive } from "./receive";
 import { createRawPreview } from "./preview";
 import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
@@ -28,7 +29,10 @@ import {
   type NativeEncoder,
 } from "@weblink/platform";
 
+const watchVisibility = createVisibilityWatcher();
+
 export const platform: PlatformRuntime = {
+  screenReceive: createNativeScreenReceive(watchVisibility),
   filesystem: nativeFileSystem,
   saveFile: saveNativeFile,
   saveFilesToDirectory: saveNativeFilesToDirectory,
@@ -84,7 +88,7 @@ export const platform: PlatformRuntime = {
         maxFileBytes,
       }),
   },
-  watchVisibility: createVisibilityWatcher(),
+  watchVisibility,
   pictureInPicture: nativePictureInPicture,
   notifications: nativeNotifications,
   application: nativeApplication,

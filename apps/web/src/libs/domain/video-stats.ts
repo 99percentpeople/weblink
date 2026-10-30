@@ -218,6 +218,13 @@ export async function readBrowserVideoStats(
   ).find((item) => item.track === track);
   if (!endpoint) return [];
   const report = await endpoint.getStats();
+  return readVideoStatsReport(report, direction);
+}
+
+export function readVideoStatsReport(
+  report: RTCStatsReport,
+  direction: "send" | "receive",
+): VideoStatsSample[] {
   const samples: VideoStatsSample[] = [];
   report.forEach((entry) => {
     const s = entry as RTCStats & Record<string, unknown>;

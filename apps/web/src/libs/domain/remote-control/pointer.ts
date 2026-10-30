@@ -44,6 +44,18 @@ import {
 } from "./session";
 export const CONTROL_CHANNEL = "weblink-control";
 export const POINTER_CHANNEL = "weblink-pointer";
+export interface ControlDataChannel extends EventTarget {
+  readonly label: string;
+  readonly protocol: string;
+  readonly ordered: boolean;
+  readonly maxRetransmits: number | null;
+  readonly maxPacketLifeTime: number | null;
+  readonly readyState: RTCDataChannelState;
+  readonly bufferedAmount: number;
+  bufferedAmountLowThreshold: number;
+  send(data: string): void;
+  close(): void;
+}
 const HIGH_WATER = 16 * 1024;
 export type PointerPosition = { x: number; y: number };
 type CursorListener = (
@@ -350,8 +362,8 @@ export class RemotePointer extends EventTarget {
   position(): PointerPosition {
     return { ...this.cursor };
   }
-  private reliable?: RTCDataChannel;
-  private movement?: RTCDataChannel;
+  private reliable?: ControlDataChannel;
+  private movement?: ControlDataChannel;
   private readonly lifetime = new AbortController();
   private binding?: ControlBinding;
   private session?: RemoteControlSession;
@@ -411,7 +423,7 @@ export class RemotePointer extends EventTarget {
         : "unavailable";
     return s.type;
   }
-  bind(channel: RTCDataChannel) {
+  bind(channel: ControlDataChannel) {
     const movement = channel.label === POINTER_CHANNEL;
     if (
       this.lifetime.signal.aborted ||
@@ -450,7 +462,7 @@ export class RemotePointer extends EventTarget {
     if (!movement)
       channel.addEventListener(
         "message",
-        (e) => this.receive(e.data),
+        (e) => this.receive((e as MessageEvent).data),
         options,
       );
     if (!movement) {

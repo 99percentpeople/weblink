@@ -2503,7 +2503,7 @@ dependencies = [
 [[package]]
 name = "libwebrtc"
 version = "0.3.49"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=60a08910b4eba28bae7ca55d446d453359b3858e#60a08910b4eba28bae7ca55d446d453359b3858e"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=91793f444042dcb153333c23a76275566b8db99d#91793f444042dcb153333c23a76275566b8db99d"
 dependencies = [
  "cxx",
  "jni 0.21.1",
@@ -5704,6 +5704,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-stream",
  "uuid",
  "windows 0.62.2",
  "windows-capture",
@@ -5733,7 +5734,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sys"
 version = "0.3.47"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=60a08910b4eba28bae7ca55d446d453359b3858e#60a08910b4eba28bae7ca55d446d453359b3858e"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=91793f444042dcb153333c23a76275566b8db99d#91793f444042dcb153333c23a76275566b8db99d"
 dependencies = [
  "cc",
  "cxx",
@@ -5747,7 +5748,7 @@ dependencies = [
 [[package]]
 name = "webrtc-sys-build"
 version = "0.3.19"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=60a08910b4eba28bae7ca55d446d453359b3858e#60a08910b4eba28bae7ca55d446d453359b3858e"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=91793f444042dcb153333c23a76275566b8db99d#91793f444042dcb153333c23a76275566b8db99d"
 dependencies = [
  "anyhow",
  "fs2",

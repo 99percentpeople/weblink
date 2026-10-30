@@ -662,7 +662,12 @@ may select concrete infrastructure implementations.
     owns each outgoing publication's offers, ICE, retry budget and cleanup;
     its retained receiver identity survives a closed or pending transport.
     `native-screen/signaling.ts` owns the additive wire messages and parser,
-    while `native-screen/receiver.ts` owns receive-only RTC and
+    while `native-screen/receiver.ts` owns browser receive-only RTC and its
+    receiver contract. `application/native-screen-receive.ts` selects the optional
+    platform receiver and owns its capability/failure policy. Windows reception
+    lives in `crates/desktop-capture/src/receive.rs`; `apps/desktop/src/receive.ts`
+    presents bounded native video/audio through the existing MediaStream UI.
+    The shared
     `native-screen/decode-monitor.ts` observes foreground decode progress.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
     presence, routed-peer messages, join acknowledgment, deployed version and

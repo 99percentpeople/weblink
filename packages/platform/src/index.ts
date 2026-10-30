@@ -1,4 +1,6 @@
 export * from "./recording";
+export type * from "./screen-receive";
+import type { NativeScreenReceive } from "./screen-receive";
 export type * from "./automation";
 export { DEFAULT_MCP_SERVER } from "./automation";
 import type { NativeAutomation } from "./automation";
@@ -96,6 +98,7 @@ export interface PlatformRuntime {
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
   readonly screenShare?: NativeScreenShare;
+  readonly screenReceive?: NativeScreenReceive;
   /** Initial native visibility and later changes; focus alone does not hide a window.
    * Shared by presentation consumers. Disposing never stops capture or transport. */
   watchVisibility?(

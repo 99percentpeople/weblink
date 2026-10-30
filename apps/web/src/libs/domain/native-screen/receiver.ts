@@ -9,9 +9,37 @@ import {
   RtpEncodedMediaWorkers,
 } from "../rtp-encoded-media";
 import { recordingMediaSources } from "../recording-media-sources";
+import { readBrowserVideoStats } from "../video-stats";
+
+export interface ScreenReceiveConnection {
+  readonly stream: MediaStream;
+  answer(sdp: string): Promise<string>;
+  addIceCandidate(
+    candidate: RTCIceCandidateInit,
+  ): Promise<void>;
+  connected(audio?: boolean): Promise<void>;
+  monitorDecode(healthy: () => void): void;
+  decodeFailed(): void;
+  close(): void;
+  getVideoStats(
+    track: MediaStreamTrack,
+  ): ReturnType<typeof readBrowserVideoStats>;
+  getRecordingMediaSources(
+    track: MediaStreamTrack,
+    audio: readonly MediaStreamTrack[],
+  ): ReturnType<typeof recordingMediaSources>;
+}
+
+export type ScreenReceiverFactory = (
+  sdp: string,
+  ...args: ConstructorParameters<typeof ScreenReceiver>
+) => ScreenReceiveConnection;
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
+  getVideoStats(track: MediaStreamTrack) {
+    return readBrowserVideoStats(this.pc, track, "receive");
+  }
   readonly pc: RTCPeerConnection;
   readonly stream = new MediaStream();
   private readonly lifetime = new AbortController();

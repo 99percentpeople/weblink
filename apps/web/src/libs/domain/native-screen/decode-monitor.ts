@@ -7,7 +7,13 @@ interface DecodeSample {
 
 /** Only consecutive, foreground observations can establish a video stall. */
 export function monitorScreenDecode(
-  pc: RTCPeerConnection,
+  pc: Pick<
+    RTCPeerConnection,
+    | "getStats"
+    | "connectionState"
+    | "addEventListener"
+    | "removeEventListener"
+  >,
   healthy: () => void,
   stalled: () => void,
 ): () => void {

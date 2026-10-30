@@ -19,7 +19,7 @@ import { RemoteControlHost } from "./remote-control-host";
 import { PeerCapabilitiesService } from "./peer-capabilities";
 import type { AutomationCapability } from "../domain/protocol/capabilities";
 import { requiredMessageFeatures } from "../domain/protocol/protocol-versions";
-import { browserDecodeCapabilities } from "../domain/media-codecs";
+import { NativeScreenReceiveService } from "./native-screen-receive";
 import {
   NativeScreenSession,
   NATIVE_SCREEN_CHANNEL,
@@ -78,6 +78,8 @@ export interface ReceivedVideoQuality {
 }
 
 export class SessionService {
+  private readonly screenReceive =
+    new NativeScreenReceiveService(platform.screenReceive);
   private readonly videoQuality = new Map<
     PeerSession,
     VideoQualityPeer
@@ -211,7 +213,7 @@ export class SessionService {
       files: { content: true, shared: true, queue: true },
       room: { chat: true, files: true },
       screen: {
-        decode: browserDecodeCapabilities(),
+        decode: this.screenReceive.capabilities(),
         trickleIce: true,
         multiScreen: true,
       },
@@ -571,6 +573,7 @@ export class SessionService {
     let controlGeneration = createUuid();
     let mainChannelReady = false;
     const native = new NativeScreenSession({
+      createReceiver: this.screenReceive.createReceiver,
       clientId: session.clientId,
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),

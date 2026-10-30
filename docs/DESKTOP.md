@@ -2145,6 +2145,42 @@ Set `WEBLINK_CONTROL_TEST_TOUCH=1` for its native touch assertions; the browser
 driver must exercise multitouch, movement, lift and cancellation. The receiver
 checks `WM_POINTER*` messages and `PT_TOUCH`, not inferred mouse events.
 
+## Native screen reception
+
+Windows desktop can receive one current, trickle-ICE screen session through
+native libwebrtc. Runtime capability discovery adds installed Media Foundation
+H.265 Main 8-bit and H.264 decoders. VP9/AV1 use Media Foundation when the D3D11
+device exposes the matching NV12 decode profile; otherwise the bundled native
+software decoders remain available. VP8 uses libvpx. HEVC availability depends on
+the installed Windows decoder and driver; it is probed rather than assumed from
+the GPU name. This factory is opt-in and does not change publisher factories.
+
+The application chooses the native receiver before answering SDP. It keeps RTP,
+ICE, decode statistics and both authenticated control DataChannels native. The
+existing video element receives a generated MediaStream track backed by read-only
+WebView2 shared memory; older runtimes retain the Canvas presentation fallback.
+Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
+MediaStream destination, preserving the existing mute, volume and playback owner.
+Browser autoplay policy still applies; user interaction resumes suspended audio.
+
+The receive factory requests zero playout delay and MF low-latency decoding.
+Decoded video retains only its latest frame, with one shared-memory copy/write
+in flight. Hidden views stop frame submission, and restore reads the latest
+frame. This route includes GPU readback and VideoFrame copies: it is not a
+zero-copy GPU compositor, and decode timing alone does not establish end-to-end
+latency. The initial presentation limit is even-sized SDR video up to 3840×2160;
+crop and color metadata accompany the pixels. HDR/Main10 is not advertised.
+
+Web, other platforms, legacy non-trickle sessions and additional simultaneous
+views retain browser reception. A native startup/presentation/decode failure
+disables native reception for the current application session. The existing
+retry policy then selects browser reception or renegotiates a browser-supported
+codec when HEVC is unavailable there. Explicit fixed sender codec choices retain
+their existing failure semantics. Remote recording uses the generated stream's
+ordinary recording fallback; encoded receive pass-through is not provided by
+this backend. Close, page reload, application exit and lease expiry release the
+native receiver, audio sinks and shared buffer.
+
 ## Receiver video quality
 
 Each viewer can lower the resolution, frame-rate and bitrate limits of its own
