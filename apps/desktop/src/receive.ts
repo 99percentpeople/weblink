@@ -68,7 +68,7 @@ export function createNativeScreenReceive(
         | ReturnType<typeof setInterval>
         | undefined;
       let refresh:
-        | ReturnType<typeof setInterval>
+        | ReturnType<typeof setTimeout>
         | undefined;
       let unwatch: (() => void) | undefined;
       let audioContext: AudioContext | undefined;
@@ -99,7 +99,7 @@ export function createNativeScreenReceive(
         closed = true;
         clearTimeout(timeout);
         clearInterval(heartbeat);
-        clearInterval(refresh);
+        clearTimeout(refresh);
         rejectReady(
           new DOMException("Receiver closed", "AbortError"),
         );
@@ -154,15 +154,16 @@ export function createNativeScreenReceive(
         )
           return;
         running = true;
+        clearTimeout(refresh);
         try {
-          while (dirty && !closed && visible()) {
+          if (dirty) {
             dirty = false;
             const frame = await invoke<Frame | null>(
               "receive_frame",
               { id, after: sequence },
             );
-            if (closed || !buffer || !visible()) break;
-            if (!frame) continue;
+            if (closed || !buffer || !visible()) return;
+            if (!frame) return;
             if (
               !Number.isInteger(frame.width) ||
               !Number.isInteger(frame.height) ||
@@ -191,18 +192,27 @@ export function createNativeScreenReceive(
             } finally {
               pixels.close();
             }
+            if (closed) return;
             const first = sequence === 0;
             sequence = frame.sequence;
             if (first) onEvent({ type: "track" });
-          }
+          } else await presenter.refresh();
         } catch (error) {
           fail(error);
         } finally {
           running = false;
+          if (!closed && visible()) {
+            // Match native preview: a busy presenter coalesces arrivals, then
+            // pulls only the latest frame without waiting for another paint.
+            if (dirty) queueMicrotask(() => void pump());
+            else if (presenter.needsRefresh)
+              refresh = setTimeout(() => void pump(), 500);
+          }
         }
       };
       const visibilityChanged = () => {
         if (!initialized || closed) return;
+        if (!visible()) clearTimeout(refresh);
         visibilityUpdate = visibilityUpdate
           .then(() => {
             if (!closed)
@@ -362,18 +372,6 @@ export function createNativeScreenReceive(
         heartbeat = setInterval(() => {
           void invoke("receive_renew", { id }).catch(fail);
         }, 10000);
-        refresh = setInterval(() => {
-          if (!running && visible() && !closed) {
-            running = true;
-            void presenter
-              .refresh()
-              .catch(fail)
-              .finally(() => {
-                running = false;
-                if (dirty) void pump();
-              });
-          }
-        }, 500);
         return {
           stream,
           answer: (sdp) =>

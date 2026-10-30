@@ -2,6 +2,17 @@ use super::*;
 use crate::receive::Receiver;
 use serde_json::json;
 
+fn assert_processing_delay(inbound: &serde_json::Value) {
+    // Native overload recovery needs the standard receive-to-decode accumulator,
+    // including time queued before a frame reaches the decoder.
+    assert!(
+        inbound["totalProcessingDelay"]
+            .as_f64()
+            .is_some_and(|seconds| seconds.is_finite() && seconds > 0.0),
+        "Native receive processing statistics unavailable: {inbound}"
+    );
+}
+
 async fn close_receiver(receiver: Arc<Receiver>) {
     let weak = Arc::downgrade(&receiver);
     receiver.close();
@@ -56,6 +67,7 @@ fn native_receiver_decodes_hevc_and_keeps_only_latest_presentation() {
 
         let inbound = stats.as_array().unwrap().iter().find(|s| s["type"] == "inbound-rtp" && s["kind"] == "video").unwrap();
         assert!(inbound["framesDecoded"].as_u64().unwrap_or(0) > 20, "{inbound}");
+        assert_processing_delay(inbound);
         let mut pixels = vec![0; crate::receive::FRAME_CAPACITY];
         let frame = receiver.copy_frame(0, &mut pixels).unwrap().expect("Decoded presentation frame");
         assert_eq!((frame.width,frame.height,frame.format),(1280,720,"NV12"));
@@ -93,6 +105,7 @@ fn native_receiver_decodes_remaining_formats() {
             let stats = receiver.stats().await.unwrap();
             let inbound = stats.as_array().unwrap().iter().find(|s|s["type"]=="inbound-rtp" && s["kind"]=="video").unwrap();
             assert!(inbound["framesDecoded"].as_u64().unwrap_or(0)>10,"{codec}: {inbound}");
+            assert_processing_delay(inbound);
             let mut pixels=vec![0;crate::receive::FRAME_CAPACITY];
             let frame=receiver.copy_frame(0,&mut pixels).unwrap().expect(codec);
             assert_eq!((frame.width,frame.height),(320,180));

@@ -3,9 +3,16 @@ interface DecodeSample {
   bytes: number;
   stalledSince?: number;
   healthySince?: number;
+  processingSeconds?: number;
+  overloadedSince?: number;
 }
 
-/** Only consecutive, foreground observations can establish a video stall. */
+interface DecodeMonitorOptions {
+  /** Opt-in native receive budget; browser receivers retain stall-only recovery. */
+  maxProcessingDelayMs?: number;
+}
+
+/** Only consecutive, foreground observations can establish a video failure. */
 export function monitorScreenDecode(
   pc: Pick<
     RTCPeerConnection,
@@ -16,6 +23,7 @@ export function monitorScreenDecode(
   >,
   healthy: () => void,
   stalled: () => void,
+  options: DecodeMonitorOptions = {},
 ): () => void {
   const events = new AbortController();
   const page =
@@ -103,6 +111,12 @@ export function monitorScreenDecode(
         const sample: DecodeSample = {
           frames: stat.framesDecoded,
           bytes: stat.bytesReceived,
+          processingSeconds:
+            typeof stat.totalProcessingDelay === "number" &&
+            Number.isFinite(stat.totalProcessingDelay) &&
+            stat.totalProcessingDelay >= 0
+              ? stat.totalProcessingDelay
+              : undefined,
         };
         next.set(id, sample);
         const previous = samples.get(id);
@@ -113,6 +127,30 @@ export function monitorScreenDecode(
         )
           return;
         if (sample.frames > previous.frames) {
+          // Interval deltas measure current receive-to-decode delay; lifetime
+          // averages can hide a growing queue after a long healthy session.
+          // Do not infer queue length from received - decoded - dropped: dropped
+          // may include frames discarded after decoding as well.
+          const processingMs =
+            sample.processingSeconds !== undefined &&
+            previous.processingSeconds !== undefined &&
+            sample.processingSeconds >=
+              previous.processingSeconds
+              ? ((sample.processingSeconds -
+                  previous.processingSeconds) *
+                  1000) /
+                (sample.frames - previous.frames)
+              : undefined;
+          if (
+            options.maxProcessingDelayMs !== undefined &&
+            processingMs !== undefined &&
+            processingMs > options.maxProcessingDelayMs
+          ) {
+            sample.overloadedSince =
+              previous.overloadedSince ?? now;
+            failed ||= now - sample.overloadedSince >= 3000;
+            return;
+          }
           sample.healthySince =
             previous.healthySince ?? now;
           if (

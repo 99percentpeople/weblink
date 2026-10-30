@@ -343,6 +343,7 @@ class NativeReceiver
         this,
         healthy,
         () => this.decodeFailed(),
+        { maxProcessingDelayMs: 250 },
       );
   }
   decodeFailed() {

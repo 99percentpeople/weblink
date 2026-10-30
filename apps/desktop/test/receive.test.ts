@@ -13,6 +13,7 @@ const presenter = vi.hoisted(() => ({
   stream: { getAudioTracks: () => [], addTrack: vi.fn() },
   write: vi.fn(async (_frame: unknown) => {}),
   refresh: vi.fn(async () => false),
+  needsRefresh: true,
   close: vi.fn(),
 }));
 vi.mock("../src/preview-track", () => ({
@@ -46,6 +47,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   shared = new ArrayBuffer(24);
   presenter.write.mockImplementation(async () => {});
+  presenter.needsRefresh = true;
   vi.stubGlobal("chrome", {
     webview: {
       addEventListener: (
@@ -157,6 +159,100 @@ it("pauses presentation while hidden and requests the newest frame on restore", 
   expect(commands).toContain("receive_frame");
   connection.close();
   await tick();
+});
+
+it("refreshes only idle generated tracks without reading shared pixels again", async () => {
+  let copies = 0;
+  mockIPC((command, args: any) => {
+    if (command === "receive_open") openBuffer(args);
+    if (command === "receive_frame") {
+      copies++;
+      return {
+        sequence: copies,
+        width: 4,
+        height: 4,
+        format: "NV12",
+      };
+    }
+  });
+  const connection = await api.open(
+    {},
+    received,
+    new AbortController().signal,
+  );
+  await tick();
+  for (let i = 0; i < 10; i++) {
+    await vi.advanceTimersByTimeAsync(100);
+    events.onmessage({ type: "frame" });
+    await tick();
+  }
+  expect(presenter.refresh).not.toHaveBeenCalled();
+  const beforeIdle = copies;
+  await vi.advanceTimersByTimeAsync(500);
+  expect(presenter.refresh).toHaveBeenCalledOnce();
+  expect(copies).toBe(beforeIdle);
+  visible(false);
+  await tick();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(presenter.refresh).toHaveBeenCalledOnce();
+  visible(true);
+  await tick();
+  expect(copies).toBe(beforeIdle + 1);
+  connection.close();
+  await tick();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("does not schedule repeat frames for the canvas presenter", async () => {
+  presenter.needsRefresh = false;
+  mockIPC((command, args: any) => {
+    if (command === "receive_open") openBuffer(args);
+    return null;
+  });
+  const connection = await api.open(
+    {},
+    received,
+    new AbortController().signal,
+  );
+  await tick();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(presenter.refresh).not.toHaveBeenCalled();
+  connection.close();
+  await tick();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("does not publish a late track after closing during a presentation write", async () => {
+  let finish!: () => void;
+  presenter.write.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  mockIPC((command, args: any) => {
+    if (command === "receive_open") openBuffer(args);
+    if (command === "receive_frame")
+      return {
+        sequence: 1,
+        width: 4,
+        height: 4,
+        format: "NV12",
+      };
+  });
+  const connection = await api.open(
+    {},
+    received,
+    new AbortController().signal,
+  );
+  await tick();
+  connection.close();
+  finish();
+  await tick();
+  expect(received).not.toHaveBeenCalledWith({
+    type: "track",
+  });
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it("cancels a pending open, releases a late buffer, then closes the native owner", async () => {

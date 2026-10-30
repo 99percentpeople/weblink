@@ -46,7 +46,7 @@ pub struct Frame {
     pub color_space: Option<Value>,
 }
 struct Presentation {
-    pixels: Option<Pixels>,
+    pixels: Option<Arc<Pixels>>,
     audio: VecDeque<Vec<i16>>,
     frame_pending: bool,
     audio_pending: bool,
@@ -297,7 +297,7 @@ impl Receiver {
                 return Ok(());
             }
             p.sequence += 1;
-            p.pixels = Some(Pixels {
+            p.pixels = Some(Arc::new(Pixels {
                 info: Frame {
                     sequence: p.sequence,
                     width,
@@ -306,7 +306,7 @@ impl Receiver {
                     color_space,
                 },
                 frame,
-            });
+            }));
             p.visible && !std::mem::replace(&mut p.frame_pending, true)
         };
         if notify {
@@ -314,18 +314,24 @@ impl Receiver {
         }
         Ok(())
     }
-    pub fn copy_frame(&self, after: u64, target: &mut [u8]) -> Result<Option<Frame>> {
+    fn latest_frame(&self, after: u64) -> Option<Arc<Pixels>> {
         let mut p = self.presentation.lock().unwrap();
         p.frame_pending = false;
         if !p.visible {
-            return Ok(None);
+            return None;
         }
-        let Some(frame) = &p.pixels else {
+        p.pixels
+            .as_ref()
+            .filter(|frame| frame.info.sequence > after)
+            .cloned()
+    }
+    pub fn copy_frame(&self, after: u64, target: &mut [u8]) -> Result<Option<Frame>> {
+        // Like capture preview, retain only the selected immutable frame while
+        // packing. The latest slot and audio must remain writable during a slow
+        // WebView copy/conversion. A racing arrival rearms one notification.
+        let Some(frame) = self.latest_frame(after) else {
             return Ok(None);
         };
-        if frame.info.sequence <= after {
-            return Ok(None);
-        }
         let (width, height) = (frame.info.width as usize, frame.info.height as usize);
         if target.len() < width * height * 3 / 2 {
             return Err("Receive buffer too small".into());
@@ -463,6 +469,75 @@ impl Drop for Receiver {
 mod tests {
     use super::*;
     use libwebrtc::video_frame::{NV12Buffer, VideoFrame, VideoRotation};
+    #[test]
+    fn slow_presenter_retains_only_its_snapshot_and_does_not_block_new_arrivals() {
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let notices = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let output = notices.clone();
+            let receiver = Receiver::new(
+                vec![],
+                false,
+                Arc::new(move |event| {
+                    if event["type"] == "frame" {
+                        output.fetch_add(1, Ordering::Relaxed);
+                    }
+                    true
+                }),
+            )
+            .unwrap();
+            let publish = |value| {
+                let mut pixels = NV12Buffer::new(4, 2);
+                pixels.data_mut().0.fill(value);
+                receiver
+                    .video(VideoFrame::new(
+                        VideoRotation::VideoRotation0,
+                        Box::new(pixels) as Box<dyn libwebrtc::video_frame::VideoBuffer>,
+                    ))
+                    .unwrap();
+            };
+            publish(1);
+            // A busy pixel consumer holds a resource reference, never the slot lock.
+            let held = receiver.latest_frame(0).unwrap();
+            let old = Arc::downgrade(&held);
+            assert!(receiver.presentation.try_lock().is_ok());
+            publish(2);
+            let replaced = Arc::downgrade(
+                receiver
+                    .presentation
+                    .lock()
+                    .unwrap()
+                    .pixels
+                    .as_ref()
+                    .unwrap(),
+            );
+            for value in 3..=100 {
+                publish(value);
+            }
+            assert!(
+                replaced.upgrade().is_none(),
+                "Intermediate frames must not queue"
+            );
+            assert_eq!(notices.load(Ordering::Relaxed), 2);
+            assert_eq!(held.frame.buffer.as_nv12().unwrap().data().0[0], 1);
+            let mut target = [0; 12];
+            assert_eq!(
+                receiver
+                    .copy_frame(held.info.sequence, &mut target)
+                    .unwrap()
+                    .unwrap()
+                    .sequence,
+                100
+            );
+            assert_eq!(target[0], 100);
+            receiver.close();
+            assert!(
+                old.upgrade().is_some(),
+                "An in-flight snapshot remains valid after close"
+            );
+            drop(held);
+            assert!(old.upgrade().is_none());
+        });
+    }
     #[test]
     fn failed_and_cancelled_startup_release_the_receiver_and_callback() {
         tokio::runtime::Runtime::new().unwrap().block_on(async {

@@ -185,6 +185,43 @@ it("retries a browser-supported format through the browser after native decode f
   receiver.close();
   expect(f.connection.close).toHaveBeenCalledTimes(1);
 });
+
+it("releases overloaded native HEVC and advertises browser fallback capabilities", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  await f.service.ready;
+  const receiver = f.create();
+  await receiver.answer(offer());
+  f.emit({ type: "state", state: "connected" });
+  let reads = 0;
+  vi.mocked(f.connection.stats).mockImplementation(
+    async () => {
+      reads++;
+      return [
+        {
+          id: "video",
+          type: "inbound-rtp",
+          timestamp: reads * 1000,
+          kind: "video",
+          framesDecoded: reads * 40,
+          bytesReceived: reads * 100000,
+          totalProcessingDelay: reads * 40 * 0.4,
+        },
+      ];
+    },
+  );
+  receiver.monitorDecode(vi.fn());
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(f.failed).toHaveBeenCalledExactlyOnceWith(
+    expect.any(ScreenDecodeError),
+  );
+  expect(f.connection.close).toHaveBeenCalledOnce();
+  expect(f.service.capabilities().video).toEqual([
+    "video/h264",
+  ]);
+  expect(f.create("H264")).toBeInstanceOf(ScreenReceiver);
+  expect(vi.getTimerCount()).toBe(0);
+});
 it("closes a late native open without reporting a cancelled startup as a codec failure", async () => {
   const f = fixture();
   await f.service.ready;

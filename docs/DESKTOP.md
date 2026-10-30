@@ -2165,7 +2165,10 @@ Browser autoplay policy still applies; user interaction resumes suspended audio.
 
 The receive factory requests zero playout delay and MF low-latency decoding.
 Decoded video retains only its latest frame, with one shared-memory copy/write
-in flight. Hidden views stop frame submission, and restore reads the latest
+in flight. Pixel packing retains an immutable frame reference outside the shared
+presentation lock, so it cannot block newer video or audio arrivals. Static
+generated tracks repeat locally only after idle periods; repeats do not reread
+shared pixels. Hidden views stop frame submission, and restore reads the latest
 frame. This route includes GPU readback and VideoFrame copies: it is not a
 zero-copy GPU compositor, and decode timing alone does not establish end-to-end
 latency. The initial presentation limit is even-sized SDR video up to 3840×2160;
@@ -2176,7 +2179,12 @@ views retain browser reception. A native startup/presentation/decode failure
 disables native reception for the current application session. The existing
 retry policy then selects browser reception or renegotiates a browser-supported
 codec when HEVC is unavailable there. Explicit fixed sender codec choices retain
-their existing failure semantics. Remote recording uses the generated stream's
+their existing failure semantics. Native reception also recovers when consecutive
+foreground statistics show interval receive-to-decode processing delay above
+250 ms for at least three seconds, even if frames continue decoding. Missing or
+reset counters, sampling gaps and visibility changes restart that observation
+window. Browser reception retains its stall-only recovery policy. Remote recording
+uses the generated stream's
 ordinary recording fallback; encoded receive pass-through is not provided by
 this backend. Close, page reload, application exit and lease expiry release the
 native receiver, audio sinks and shared buffer.
