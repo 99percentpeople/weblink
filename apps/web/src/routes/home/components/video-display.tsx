@@ -115,6 +115,11 @@ export const VideoDisplay = (
 
   const [videoRef, setVideoRef] =
     createSignal<HTMLVideoElement | null>(null);
+  // Membership/layout changes can invalidate the getter while its boolean
+  // stays true. Rebinding would hide the native plane and remove its mask.
+  const playbackActive = createMemo(
+    () => props.playbackActive !== false,
+  );
 
   const presentation = useContext(
     PresentationDiagnosticsContext,
@@ -132,7 +137,7 @@ export const VideoDisplay = (
       const unbind = platform.videoPresentation?.bind(
         track,
         video,
-        props.playbackActive !== false,
+        playbackActive(),
       );
       if (unbind) onCleanup(unbind);
     }
@@ -255,7 +260,7 @@ export const VideoDisplay = (
   createVideoPlaybackRecovery({
     video: videoRef,
     track: videoTrack,
-    active: () => props.playbackActive !== false,
+    active: playbackActive,
     resume: (video, track, restartPending) => {
       const currentStream = videoStream();
       if (

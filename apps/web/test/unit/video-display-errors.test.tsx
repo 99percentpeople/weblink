@@ -27,6 +27,15 @@ const notification = vi.hoisted(() => ({
   ),
   dismiss: vi.fn(),
 }));
+const nativePresentation = vi.hoisted(() => ({
+  bind: vi.fn(),
+}));
+vi.mock("@/libs/platform/runtime", () => ({
+  platform: {
+    kind: "browser",
+    videoPresentation: nativePresentation,
+  },
+}));
 vi.mock("solid-sonner", () => ({ toast: notification }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/components/icons", () => ({
@@ -73,6 +82,7 @@ beforeEach(() => {
     "pause",
   ).mockImplementation(() => {});
   vi.clearAllMocks();
+  nativePresentation.bind.mockReset();
   play = vi
     .spyOn(HTMLMediaElement.prototype, "play")
     .mockResolvedValue();
@@ -109,6 +119,51 @@ async function setup(
 }
 
 describe("VideoDisplay playback error notifications", () => {
+  it("retains native binding when membership changes without changing playback visibility", async () => {
+    const unbind = vi.fn();
+    nativePresentation.bind.mockReturnValue(unbind);
+    const source = track("native-screen");
+    const shared = stream(source);
+    const [members, setMembers] = createSignal(["sender"]);
+    const view = render(() => (
+      <VideoDisplay
+        stream={shared}
+        name="Sender"
+        playbackActive={members().includes("sender")}
+      />
+    ));
+    await flush();
+    expect(nativePresentation.bind).toHaveBeenCalledOnce();
+    setMembers(["sender", "new-peer"]);
+    await flush();
+    setMembers(["sender"]);
+    await flush();
+    expect(nativePresentation.bind).toHaveBeenCalledOnce();
+    expect(unbind).not.toHaveBeenCalled();
+    setMembers([]);
+    await flush();
+    expect(
+      nativePresentation.bind,
+    ).toHaveBeenLastCalledWith(
+      source,
+      expect.any(HTMLVideoElement),
+      false,
+    );
+    expect(unbind).toHaveBeenCalledOnce();
+    setMembers(["sender"]);
+    await flush();
+    expect(
+      nativePresentation.bind,
+    ).toHaveBeenLastCalledWith(
+      source,
+      expect.any(HTMLVideoElement),
+      true,
+    );
+    expect(unbind).toHaveBeenCalledTimes(2);
+    view.unmount();
+    expect(unbind).toHaveBeenCalledTimes(3);
+    expect(source.stop).not.toHaveBeenCalled();
+  });
   it("keeps the same video/card node for terminal decode failure and releases only presentation", async () => {
     const source = track("hevc");
     const [error, setError] = createSignal<"codec">();

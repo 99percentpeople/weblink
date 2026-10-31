@@ -7,10 +7,12 @@ import {
 } from "vitest";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { createNativePresentation } from "../src/presentation";
+import type { Channel } from "@tauri-apps/api/core";
 
 const pixels = vi.hoisted(() => ({
   stop: vi.fn(),
   requestFrame: vi.fn(),
+  fillRect: vi.fn(),
 }));
 vi.mock("../src/presentation-layout", () => ({
   createPresentationLayout: () => ({
@@ -24,6 +26,19 @@ const tick = async () => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(
+    HTMLCanvasElement.prototype,
+    "getContext",
+  ).mockReturnValue({
+    fillRect: pixels.fillRect,
+  } as unknown as CanvasRenderingContext2D);
   Object.defineProperty(
     HTMLCanvasElement.prototype,
     "captureStream",
@@ -37,6 +52,72 @@ beforeEach(() => {
     vi.fn(() => 1),
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
+});
+it("refreshes the placeholder on demand without periodic pixel work", async () => {
+  let events!: Channel<{
+    type: string;
+    width: number;
+    height: number;
+  }>;
+  mockIPC((command, args) => {
+    if (command === "presentation_open")
+      events = (args as { events: typeof events }).events;
+    if (command === "presentation_stats")
+      return { presentedFrames: 1 };
+  });
+  const presentation = createNativePresentation();
+  const surface = presentation.create(
+    "receiver",
+    false,
+    vi.fn(),
+    vi.fn(),
+    vi.fn(),
+  );
+  await surface.open();
+  events.onmessage({
+    type: "surface",
+    width: 640,
+    height: 360,
+  });
+  expect(pixels.requestFrame).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(16000);
+  expect(pixels.requestFrame).toHaveBeenCalledOnce();
+  const video = document.createElement("video");
+  document.body.append(video);
+  const unbind = presentation.bind(
+    pixels as unknown as MediaStreamTrack,
+    video,
+  )!;
+  const attached = pixels.requestFrame.mock.calls.length;
+  expect(attached).toBeGreaterThan(1);
+  await vi.advanceTimersByTimeAsync(16000);
+  expect(pixels.requestFrame).toHaveBeenCalledTimes(
+    attached,
+  );
+  video.dispatchEvent(new Event("play"));
+  expect(pixels.requestFrame).toHaveBeenCalledTimes(
+    attached + 1,
+  );
+  events.onmessage({
+    type: "surface",
+    width: 800,
+    height: 600,
+  });
+  expect(surface.size).toEqual({ width: 800, height: 600 });
+  expect(pixels.requestFrame).toHaveBeenCalledTimes(
+    attached + 2,
+  );
+  unbind();
+  video.dispatchEvent(new Event("play"));
+  expect(pixels.requestFrame).toHaveBeenCalledTimes(
+    attached + 2,
+  );
+  surface.close();
+  surface.refreshPlaceholder();
+  expect(pixels.requestFrame).toHaveBeenCalledTimes(
+    attached + 2,
+  );
+  expect(vi.getTimerCount()).toBe(0);
 });
 afterEach(() => {
   clearMocks();

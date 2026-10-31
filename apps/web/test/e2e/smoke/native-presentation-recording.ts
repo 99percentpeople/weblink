@@ -1,4 +1,5 @@
 import { staticRecordingInput } from "../../../../desktop/test/browser/presentation-recording";
+import { idlePresentation } from "../../../../desktop/test/browser/presentation-idle";
 import { remuxRecording } from "@/libs/application/recording-remux";
 import {
   ALL_FORMATS,
@@ -16,7 +17,9 @@ function assert(
   if (!value) throw new Error(message);
 }
 async function run() {
-  const measurements: unknown[] = [];
+  const measurements: unknown[] = [
+    await idlePresentation(),
+  ];
   // Include quick stop, delayed attachment, static content and a second recording.
   for (const canvas of [false, true])
     for (const duration of [100, 2200]) {
@@ -107,6 +110,7 @@ async function run() {
     ok: true,
     tests: measurements.length,
     passed: [
+      "native presentation sleeps at rest and follows WAAPI, reattachment and source resize without a black-frame timer",
       "static native frames survive delayed recorder attachment, quick stop and restart without extra GPU readback",
     ],
     measurements,

@@ -2190,6 +2190,13 @@ Rounded clipping follows each container's padding edge, including border thickne
 and animated transforms; fitted video corners inside black bars remain square.
 Live background masks and native clip objects are reused during layout/fade changes,
 and each compositor iteration commits its latest layout updates together.
+Geometry observation sleeps while layout is static. Resize, scrolling, visibility,
+DOM layout changes and explicit WAAPI startup notifications wake it; animation
+frames are measured only until the relevant motion settles. Membership changes
+that preserve a video's playback state keep its native binding and mask alive.
+The black lifecycle track refreshes on attachment, playback recovery and source
+resize, independently of native presentation and recording frame delivery. An
+unbound live surface still renews its native lease without periodic pixel work.
 The native window backing is opaque black. Composition explicitly uses GPU linear
 interpolation for scaled preview and receive views, instead of DirectComposition's
 nearest-neighbor default; it adds no CPU readback or extra frame queue.

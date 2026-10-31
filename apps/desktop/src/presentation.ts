@@ -4,6 +4,7 @@ import { createNativePresentationStats } from "./presentation-stats";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { createPresentationLayout } from "./presentation-layout";
 import { readPresentationGeometry } from "./presentation-geometry";
+import { observePresentationLayout } from "./presentation-observer";
 
 export interface GpuStats {
   path: string;
@@ -30,6 +31,8 @@ export interface GpuSurface {
   fail(error: unknown): void;
   closed: boolean;
   bound?: () => void;
+  resized?: () => void;
+  refreshPlaceholder(): void;
 }
 export function createNativePresentation(
   watchVisibility?: (
@@ -98,9 +101,10 @@ export function createNativePresentation(
         | undefined;
       let renewing = false;
       const draw = () => {
-        canvas
-          .getContext("2d")!
-          .fillRect(0, 0, canvas.width, canvas.height);
+        if (surface.closed || !surface.size.width) return;
+        // Mark the already-black canvas dirty for a newly attached consumer.
+        // The full backing store is painted only when its dimensions change.
+        canvas.getContext("2d")!.fillRect(0, 0, 1, 1);
         placeholder.requestFrame();
       };
       const surface: GpuSurface = {
@@ -112,6 +116,7 @@ export function createNativePresentation(
         ready,
         closed: false,
         fail,
+        refreshPlaceholder: draw,
         async open() {
           if (surface.closed)
             throw new DOMException(
@@ -157,9 +162,18 @@ export function createNativePresentation(
               );
               return;
             }
-            surface.size = { width, height };
-            canvas.width = width;
-            canvas.height = height;
+            if (
+              width !== surface.size.width ||
+              height !== surface.size.height
+            ) {
+              surface.size = { width, height };
+              canvas.width = width;
+              canvas.height = height;
+              canvas
+                .getContext("2d")!
+                .fillRect(0, 0, width, height);
+              surface.resized?.();
+            }
             draw();
             resolve();
             track();
@@ -177,15 +191,10 @@ export function createNativePresentation(
               "AbortError",
             );
           refresh = setInterval(() => {
-            if (surface.size.width) draw();
             // A live track can outlast its current video element (for example
             // during view changes). Keep its native lease until close(), even
             // when no bound element is polling presentation statistics.
-            if (
-              !surface.bound &&
-              !renewing &&
-              performance.now() - surface.statsAt >= 15000
-            ) {
+            if (!surface.bound && !renewing) {
               renewing = true;
               void surface
                 .stats()
@@ -196,7 +205,7 @@ export function createNativePresentation(
                   renewing = false;
                 });
             }
-          }, 500);
+          }, 15000);
         },
         close() {
           if (surface.closed) return;
@@ -211,6 +220,7 @@ export function createNativePresentation(
           clearInterval(refresh);
           sources.delete(placeholder);
           placeholder.stop();
+          canvas.width = canvas.height = 2;
           void (opening ?? Promise.resolve())
             .catch(() => {})
             .then(() =>
@@ -253,9 +263,11 @@ export function createNativePresentation(
       surface.bound?.();
       const key = Symbol();
       let stopped = false,
-        raf = 0,
         last = "",
         sending = false;
+      let observer:
+        | ReturnType<typeof observePresentationLayout>
+        | undefined;
       let next:
         | Record<string, number | boolean>
         | undefined;
@@ -268,7 +280,11 @@ export function createNativePresentation(
         try {
           const stats = await surface.stats();
           if (stopped) return;
-          shown = stats.presentedFrames > 0;
+          const presented = stats.presentedFrames > 0;
+          if (shown !== presented) {
+            shown = presented;
+            observer?.request();
+          }
           check = setTimeout(
             () => void poll(),
             shown ? 1000 : 100,
@@ -324,18 +340,18 @@ export function createNativePresentation(
         if (visible && shown) {
           layout.show(key, video, geometry);
         } else layout.hide(key, video);
-        raf = requestAnimationFrame(position);
       };
       const close = () => {
         if (stopped) return;
         stopped = true;
         unwatch?.();
         lifetime.abort();
-        cancelAnimationFrame(raf);
+        observer?.close();
         clearTimeout(check);
         layout.hide(key, video);
         if (surface.bound === close) {
           surface.bound = undefined;
+          surface.resized = undefined;
           surface.visible = false;
           void surface
             .layout({
@@ -350,9 +366,12 @@ export function createNativePresentation(
         }
       };
       surface.bound = close;
+      observer = observePresentationLayout(video, position);
+      surface.resized = observer.request;
       const refreshPosition = () => {
-        cancelAnimationFrame(raf);
-        position();
+        observer?.refresh();
+        if (nativeVisible && !document.hidden)
+          surface.refreshPlaceholder();
       };
       unwatch = watchVisibility?.((visible) => {
         nativeVisible = visible;
@@ -363,11 +382,16 @@ export function createNativePresentation(
         refreshPosition,
         { signal: lifetime.signal },
       );
-      document.addEventListener(
-        "fullscreenchange",
-        refreshPosition,
-        { signal: lifetime.signal },
-      );
+      // play/emptied cover attachment and playback recovery after bind(). The
+      // pixel track is only a lifecycle placeholder; native video paints itself.
+      for (const event of ["play", "emptied"])
+        video.addEventListener(
+          event,
+          surface.refreshPlaceholder,
+          {
+            signal: lifetime.signal,
+          },
+        );
       void poll();
       refreshPosition();
       return close;
