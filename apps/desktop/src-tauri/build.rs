@@ -8,8 +8,14 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
+            "presentation_frame",
+            "presentation_open",
+            "presentation_layout",
+            "presentation_stats",
+            "presentation_close",
             "receive_codecs",
             "receive_open",
+            "receive_release",
             "receive_answer",
             "receive_candidate",
             "receive_stats",
@@ -17,7 +23,6 @@ fn main() {
             "receive_send",
             "receive_audio",
             "receive_visible",
-            "receive_frame",
             "receive_close",
             "automation_open",
             "automation_heartbeat",

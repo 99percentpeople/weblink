@@ -29,6 +29,14 @@ async fn close_receiver(receiver: Arc<Receiver>) {
 #[test]
 #[ignore = "Requires Windows HEVC decoder and hardware encoder; uses synthetic pixels only"]
 fn native_receiver_decodes_hevc_and_keeps_only_latest_presentation() {
+    native_hevc(false);
+}
+#[test]
+#[ignore = "Requires Windows HEVC decoder and hardware encoder; uses synthetic pixels only"]
+fn native_receiver_leases_hevc_textures_for_gpu_presentation() {
+    native_hevc(true);
+}
+fn native_hevc(gpu: bool) {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         assert!(crate::receive::codecs().iter().any(|c| c == "video/h265"), "HEVC decoder is unavailable on this test host");
         let encoder = MediaSession::encoders().unwrap().into_iter()
@@ -41,11 +49,11 @@ fn native_receiver_decodes_hevc_and_keeps_only_latest_presentation() {
         }).unwrap();
         let candidates = Arc::new(Mutex::new(Vec::new()));
         let gathered = candidates.clone();
-        let receiver = Receiver::new(vec![], false, Arc::new(move |event| {
+        let receiver = Receiver::new_with_presentation(vec![], false, Arc::new(move |event| {
             if event["type"] == "candidate" { gathered.lock().unwrap().push(event["candidate"].clone()); }
             if event["type"] == "error" { eprintln!("Receive error: {event}"); }
             true
-        })).unwrap();
+        }), gpu).unwrap();
         let offer = media.offer_configured("native-hevc".into(), vec![], false, false, None, None, None).await.unwrap();
         let answer = receiver.answer(&offer).await.unwrap();
         assert!(answer.contains("H265/90000"), "{answer}");
@@ -68,12 +76,28 @@ fn native_receiver_decodes_hevc_and_keeps_only_latest_presentation() {
         let inbound = stats.as_array().unwrap().iter().find(|s| s["type"] == "inbound-rtp" && s["kind"] == "video").unwrap();
         assert!(inbound["framesDecoded"].as_u64().unwrap_or(0) > 20, "{inbound}");
         assert_processing_delay(inbound);
-        let mut pixels = vec![0; crate::receive::FRAME_CAPACITY];
-        let frame = receiver.copy_frame(0, &mut pixels).unwrap().expect("Decoded presentation frame");
-        assert_eq!((frame.width,frame.height,frame.format),(1280,720,"NV12"));
-        assert!(receiver.copy_frame(frame.sequence,&mut pixels).unwrap().is_none());
+        let retained = if gpu {
+            let source = receiver.gpu.as_ref().unwrap();
+            let held = source.latest().expect("GPU decoded frame");
+            assert_eq!(held.texture.size, (1280,720));
+            assert_eq!(source.stats().uploaded_frames, 0, "Hardware decode unexpectedly uploaded CPU frames");
+            assert!(inbound["decoderImplementation"].as_str().unwrap_or("").contains("texture"), "{inbound}");
+            let retained = crate::presentation::Source::default();
+            retained.publish(held.texture.clone());
+            let before = retained.read_frame(0).unwrap();
+            assert_eq!(before.len(), 24+1280*720*3/2);
+            assert!(before[24..24+1280*720].iter().any(|&y| y > 32));
+            Some((retained,before))
+        } else {
+            let mut pixels = vec![0; crate::receive::FRAME_CAPACITY];
+            let frame = receiver.copy_frame(0, &mut pixels).unwrap().expect("Decoded presentation frame");
+            assert_eq!((frame.width,frame.height,frame.format),(1280,720,"NV12"));
+            assert!(receiver.copy_frame(frame.sequence,&mut pixels).unwrap().is_none());
+            None
+        };
         eprintln!("Native HEVC result {}", json!({"frames":inbound["framesDecoded"],"decoder":inbound["decoderImplementation"],"hardware":inbound["powerEfficientDecoder"]}));
         close_receiver(receiver).await; media.close();
+        if let Some((retained,before)) = retained { assert_eq!(retained.read_frame(0).unwrap(), before, "GPU lease changed after decoder shutdown"); }
     });
 }
 

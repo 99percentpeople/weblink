@@ -15,8 +15,12 @@ pub(super) struct State {
     latest: Option<Arc<hardware::gpu::Captured>>,
     generation: u64,
     sent: Option<Instant>,
+    preview_converter: Option<hardware::gpu::Converter>,
 }
 impl MediaSession {
+    pub fn wake_gpu_preview(&self) {
+        self.gpu_notify.notify_one();
+    }
     pub(super) fn encoding_wake(&self) -> crate::surface::gpu::Wake {
         let cpu = self.notify.clone();
         let gpu = self.gpu_notify.clone();
@@ -88,7 +92,9 @@ impl MediaSession {
             .filter(|e| !e.needs_readback())
             .collect();
         let mut state = self.gpu_capture.lock().unwrap_or_else(|e| e.into_inner());
-        if self.closed.load(Ordering::Acquire) || encoders.is_empty() {
+        if self.closed.load(Ordering::Acquire)
+            || (encoders.is_empty() && !self.gpu_preview.active())
+        {
             *state = State::default();
             return Work::default();
         }
@@ -148,6 +154,48 @@ impl MediaSession {
         }
         let captured_at = if dirty { readback.captured_at } else { None };
         drop(readback);
+        if self.gpu_preview.active() {
+            let captured = state.latest.as_ref().unwrap().clone();
+            let size = captured.size();
+            let size = options.dimensions(size.0, size.1);
+            let result = (|| -> windows::core::Result<()> {
+                if state
+                    .preview_converter
+                    .as_ref()
+                    .is_none_or(|c| !c.matches(&captured, size))
+                {
+                    let notify = self.gpu_notify.clone();
+                    state.preview_converter = Some(hardware::gpu::Converter::new(
+                        &captured.device,
+                        size,
+                        Arc::new(move || notify.notify_one()),
+                    )?);
+                }
+                if let Some(surface) = state
+                    .preview_converter
+                    .as_mut()
+                    .unwrap()
+                    .convert(&captured, &options)?
+                {
+                    let color = options.color_space().rtc();
+                    self.gpu_preview.publish(crate::presentation::Texture {
+                        cpu_upload: false,
+                        texture: surface.texture.clone(),
+                        subresource: 0,
+                        crop: (0, 0),
+                        size,
+                        bt709: color.matrix == 1,
+                        full_range: color.full_range,
+                        owner: surface,
+                    });
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                self.gpu_preview
+                    .fail(format!("Native preview conversion failed: {error}"));
+            }
+        }
         let frame = Arc::new(hardware::Frame::from_gpu(
             state.latest.as_ref().unwrap().clone(),
             &options,

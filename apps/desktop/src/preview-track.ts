@@ -1,7 +1,7 @@
 interface GeneratedVideoTrack extends MediaStreamTrack {
   writable: WritableStream<VideoFrame>;
 }
-interface PreviewTrack {
+export interface PreviewTrack {
   stream: MediaStream;
   implementation: string;
   needsRefresh: boolean;

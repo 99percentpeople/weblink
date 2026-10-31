@@ -1,0 +1,40 @@
+/* Native video is composed below WebView2. Mask background layers only so HTML
+   controls, dialogs and remote-control overlays keep their usual stacking. */
+html.native-video-active,
+html.native-video-active body {
+  background: transparent;
+}
+.native-video-background {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -3;
+  background: var(--background, #132332);
+}
+.native-video-background,
+html.native-video-active body::before,
+html.native-video-active body::after {
+  mask-image: var(--native-video-mask);
+  mask-repeat: no-repeat;
+}
+/* The fullscreen backdrop is a separate top-layer box. Keep it transparent
+   and hide the underlying page so its controls cannot show through the video.
+   Visibility on the fullscreen subtree restores its own controls and overlays. */
+html.native-video-active:has(
+    :fullscreen video[data-native-video]
+  )
+  body {
+  visibility: hidden;
+}
+html.native-video-active
+  :fullscreen:has(video[data-native-video]) {
+  visibility: visible;
+}
+html.native-video-active
+  :fullscreen:has(video[data-native-video])::backdrop {
+  background: transparent;
+}
+.meeting-tile-surface:has(video[data-native-video]),
+.meeting-tile-video:has(video[data-native-video]) {
+  background: transparent;
+}

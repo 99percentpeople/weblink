@@ -44,8 +44,9 @@ Cargo also fetches the patched WebRTC bindings from the
 [Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/weblink-native-media),
 pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
 No vendored source or separate dependency preparation step is needed.
-The fork keeps only `main` for official upstream history and `weblink-native-media`
-for Weblink changes. Rebase the complete Weblink patch series onto updated `main`
+The fork uses `main` for official upstream history and `weblink-native-media`
+for integrated Weblink changes. Feature work can pin a published feature commit
+before integration. Rebase the complete Weblink patch series onto updated `main`
 so our commits always follow the official commits; verify the patches with
 `git range-diff` and refresh both pinned dependency files after validation.
 After initializing Git submodules, run from the root:
@@ -273,8 +274,9 @@ upgrade needs a later, higher-version signed release for Windows verification.
   Windows retains its serialized queue, authorization engine, safety hooks and
   input-release behavior. An unimplemented backend cannot open an input owner.
 - `preview` and `keyboard` expose common command signatures and select their
-  native implementations inside the feature. Windows preview uses WebView2 shared
-  buffers. Notifications use the Windows backend for permission queries, presentation
+  native implementations inside the feature. Windows retains shared-buffer preview
+  for CPU consumers; normal preview uses the shared GPU presentation service.
+  Notifications use the Windows backend for permission queries, presentation
   and actions. Only Windows is a supported desktop target; other platforms retain
   unavailable implementations for host compilation and shared-logic tests.
 - Native capture and media still share `desktop-capture`. Its `media/recording`
@@ -2157,27 +2159,51 @@ the GPU name. This factory is opt-in and does not change publisher factories.
 
 The application chooses the native receiver before answering SDP. It keeps RTP,
 ICE, decode statistics and both authenticated control DataChannels native. The
-existing video element receives a generated MediaStream track backed by read-only
-WebView2 shared memory; older runtimes retain the Canvas presentation fallback.
+existing video element carries a dimension/lifecycle track; its video region is
+backed by a native D3D11/DirectComposition surface below WebView2. HTML controls,
+remote-input coordinates and layout remain in the existing component tree.
 Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
 MediaStream destination, preserving the existing mute, volume and playback owner.
 Browser autoplay policy still applies; user interaction resumes suspended audio.
 
 The receive factory requests zero playout delay and MF low-latency decoding.
-MF GPU output uses an event-driven staging copy: one readback is in flight and
-only the newest pending decoded surface is retained. Completion returns to the
-decoder worker and maps without waiting, reusing staging and bounded NV12 buffers.
-It also completes the final static frame without requiring another input frame.
-Resize and shutdown cancel queued completion tasks and join the native wait callback.
-Decoded video retains only its latest frame, with one shared-memory copy/write
-in flight. Pixel packing retains an immutable frame reference outside the shared
-presentation lock, so it cannot block newer video or audio arrivals. Static
-generated tracks repeat locally only after idle periods; repeats do not reread
-shared pixels. Hidden views stop frame submission, and restore reads the latest
-frame. This route includes GPU readback and VideoFrame copies: it is not a
-zero-copy GPU compositor, and decode timing alone does not establish end-to-end
-latency. The initial presentation limit is even-sized SDR video up to 3840×2160;
-crop and color metadata accompany the pixels. HDR/Main10 is not advertised.
+Its opt-in GPU mode publishes immutable D3D11 textures with their original MF
+sample leases. The complete frame, not merely a texture COM pointer, remains
+alive until the compositor's D3D11 completion query finishes. One GPU submission
+per view and a replaceable latest frame bound the queue. Resizing, hiding and
+removing views preserve in-flight leases until GPU completion. Decoder shutdown
+cannot invalidate a texture still held by a reader.
+
+Local preview and native receive share the same window-owned compositor.
+Preview uses the encoding capture pool and GPU conversion, including rotation,
+cursor and color handling; merely showing a preview does not request CPU pixels.
+Hardware receive uses the decoder texture directly. Native software decode
+uploads its output for the same compositor, without browser decoding. Each
+source uses its own D3D11 device; the composition tree contains its swap chain.
+The swap chain limits queued presentation to one frame. Layout IPC contains only
+validated rectangles and visibility; pixels and native handles stay native.
+Page backgrounds and the black placeholder are masked in video regions, leaving
+HTML control and dialog overlays intact. Fullscreen keeps its backdrop transparent
+and hides the underlying page while preserving controls inside the fullscreen
+element; its original tile ancestors no longer clip the surface.
+The presentation limit remains even-sized
+SDR video up to 3840×2160. HDR/Main10 is not advertised.
+
+The shared-buffer receive transport remains available for native CPU consumers
+and comparison builds. Its event-driven readback leases a mapped staging texture
+as immutable NV12, eliminating the intermediate staging-to-NV12 copy. A bounded
+pool permits cross-thread delayed release and resumes the latest pending frame
+when a lease returns, including the final static frame. Horizontal crops retain
+the packed compatibility path because row slices must not extend beyond the
+mapping. Two read-only WebView2 slots pipeline native packing and presentation;
+lease returns use origin/capability-checked one-way Tauri string notifications.
+Busy slots coalesce new frames rather than queueing pixel copies.
+
+Persistent shared buffers must not appear in `VideoFrame`'s `transfer` list.
+Transfer can alias mapped pixels, so returning a slot after construction could
+corrupt a frame retained by Chromium. This transport depends on the constructor's
+independent pixel snapshot. GPU presentation avoids both shared-buffer copies;
+it does not change or weaken the shared-buffer ownership contract.
 
 Windows desktop advertises native receive formats only and does not automatically
 fall back to browser reception. Legacy non-trickle sessions, unsupported formats
@@ -2193,11 +2219,21 @@ Native reception recovers when consecutive
 foreground statistics show interval receive-to-decode processing delay above
 250 ms for at least three seconds, even if frames continue decoding. Missing or
 reset counters, sampling gaps and visibility changes restart that observation
-window. Browser reception retains its stall-only recovery policy. Remote recording
-uses the generated stream's
-ordinary recording fallback; encoded receive pass-through is not provided by
-this backend. Close, page reload, application exit and lease expiry release the
+window. Browser reception retains its stall-only recovery policy. Recording
+explicitly opens a bounded CPU readback consumer of the native surface. It
+supplies real pixels to the recorder instead of recording the placeholder,
+without changing the GPU display path. Encoded receive pass-through is not
+provided by this backend. Close, page reload, application exit and lease expiry release the
 native receiver, audio sinks and shared buffer.
+
+Native inbound video reports include `nativeReceive` diagnostics. GPU mode
+reports decoded and presented frame counts, CPU-upload counts, decoded-frame age
+at submission and native submission duration. Shared-buffer mode retains the
+worker, packing, lease and renderer stage counters and bounded timing summaries.
+Detailed automation diagnostics export only known numeric fields. These are
+process-local durations, not end-to-end or physical display latency. A placeholder
+video's `requestVideoFrameCallback` does not measure native GPU presentation;
+comparisons must observe the same actual display boundary on both paths.
 
 ## Receiver video quality
 

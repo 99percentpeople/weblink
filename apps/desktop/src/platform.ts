@@ -5,7 +5,8 @@ import { nativeFileSystem } from "./filesystem";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createNativeScreenReceive } from "./receive";
-import { createRawPreview } from "./preview";
+import { createNativePresentation } from "./presentation";
+import { createGpuPreview } from "./preview-gpu";
 import { nativeKeyboard } from "./keyboard";
 import { nativeApplication } from "./application";
 import { nativeUpdates } from "./updates";
@@ -30,9 +31,15 @@ import {
 } from "@weblink/platform";
 
 const watchVisibility = createVisibilityWatcher();
+const nativePresentation =
+  createNativePresentation(watchVisibility);
 
 export const platform: PlatformRuntime = {
-  screenReceive: createNativeScreenReceive(watchVisibility),
+  screenReceive: createNativeScreenReceive(
+    watchVisibility,
+    nativePresentation,
+  ),
+  videoPresentation: nativePresentation,
   filesystem: nativeFileSystem,
   saveFile: saveNativeFile,
   saveFilesToDirectory: saveNativeFilesToDirectory,
@@ -157,7 +164,14 @@ export const platform: PlatformRuntime = {
   screenShare: {
     pipelineStats: (sessionId) =>
       invoke("capture_pipeline_stats", { sessionId }),
-    preview: createRawPreview,
+    preview: (id, audio, ended, signal) =>
+      createGpuPreview(
+        nativePresentation,
+        id,
+        audio,
+        ended,
+        signal,
+      ),
     stats: (sessionId, peerId) =>
       invoke<
         import("@weblink/platform").NativeVideoStats[]

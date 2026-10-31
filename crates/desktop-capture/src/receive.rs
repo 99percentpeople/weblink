@@ -35,6 +35,7 @@ pub type Events = Arc<dyn Fn(Value) -> bool + Send + Sync>;
 struct Pixels {
     pub info: Frame,
     pub frame: BoxVideoFrame,
+    ready: Instant,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +45,9 @@ pub struct Frame {
     pub height: u32,
     pub format: &'static str,
     pub color_space: Option<Value>,
+    /// Native decoded output (including decoder readback) to shared-copy start.
+    pub decoded_queue_ms: f64,
+    pub pixel_copy_ms: f64,
 }
 struct Presentation {
     pixels: Option<Arc<Pixels>>,
@@ -55,6 +59,8 @@ struct Presentation {
 }
 pub struct Receiver {
     pub pc: PeerConnection,
+    pub gpu: Option<Arc<crate::presentation::Source>>,
+    upload: Mutex<crate::presentation::upload::Upload>,
     _factory: PeerConnectionFactory,
     events: Events,
     closed: watch::Sender<bool>,
@@ -82,6 +88,14 @@ pub fn codecs() -> Vec<String> {
 }
 impl Receiver {
     pub fn new(servers: Vec<IceServer>, relay: bool, events: Events) -> Result<Arc<Self>> {
+        Self::new_with_presentation(servers, relay, events, false)
+    }
+    pub fn new_with_presentation(
+        servers: Vec<IceServer>,
+        relay: bool,
+        events: Events,
+        gpu: bool,
+    ) -> Result<Arc<Self>> {
         if servers.len() > 32
             || servers
                 .iter()
@@ -89,7 +103,11 @@ impl Receiver {
         {
             return Err("Invalid receiver ICE configuration".into());
         }
-        let factory = PeerConnectionFactory::for_screen_receive();
+        let factory = if gpu {
+            PeerConnectionFactory::for_screen_receive_gpu()
+        } else {
+            PeerConnectionFactory::for_screen_receive()
+        };
         let mut config = RtcConfiguration::default();
         config.continual_gathering_policy = ContinualGatheringPolicy::GatherOnce;
         config.ice_transport_type = if relay {
@@ -110,6 +128,8 @@ impl Receiver {
             .map_err(|e| e.to_string())?;
         let this = Arc::new(Self {
             pc,
+            gpu: gpu.then(|| Arc::new(crate::presentation::Source::default())),
+            upload: Mutex::new(Default::default()),
             _factory: factory,
             events,
             closed: watch::channel(false).0,
@@ -304,12 +324,47 @@ impl Receiver {
                     height,
                     format,
                     color_space,
+                    decoded_queue_ms: 0.0,
+                    pixel_copy_ms: 0.0,
                 },
                 frame,
+                ready: Instant::now(),
             }));
             p.visible && !std::mem::replace(&mut p.frame_pending, true)
         };
-        if notify {
+        if let Some(source) = &self.gpu {
+            // Close may clear the latest frame after publication above.
+            let Some(pixels) = self.presentation.lock().unwrap().pixels.clone() else {
+                return Ok(());
+            };
+            let texture = if let Some(native) = pixels.frame.buffer.as_native() {
+                use windows_core::Interface;
+                // This receiver was exclusively created with for_screen_receive_gpu.
+                // Retain the entire immutable frame until the compositor's GPU query completes.
+                let resource = unsafe { native.d3d11_resource() };
+                let texture = unsafe {
+                    windows::Win32::Graphics::Direct3D11::ID3D11Texture2D::from_raw_borrowed(
+                        &resource.texture,
+                    )
+                }
+                .ok_or("Native decoder returned a null texture")?
+                .clone();
+                let color = pixels.frame.buffer.color_space().unwrap_or([1, 1, 1, 1]);
+                crate::presentation::Texture {
+                    cpu_upload: false,
+                    texture,
+                    subresource: resource.subresource,
+                    crop: (resource.crop_x, resource.crop_y),
+                    size: (width, height),
+                    bt709: color[2] == 1,
+                    full_range: color[3] == 2,
+                    owner: pixels.clone(),
+                }
+            } else {
+                self.upload.lock().unwrap().frame(&pixels.frame)?
+            };
+            source.publish(texture);
+        } else if notify {
             self.emit(json!({"type":"frame"}));
         }
         Ok(())
@@ -332,6 +387,8 @@ impl Receiver {
         let Some(frame) = self.latest_frame(after) else {
             return Ok(None);
         };
+        let copying = Instant::now();
+        let decoded_queue_ms = frame.ready.elapsed().as_secs_f64() * 1000.0;
         let (width, height) = (frame.info.width as usize, frame.info.height as usize);
         if target.len() < width * height * 3 / 2 {
             return Err("Receive buffer too small".into());
@@ -359,7 +416,13 @@ impl Receiver {
                 [(y, sy as usize), (u, su as usize), (v, sv as usize)],
             )?;
         }
-        Ok(Some(frame.info.clone()))
+        let mut info = frame.info.clone();
+        info.decoded_queue_ms = decoded_queue_ms;
+        info.pixel_copy_ms = copying.elapsed().as_secs_f64() * 1000.0;
+        Ok(Some(info))
+    }
+    pub fn decoded_frames(&self) -> u64 {
+        self.presentation.lock().unwrap().sequence
     }
     pub fn visible(&self, visible: bool) {
         let notify = {
@@ -438,6 +501,9 @@ impl Receiver {
             .map_err(|e| e.to_string())
     }
     pub fn close(&self) {
+        if let Some(source) = &self.gpu {
+            source.close();
+        }
         if self.closed.send_replace(true) {
             return;
         }

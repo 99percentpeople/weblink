@@ -1,40 +1,27 @@
+import type { NativePresentation } from "./presentation";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   NativeScreenReceive,
   NativeReceiveEvent,
 } from "@weblink/platform";
 import { createPreviewTrack } from "./preview-track";
+import {
+  createReceiveVideo,
+  type ReceiveFrame,
+  type SharedEvent,
+  type SharedWebview,
+} from "./receive-video";
 
-interface SharedEvent {
-  additionalData?: { kind?: string; id?: string };
-  getBuffer(): ArrayBuffer;
-}
-interface SharedWebview {
-  addEventListener(
-    type: "sharedbufferreceived",
-    listener: (e: SharedEvent) => void,
-  ): void;
-  removeEventListener(
-    type: "sharedbufferreceived",
-    listener: (e: SharedEvent) => void,
-  ): void;
-  releaseBuffer(buffer: ArrayBuffer): void;
-}
-interface Frame {
-  sequence: number;
-  width: number;
-  height: number;
-  format: "NV12" | "I420";
-  colorSpace?: VideoColorSpaceInit | null;
-}
 type Event =
   | NativeReceiveEvent
-  | { type: "frame" | "audio" | "audio-track" };
+  | ReceiveFrame
+  | { type: "audio" | "audio-track" };
 
 export function createNativeScreenReceive(
   watchVisibility: (
     changed: (visible: boolean) => void,
   ) => () => void,
+  presentation?: NativePresentation,
 ): NativeScreenReceive {
   // Fail closed until discovery identifies an unsupported desktop platform.
   // Windows keeps native receiving even when discovery or a decoder fails.
@@ -52,35 +39,44 @@ export function createNativeScreenReceive(
     },
     async open(configuration, onEvent, signal) {
       signal.throwIfAborted();
-      const webview = (
-        window as Window & {
-          chrome?: { webview?: SharedWebview };
-        }
-      ).chrome?.webview;
+      const runtime = window as Window & {
+        chrome?: { webview?: SharedWebview };
+        __WEBLINK_RECEIVE_RELEASE__?: (
+          id: string,
+          releases: { slot: number; lease: number }[],
+        ) => void;
+      };
+      const webview = runtime.chrome?.webview;
+      const returnSlots =
+        runtime.__WEBLINK_RECEIVE_RELEASE__;
       if (
-        !webview?.releaseBuffer ||
-        typeof VideoFrame === "undefined"
+        !presentation &&
+        (!webview?.releaseBuffer ||
+          !returnSlots ||
+          typeof VideoFrame === "undefined")
       )
         throw new Error(
           "Native receiving requires WebView2 shared buffers",
         );
       const id = crypto.randomUUID();
-      const presenter = createPreviewTrack();
-      const stream = presenter.stream;
+      const surface = presentation?.create(
+        id,
+        false,
+        () => onEvent({ type: "track" }),
+        () => fail(new Error("Native surface ended")),
+        (error) => fail(error),
+      );
+      const presenter = surface
+        ? undefined
+        : createPreviewTrack();
+      const stream = surface?.stream ?? presenter!.stream;
       let closed = false;
       let initialized = false;
-      let buffer: ArrayBuffer | undefined;
-      let sequence = 0;
-      let dirty = false;
-      let running = false;
       let visibilityUpdate = Promise.resolve();
       let nativeVisible = true;
       let opening: Promise<unknown> | undefined;
       let heartbeat:
         | ReturnType<typeof setInterval>
-        | undefined;
-      let refresh:
-        | ReturnType<typeof setTimeout>
         | undefined;
       let unwatch: (() => void) | undefined;
       let audioContext: AudioContext | undefined;
@@ -111,7 +107,6 @@ export function createNativeScreenReceive(
         closed = true;
         clearTimeout(timeout);
         clearInterval(heartbeat);
-        clearTimeout(refresh);
         rejectReady(
           new DOMException("Receiver closed", "AbortError"),
         );
@@ -131,21 +126,17 @@ export function createNativeScreenReceive(
           true,
         );
         unwatch?.();
-        presenter.close();
+        video.close();
         audioNode?.disconnect();
         for (const track of stream.getAudioTracks())
           track.stop();
         void audioContext?.close().catch(() => {});
-        if (buffer) {
-          webview.releaseBuffer(buffer);
-          buffer = undefined;
-        }
         void (opening ?? Promise.resolve())
           .catch(() => {})
           .then(() => invoke("receive_close", { id }))
           .catch(console.warn)
           .finally(() =>
-            webview.removeEventListener(
+            webview?.removeEventListener(
               "sharedbufferreceived",
               received,
             ),
@@ -156,75 +147,32 @@ export function createNativeScreenReceive(
         onEvent({ type: "error", error: String(error) });
         close();
       };
-      const pump = async () => {
-        if (
-          running ||
-          closed ||
-          !initialized ||
-          !buffer ||
-          !visible()
-        )
-          return;
-        running = true;
-        clearTimeout(refresh);
-        try {
-          if (dirty) {
-            dirty = false;
-            const frame = await invoke<Frame | null>(
-              "receive_frame",
-              { id, after: sequence },
-            );
-            if (closed || !buffer || !visible()) return;
-            if (!frame) return;
-            if (
-              !Number.isInteger(frame.width) ||
-              !Number.isInteger(frame.height) ||
-              frame.width < 2 ||
-              frame.height < 2 ||
-              frame.width > 3840 ||
-              frame.height > 2160 ||
-              frame.width % 2 ||
-              frame.height % 2 ||
-              !["I420", "NV12"].includes(frame.format)
-            )
-              throw new Error(
-                "Invalid native receive frame",
-              );
-            const pixels = new VideoFrame(buffer, {
-              format: frame.format,
-              codedWidth: frame.width,
-              codedHeight: frame.height,
-              timestamp: Math.round(
-                performance.now() * 1000,
-              ),
-              colorSpace: frame.colorSpace ?? undefined,
-            });
-            try {
-              await presenter.write(pixels);
-            } finally {
-              pixels.close();
-            }
-            if (closed) return;
-            const first = sequence === 0;
-            sequence = frame.sequence;
-            if (first) onEvent({ type: "track" });
-          } else await presenter.refresh();
-        } catch (error) {
-          fail(error);
-        } finally {
-          running = false;
-          if (!closed && visible()) {
-            // Match native preview: a busy presenter coalesces arrivals, then
-            // pulls only the latest frame without waiting for another paint.
-            if (dirty) queueMicrotask(() => void pump());
-            else if (presenter.needsRefresh)
-              refresh = setTimeout(() => void pump(), 500);
+      const video = surface
+        ? {
+            close: () => surface.close(),
+            received: (_event: SharedEvent) => {},
+            frame: (_event: ReceiveFrame) => {},
+            start: () => {},
+            visibilityChanged: () => {},
+            stats: () =>
+              surface.latestStats ?? {
+                path: "d3d11-composition",
+              },
           }
-        }
-      };
+        : createReceiveVideo({
+            id,
+            webview: webview!,
+            presenter: presenter!,
+            returnSlots: (releases) =>
+              returnSlots!(id, releases),
+            visible,
+            mapped: ready,
+            track: () => onEvent({ type: "track" }),
+            fail,
+          });
       const visibilityChanged = () => {
         if (!initialized || closed) return;
-        if (!visible()) clearTimeout(refresh);
+        if (!visible()) video.visibilityChanged();
         visibilityUpdate = visibilityUpdate
           .then(() => {
             if (!closed)
@@ -233,27 +181,11 @@ export function createNativeScreenReceive(
                 visible: visible(),
               });
           })
-          .then(() => {
-            dirty = true;
-            void pump();
-          })
+          .then(() => video.visibilityChanged())
           .catch(fail);
       };
-      const received = (event: SharedEvent) => {
-        if (
-          event.additionalData?.kind !==
-            "weblink-receive" ||
-          event.additionalData.id !== id
-        )
-          return;
-        const value = event.getBuffer();
-        if (closed || buffer) {
-          webview.releaseBuffer(value);
-          return;
-        }
-        buffer = value;
-        ready();
-      };
+      const received = (event: SharedEvent) =>
+        video.received(event);
       const prepareAudio = () =>
         (audioReady ??= (async () => {
           audioContext = new AudioContext({
@@ -318,7 +250,7 @@ export function createNativeScreenReceive(
           audioRunning = false;
         }
       };
-      webview.addEventListener(
+      webview?.addEventListener(
         "sharedbufferreceived",
         received,
       );
@@ -339,8 +271,7 @@ export function createNativeScreenReceive(
         const events = new Channel<Event>((event) => {
           if (closed) return;
           if (event.type === "frame") {
-            dirty = true;
-            void pump();
+            video.frame(event);
           } else if (event.type === "audio") {
             audioDirty = true;
             void pumpAudio();
@@ -350,6 +281,7 @@ export function createNativeScreenReceive(
         });
         opening = invoke("receive_open", {
           id,
+          gpu: !!surface,
           events,
           relayOnly:
             configuration.iceTransportPolicy === "relay",
@@ -364,7 +296,12 @@ export function createNativeScreenReceive(
             }),
           ),
         });
-        await Promise.all([opening, mapped]);
+        if (surface)
+          await Promise.race([
+            opening.then(() => surface.open()),
+            mapped,
+          ]);
+        else await Promise.all([opening, mapped]);
         clearTimeout(timeout);
         signal.throwIfAborted();
         if (closed)
@@ -372,6 +309,7 @@ export function createNativeScreenReceive(
             "Native receiver closed during startup",
           );
         initialized = true;
+        video.start();
         document.addEventListener(
           "visibilitychange",
           visibilityChanged,
@@ -390,7 +328,26 @@ export function createNativeScreenReceive(
             invoke("receive_answer", { id, sdp }),
           addIceCandidate: (candidate) =>
             invoke("receive_candidate", { id, candidate }),
-          stats: () => invoke("receive_stats", { id }),
+          stats: async () => {
+            if (surface) await surface.stats();
+            const reports = await invoke<
+              (RTCStats & Record<string, unknown>)[]
+            >("receive_stats", { id });
+            return reports.map((report) =>
+              report.type === "inbound-rtp" &&
+              report.kind === "video"
+                ? {
+                    ...report,
+                    nativeReceive: {
+                      ...(report.nativeReceive as
+                        | Record<string, unknown>
+                        | undefined),
+                      renderer: video.stats(),
+                    },
+                  }
+                : report,
+            );
+          },
           send: (label, data) =>
             invoke("receive_send", { id, label, data }),
           close,

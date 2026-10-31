@@ -7,6 +7,9 @@ impl Service {
     pub fn clear(&self, _: Option<&str>) {}
 }
 pub fn clear_buffers(_: &tauri::WebviewWindow) {}
+pub fn release_notification(invoke: &tauri::ipc::Invoke<tauri::Wry>) -> bool {
+    invoke.message.command() == "receive_release"
+}
 #[tauri::command]
 pub fn receive_codecs() -> Vec<String> {
     Vec::new()
@@ -26,6 +29,5 @@ unavailable!(
     receive_send,
     receive_audio,
     receive_visible,
-    receive_frame,
     receive_close
 );
