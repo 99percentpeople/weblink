@@ -52,51 +52,9 @@ extern "C" HRESULT wl_upload_nv12(Upload** state,
 extern "C" void wl_upload_destroy(Upload* upload) {
   delete upload;
 }
-// Explicit CPU consumers (recording/export) only. Ordinary presentation never
-// calls this path. The caller owns the source lease for the whole operation.
-extern "C" HRESULT wl_read_nv12(ID3D11Texture2D* texture,
-                                UINT subresource,
-                                UINT crop_x,
-                                UINT crop_y,
-                                UINT width,
-                                UINT height,
-                                BYTE* output) {
-  D3D11_TEXTURE2D_DESC td{};
-  texture->GetDesc(&td);
-  if (td.Format != DXGI_FORMAT_NV12 || td.MipLevels != 1 ||
-      subresource >= td.ArraySize || crop_x + width > td.Width ||
-      crop_y + height > td.Height)
-    return E_INVALIDARG;
-  ComPtr<ID3D11Device> device;
-  texture->GetDevice(&device);
-  ComPtr<ID3D11DeviceContext> context;
-  device->GetImmediateContext(&context);
-  td.ArraySize = 1;
-  td.Usage = D3D11_USAGE_STAGING;
-  td.BindFlags = td.MiscFlags = 0;
-  td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-  ComPtr<ID3D11Texture2D> staging;
-  CHECK(device->CreateTexture2D(&td, nullptr, &staging));
-  context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, texture,
-                                 subresource, nullptr);
-  D3D11_MAPPED_SUBRESOURCE mapped{};
-  CHECK(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped));
-  const BYTE* y = static_cast<const BYTE*>(mapped.pData) +
-                  size_t(crop_y) * mapped.RowPitch + crop_x;
-  const BYTE* uv = static_cast<const BYTE*>(mapped.pData) +
-                   size_t(td.Height + crop_y / 2) * mapped.RowPitch + crop_x;
-  for (UINT row = 0; row < height; ++row)
-    memcpy(output + size_t(row) * width, y + size_t(row) * mapped.RowPitch,
-           width);
-  for (UINT row = 0; row < height / 2; ++row)
-    memcpy(output + size_t(height + row) * width,
-           uv + size_t(row) * mapped.RowPitch, width);
-  context->Unmap(staging.Get(), 0);
-  return S_OK;
-}
-
 struct View {
   ComPtr<IDCompositionVisual> visual;
+  ComPtr<IDCompositionRectangleClip> clip;
   ComPtr<ID3D11Device> device;
   ComPtr<ID3D11DeviceContext> context;
   ComPtr<ID3D11VideoDevice> video;
@@ -109,6 +67,8 @@ struct View {
   bool pending = false;
   float x = 0, y = 0, display_width = 0, display_height = 0, radius = 0;
   BOOL visible = FALSE;
+  UINT clip_width = 0, clip_height = 0;
+  float clip_rx = -1, clip_ry = -1;
   HANDLE available = nullptr;
   ~View() {
     if (available)
@@ -120,6 +80,7 @@ struct Composition {
   ComPtr<IDCompositionTarget> target;
   ComPtr<IDCompositionVisual> root;
   std::map<UINT64, std::unique_ptr<View>> views;
+  bool dirty = false;
 };
 extern "C" HRESULT wl_composition_create(HWND window, Composition** result) {
   *result = nullptr;
@@ -127,6 +88,10 @@ extern "C" HRESULT wl_composition_create(HWND window, Composition** result) {
   CHECK(DCompositionCreateDevice(nullptr, IID_PPV_ARGS(&c->device)));
   CHECK(c->device->CreateTargetForHwnd(window, FALSE, &c->target));
   CHECK(c->device->CreateVisual(&c->root));
+  // The inherited default is nearest-neighbor, which drops thin text strokes
+  // when desktop views shrink. Filter both preview and receive visuals on GPU.
+  CHECK(c->root->SetBitmapInterpolationMode(
+      DCOMPOSITION_BITMAP_INTERPOLATION_MODE_LINEAR));
   CHECK(c->target->SetRoot(c->root.Get()));
   CHECK(c->device->Commit());
   *result = c.release();
@@ -143,7 +108,15 @@ extern "C" HRESULT wl_composition_remove(Composition* c, UINT64 id) {
     return E_PENDING;
   CHECK(c->root->RemoveVisual(it->second->visual.Get()));
   c->views.erase(it);
-  return c->device->Commit();
+  c->dirty = true;
+  return S_OK;
+}
+extern "C" HRESULT wl_composition_commit(Composition* c) {
+  if (!c->dirty)
+    return S_OK;
+  CHECK(c->device->Commit());
+  c->dirty = false;
+  return S_OK;
 }
 extern "C" HRESULT wl_composition_layout(Composition* c,
                                          UINT64 id,
@@ -153,12 +126,21 @@ extern "C" HRESULT wl_composition_layout(Composition* c,
                                          float height,
                                          float radius,
                                          BOOL visible) {
-  auto& v = c->views[id];
-  if (!v) {
-    v = std::make_unique<View>();
-    CHECK(c->device->CreateVisual(&v->visual));
-    CHECK(c->root->AddVisual(v->visual.Get(), TRUE, nullptr));
+  auto it = c->views.find(id);
+  if (it == c->views.end()) {
+    auto view = std::make_unique<View>();
+    CHECK(c->device->CreateVisual(&view->visual));
+    CHECK(c->device->CreateRectangleClip(&view->clip));
+    CHECK(view->clip->SetLeft(0.f));
+    CHECK(view->clip->SetTop(0.f));
+    CHECK(view->clip->SetRight(0.f));
+    CHECK(view->clip->SetBottom(0.f));
+    CHECK(view->visual->SetClip(view->clip.Get()));
+    CHECK(c->root->AddVisual(view->visual.Get(), TRUE, nullptr));
+    it = c->views.emplace(id, std::move(view)).first;
   }
+  auto& v = it->second;
+  c->dirty = true;
   v->x = x;
   v->y = y;
   v->display_width = width;
@@ -170,25 +152,30 @@ extern "C" HRESULT wl_composition_layout(Composition* c,
   if (v->width && v->height) {
     D2D_MATRIX_3X2_F matrix{width / v->width, 0, 0, height / v->height, 0, 0};
     CHECK(v->visual->SetTransform(matrix));
-    ComPtr<IDCompositionRectangleClip> clip;
-    CHECK(c->device->CreateRectangleClip(&clip));
-    CHECK(clip->SetLeft(0.f));
-    CHECK(clip->SetTop(0.f));
-    CHECK(clip->SetRight(visible ? float(v->width) : 0));
-    CHECK(clip->SetBottom(visible ? float(v->height) : 0));
+    const UINT clip_width = visible ? v->width : 0;
+    const UINT clip_height = visible ? v->height : 0;
+    if (v->clip_width != clip_width || v->clip_height != clip_height) {
+      CHECK(v->clip->SetRight(float(clip_width)));
+      CHECK(v->clip->SetBottom(float(clip_height)));
+      v->clip_width = clip_width;
+      v->clip_height = clip_height;
+    }
     const float rx = width > 0 ? radius * v->width / width : 0;
     const float ry = height > 0 ? radius * v->height / height : 0;
-    CHECK(clip->SetTopLeftRadiusX(rx));
-    CHECK(clip->SetTopLeftRadiusY(ry));
-    CHECK(clip->SetTopRightRadiusX(rx));
-    CHECK(clip->SetTopRightRadiusY(ry));
-    CHECK(clip->SetBottomLeftRadiusX(rx));
-    CHECK(clip->SetBottomLeftRadiusY(ry));
-    CHECK(clip->SetBottomRightRadiusX(rx));
-    CHECK(clip->SetBottomRightRadiusY(ry));
-    CHECK(v->visual->SetClip(clip.Get()));
+    if (v->clip_rx != rx || v->clip_ry != ry) {
+      CHECK(v->clip->SetTopLeftRadiusX(rx));
+      CHECK(v->clip->SetTopLeftRadiusY(ry));
+      CHECK(v->clip->SetTopRightRadiusX(rx));
+      CHECK(v->clip->SetTopRightRadiusY(ry));
+      CHECK(v->clip->SetBottomLeftRadiusX(rx));
+      CHECK(v->clip->SetBottomLeftRadiusY(ry));
+      CHECK(v->clip->SetBottomRightRadiusX(rx));
+      CHECK(v->clip->SetBottomRightRadiusY(ry));
+      v->clip_rx = rx;
+      v->clip_ry = ry;
+    }
   }
-  return c->device->Commit();
+  return S_OK;
 }
 static HRESULT configure(Composition* c,
                          UINT64 id,

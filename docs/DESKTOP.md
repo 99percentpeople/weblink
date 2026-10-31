@@ -2186,6 +2186,13 @@ Page backgrounds and the black placeholder are masked in video regions, leaving
 HTML control and dialog overlays intact. Fullscreen keeps its backdrop transparent
 and hides the underlying page while preserving controls inside the fullscreen
 element; its original tile ancestors no longer clip the surface.
+Rounded clipping follows each container's padding edge, including border thickness
+and animated transforms; fitted video corners inside black bars remain square.
+Live background masks and native clip objects are reused during layout/fade changes,
+and each compositor iteration commits its latest layout updates together.
+The native window backing is opaque black. Composition explicitly uses GPU linear
+interpolation for scaled preview and receive views, instead of DirectComposition's
+nearest-neighbor default; it adds no CPU readback or extra frame queue.
 The presentation limit remains even-sized
 SDR video up to 3840×2160. HDR/Main10 is not advertised.
 
@@ -2220,8 +2227,21 @@ foreground statistics show interval receive-to-decode processing delay above
 250 ms for at least three seconds, even if frames continue decoding. Missing or
 reset counters, sampling gaps and visibility changes restart that observation
 window. Browser reception retains its stall-only recovery policy. Recording
-explicitly opens a bounded CPU readback consumer of the native surface. It
-supplies real pixels to the recorder instead of recording the placeholder,
+explicitly opens a bounded CPU readback consumer of the native surface. Each
+consumer has one read in flight, with at most two reusable staging textures and
+GPU completion events shared per source. Completion wakes the asynchronous reader;
+mapping uses `DO_NOT_WAIT`, without blocking the immediate context on GPU work.
+Resize or device changes replace incompatible idle slots. Closing a recording
+releases its pool ownership; pending copies retain their complete frame leases
+until completion, even after cancellation. Pixels are packed directly into the
+owned IPC response, which cannot be recycled while the page may retain it.
+The recording input replays its retained first frame after MediaRecorder attaches,
+then refreshes static pixels sparsely with fresh timestamps. These repeats do not
+request another GPU readback; generated tracks otherwise lose a pre-attachment
+frame and can produce empty output when recording stops.
+This pool is independent of the sender's **GPU readback buffers** setting: that
+setting only controls sender paths requiring GPU-to-CPU readback and applies to
+the next share. Recording supplies real pixels instead of recording the placeholder,
 without changing the GPU display path. Encoded receive pass-through is not
 provided by this backend. Close, page reload, application exit and lease expiry release the
 native receiver, audio sinks and shared buffer.

@@ -1,8 +1,10 @@
 //! Shared native presentation for capture preview and decoded screen reception.
 mod compositor;
+mod recording;
 mod source;
 pub mod upload;
 pub use compositor::{Compositor, Layout};
+pub use recording::Recording;
 pub use source::{Frame, Source, Stats, Subscription, Texture};
 #[cfg(test)]
 mod tests {

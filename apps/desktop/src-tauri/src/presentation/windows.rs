@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{ipc::Channel, Manager, State, Webview};
-use weblink_desktop_capture::presentation::{Compositor, Layout, Source, Subscription};
+use weblink_desktop_capture::presentation::{Compositor, Layout, Recording, Source, Subscription};
 
 struct Entry {
     owner: String,
@@ -14,6 +14,14 @@ struct Entry {
     media: Option<std::sync::Weak<weblink_desktop_capture::media::MediaSession>>,
     key: u64,
     renewed: Instant,
+    recordings: HashMap<String, Arc<Recording>>,
+}
+impl Drop for Entry {
+    fn drop(&mut self) {
+        for recording in self.recordings.values() {
+            recording.close();
+        }
+    }
 }
 #[derive(Default)]
 struct Data {
@@ -79,11 +87,17 @@ pub async fn presentation_open(
             .gpu_source(webview.label(), &source_id)?
     };
     let owner = webview.label().to_string();
+    // Layout IPC and WebView painting can land on adjacent frames. Exposed
+    // areas behind the GPU visuals should match the video's black bars.
+    let window = webview.window();
+    window
+        .set_background_color(Some(tauri::window::Color(0, 0, 0, 255)))
+        .map_err(|e| e.to_string())?;
     // Transparent WebView content exposes the composition target below its HWND.
     webview
         .set_background_color(Some(tauri::window::Color(0, 0, 0, 0)))
         .map_err(|e| e.to_string())?;
-    let hwnd = webview.window().hwnd().map_err(|e| e.to_string())?.0 as usize;
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as usize;
     let mut data = service.0.lock().unwrap();
     let expired: Vec<_> = data
         .entries
@@ -132,6 +146,7 @@ pub async fn presentation_open(
             media: media.as_ref().map(Arc::downgrade),
             key,
             renewed: Instant::now(),
+            recordings: HashMap::new(),
         },
     );
     drop(data);
@@ -199,23 +214,77 @@ pub fn presentation_close(webview: Webview, service: State<'_, Service>, id: Str
     }
 }
 #[tauri::command]
+pub fn presentation_recording_open(
+    webview: Webview,
+    service: State<'_, Service>,
+    id: String,
+    recording_id: String,
+) -> Result<(), String> {
+    if recording_id.is_empty() || recording_id.len() > 128 {
+        return Err("Invalid native recording ID".into());
+    }
+    let mut data = service.0.lock().unwrap();
+    let entry = data
+        .entries
+        .get_mut(&id)
+        .filter(|e| e.owner == webview.label())
+        .ok_or("Native presentation closed")?;
+    // Allow a new recording while the previous session's asynchronous close is
+    // in transit. Both ownership and readback work remain bounded.
+    if entry.recordings.contains_key(&recording_id)
+        || entry.recordings.len() >= 2
+        || entry.source.closed()
+    {
+        return Err("Native recording limit reached or source closed".into());
+    }
+    entry
+        .recordings
+        .insert(recording_id, Arc::new(entry.source.recording()));
+    entry.renewed = Instant::now();
+    if let Some(media) = entry.media.as_ref().and_then(|m| m.upgrade()) {
+        media.wake_gpu_preview();
+    }
+    Ok(())
+}
+#[tauri::command]
+pub fn presentation_recording_close(
+    webview: Webview,
+    service: State<'_, Service>,
+    id: String,
+    recording_id: String,
+) {
+    let mut data = service.0.lock().unwrap();
+    if let Some(entry) = data
+        .entries
+        .get_mut(&id)
+        .filter(|e| e.owner == webview.label())
+    {
+        // A late close from a cancelled opening must not close a new recording.
+        if let Some(recording) = entry.recordings.remove(&recording_id) {
+            recording.close();
+        }
+    }
+}
+#[tauri::command]
 pub async fn presentation_frame(
     webview: Webview,
     service: State<'_, Service>,
     id: String,
+    recording_id: String,
     after: u64,
 ) -> Result<tauri::ipc::Response, String> {
-    let source = service
+    let recording = service
         .0
         .lock()
         .unwrap()
         .entries
-        .get(&id)
+        .get_mut(&id)
         .filter(|e| e.owner == webview.label())
-        .map(|e| e.source.clone())
-        .ok_or("Native presentation closed")?;
-    let data = tauri::async_runtime::spawn_blocking(move || source.read_frame(after))
-        .await
-        .map_err(|e| e.to_string())??;
+        .and_then(|e| {
+            e.renewed = Instant::now();
+            e.recordings.get(&recording_id).cloned()
+        })
+        .ok_or("Native recording closed")?;
+    let data = recording.read_frame(after).await?;
     Ok(tauri::ipc::Response::new(data))
 }

@@ -6,6 +6,8 @@
   "permissions": [
     "allow-runtime-capabilities",
     "allow-presentation-frame",
+    "allow-presentation-recording-open",
+    "allow-presentation-recording-close",
     "allow-presentation-open",
     "allow-presentation-layout",
     "allow-presentation-stats",

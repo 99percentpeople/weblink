@@ -7,7 +7,7 @@ export interface PreviewTrack {
   needsRefresh: boolean;
   /** The owner serializes writes and closes each input frame. */
   write(frame: VideoFrame): Promise<void>;
-  refresh(): Promise<boolean>;
+  refresh(force?: boolean): Promise<boolean>;
   close(): void;
 }
 
@@ -62,11 +62,11 @@ function generatedTrack(
     implementation: "Shared memory / VideoFrame",
     needsRefresh: true,
     write,
-    refresh: async () => {
+    refresh: async (force = false) => {
       if (
         closed ||
         !latest ||
-        performance.now() - lastWrite < 500
+        (!force && performance.now() - lastWrite < 500)
       )
         return false;
       // Generated tracks do not cache a frame for a newly attached player.
@@ -109,6 +109,8 @@ function canvasTrack(): PreviewTrack {
     stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
   const stop = video.stop.bind(video);
   let closed = false;
+  let hasFrame = false;
+  let lastWrite = 0;
   return {
     stream,
     implementation: "Shared memory / Canvas",
@@ -127,9 +129,23 @@ function canvasTrack(): PreviewTrack {
         canvas.height = frame.displayHeight;
       }
       context.drawImage(frame, 0, 0);
+      hasFrame = true;
+      lastWrite = performance.now();
       video.requestFrame();
     },
-    refresh: async () => false,
+    refresh: async (force = false) => {
+      if (
+        closed ||
+        !hasFrame ||
+        (!force && performance.now() - lastWrite < 500)
+      )
+        return false;
+      lastWrite = performance.now();
+      // requestFrame alone does not capture an unchanged canvas in Chromium.
+      context.drawImage(canvas, 0, 0);
+      video.requestFrame();
+      return true;
+    },
     close: () => {
       if (closed) return;
       closed = true;

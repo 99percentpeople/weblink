@@ -25,6 +25,9 @@ const chatUi = process.argv.includes("--chat");
 const meetingUi = process.argv.includes("--meeting");
 const playbackTest = process.argv.includes("--playback");
 const recordingTest = process.argv.includes("--recording");
+const presentationRecordingTest = process.argv.includes(
+  "--native-presentation-recording",
+);
 const dropTest = process.argv.includes("--drop");
 const conversationStorage = process.argv.includes(
   "--conversations",
@@ -75,8 +78,10 @@ const defaultEntry = notificationsTest
 const httpDeviceTrust = process.argv.includes(
   "--device-trust-http",
 );
-const entry =
-  process.argv.includes("--device-trust") || httpDeviceTrust
+const entry = presentationRecordingTest
+  ? "test/e2e/smoke/native-presentation-recording.html"
+  : process.argv.includes("--device-trust") ||
+      httpDeviceTrust
     ? "test/e2e/smoke/device-trust.html"
     : process.argv.includes("--automation")
       ? "test/e2e/smoke/automation.html"
@@ -228,6 +233,7 @@ async function main() {
         recoveryTest ||
         playbackTest ||
         recordingTest ||
+        presentationRecordingTest ||
         nativeScreenTest
           ? ["--autoplay-policy=no-user-gesture-required"]
           : []),

@@ -322,7 +322,7 @@
       "readback_buffers_1": "단일 버퍼",
       "readback_buffers_2": "이중 버퍼(기본값)",
       "readback_buffers_3": "트리플 버퍼",
-      "readback_buffers_description": "버퍼가 많을수록 프레임 처리가 겹치는 것이 허용되지만 GPU 메모리를 더 많이 사용하고 대기 시간이 늘어날 수 있습니다. 다음 공유에 적용됩니다.",
+      "readback_buffers_description": "송신 측에서 GPU 프레임을 CPU로 읽어오는 경우에만 영향을 주며, 수신 측 녹화나 GPU 내장 표시에는 영향을 주지 않습니다. 버퍼가 많을수록 프레임을 병렬로 처리할 수 있지만 GPU 메모리 사용량과 지연 시간이 늘어날 수 있습니다. 다음 공유에 적용됩니다.",
       "color_matrix": "컬러 매트릭스",
       "color_auto": "자동",
       "color_range": "색상 범위",

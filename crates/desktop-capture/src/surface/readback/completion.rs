@@ -19,7 +19,7 @@ use windows::{
     },
 };
 
-pub(super) struct Completion {
+pub(crate) struct Completion {
     context: ID3D11DeviceContext3,
     event: HANDLE,
     wait: PTP_WAIT,
@@ -32,13 +32,13 @@ struct State {
     ready: AtomicBool,
 }
 
-// The immediate context is multithread protected by Readback::copy_at. The handles
+// Callers enable multithread protection on the immediate context. The handles
 // may move between worker threads; only &mut self arms them. Callbacks only access
 // State's atomic flag and Notify, and Drop joins them before freeing that allocation.
 unsafe impl Send for Completion {}
 
 impl Completion {
-    pub(super) fn new(context: &ID3D11DeviceContext, notify: Arc<Notify>) -> Result<Self> {
+    pub(crate) fn new(context: &ID3D11DeviceContext, notify: Arc<Notify>) -> Result<Self> {
         let context = context.cast()?;
         let event = unsafe { CreateEventW(None, false, false, None)? };
         let mut state = Box::new(State {
@@ -69,7 +69,7 @@ impl Completion {
         })
     }
 
-    pub(super) fn ready(&self) -> bool {
+    pub(crate) fn ready(&self) -> bool {
         self.state.ready.load(Ordering::Acquire)
     }
 
@@ -86,8 +86,15 @@ impl Completion {
         Ok(())
     }
 
-    pub(super) fn flush(&mut self) -> Result<()> {
+    pub(crate) fn flush(&mut self) -> Result<()> {
+        self.submit(|| {})
+    }
+
+    /// Arm before submitting work so a failed event reset cannot leave a copy
+    /// using a source lease that the caller is about to release.
+    pub(crate) fn submit(&mut self, submit: impl FnOnce()) -> Result<()> {
         self.arm()?;
+        submit();
         unsafe {
             self.context
                 .Flush1(D3D11_CONTEXT_TYPE_ALL, Some(self.event));

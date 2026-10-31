@@ -165,6 +165,22 @@ it("keeps a pending submission pending and disposes its retained frame on stop",
   expect(received).toHaveLength(1);
 });
 
+it("can seed a newly attached recorder before the static refresh interval", async () => {
+  const preview = createPreviewTrack();
+  await preview.write(frame());
+  await vi.advanceTimersByTimeAsync(100);
+  expect(await preview.refresh()).toBe(false);
+  expect(await preview.refresh(true)).toBe(true);
+  expect(received).toHaveLength(2);
+  expect(received[1].timestamp).toBe(100_000);
+  expect(allocated.filter((f) => !f.closed)).toHaveLength(
+    1,
+  );
+  preview.close();
+  expect(await preview.refresh(true)).toBe(false);
+  expect(allocated.every((f) => f.closed)).toBe(true);
+});
+
 it("falls back to Canvas if the generator cannot initialize", async () => {
   vi.stubGlobal(
     "MediaStreamTrackGenerator",
@@ -201,6 +217,9 @@ it("falls back to Canvas if the generator cannot initialize", async () => {
     expect(draw).toHaveBeenCalledWith(input, 0, 0);
     expect(requestFrame).toHaveBeenCalledOnce();
     expect(await preview.refresh()).toBe(false);
+    expect(await preview.refresh(true)).toBe(true);
+    expect(draw).toHaveBeenCalledTimes(2);
+    expect(requestFrame).toHaveBeenCalledTimes(2);
     preview.close();
     preview.close();
     expect(stop).toHaveBeenCalledOnce();

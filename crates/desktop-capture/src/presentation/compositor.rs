@@ -75,6 +75,7 @@ unsafe extern "C" {
     ) -> i32;
     fn wl_composition_poll(c: *mut c_void, id: u64) -> i32;
     fn wl_composition_remove(c: *mut c_void, id: u64) -> i32;
+    fn wl_composition_commit(c: *mut c_void) -> i32;
 }
 struct Native(*mut c_void);
 impl Drop for Native {
@@ -268,6 +269,15 @@ fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
             pending = true;
             true
         });
+        // Layout, removal and swap-chain changes share one composition commit.
+        // Bindings already hold only the latest layout, so animations cannot
+        // accumulate a FIFO of obsolete positions behind frame presentation.
+        let hr = unsafe { wl_composition_commit(native.0) };
+        if hr < 0 {
+            for (source, _) in bindings.values() {
+                source.fail(format!("Native video composition: {hr:#x}"));
+            }
+        }
         if closed && views.is_empty() {
             break;
         }

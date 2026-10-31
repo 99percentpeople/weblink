@@ -16,6 +16,8 @@ import {
 
 export interface RecordingInput {
   stream: MediaStream;
+  /** Called after the recorder attaches, to seed static native pixel sources. */
+  start?(): Promise<void>;
   close(): void;
 }
 export interface RecordingSource {
@@ -438,6 +440,7 @@ export class RecordingService {
         500,
       );
       this.update(session);
+      await session.input.start?.();
     } catch (error) {
       if (!session.stopping || session.error)
         session.error ??= error;

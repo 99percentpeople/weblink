@@ -115,6 +115,8 @@ pub fn run() {
             let dispatch: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             capabilities::runtime_capabilities,
             presentation::presentation_frame,
+            presentation::presentation_recording_open,
+            presentation::presentation_recording_close,
             presentation::presentation_open,
             presentation::presentation_layout,
             presentation::presentation_stats,

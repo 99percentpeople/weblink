@@ -346,7 +346,7 @@
       "readback_buffers_1": "Single buffer",
       "readback_buffers_2": "Double buffer (default)",
       "readback_buffers_3": "Triple buffer",
-      "readback_buffers_description": "More buffers allow overlapping frame processing, but use more GPU memory and may increase latency. Applies to the next share.",
+      "readback_buffers_description": "Only affects sender workflows that read GPU frames back to the CPU, not receiver recording or embedded GPU display. More buffers allow overlapping frame processing, but use more GPU memory and may increase latency. Applies to the next share.",
       "color_matrix": "Colour matrix",
       "color_auto": "Auto",
       "color_range": "Colour range",

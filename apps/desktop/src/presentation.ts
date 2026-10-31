@@ -2,10 +2,8 @@ import "./presentation.css";
 import { openPresentationRecording } from "./presentation-recording";
 import { createNativePresentationStats } from "./presentation-stats";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import {
-  createPresentationLayout,
-  type SurfaceRect,
-} from "./presentation-layout";
+import { createPresentationLayout } from "./presentation-layout";
+import { readPresentationGeometry } from "./presentation-geometry";
 
 export interface GpuStats {
   path: string;
@@ -296,68 +294,15 @@ export function createNativePresentation(
       };
       const position = () => {
         if (stopped) return;
-        const box = video.getBoundingClientRect();
         const { width, height } = surface.size;
-        const scale = Math.min(
-          box.width / width,
-          box.height / height,
+        const geometry = readPresentationGeometry(
+          video,
+          width,
+          height,
         );
-        let radius = 0;
-        let left = Math.max(box.left, 0),
-          top = Math.max(box.top, 0);
-        let right = Math.min(box.right, innerWidth),
-          bottom = Math.min(box.bottom, innerHeight);
-        let visible =
-          active &&
-          nativeVisible &&
-          !document.hidden &&
-          video.isConnected &&
-          (!document.fullscreenElement ||
-            document.fullscreenElement.contains(video)) &&
-          width > 0 &&
-          height > 0;
-        for (
-          let parent: Element | null = video;
-          parent;
-          parent = parent.parentElement
-        ) {
-          const style = getComputedStyle(parent);
-          if (
-            style.display === "none" ||
-            style.visibility === "hidden" ||
-            Number(style.opacity) === 0
-          )
-            visible = false;
-          if (
-            style.overflowX !== "visible" ||
-            style.overflowY !== "visible"
-          ) {
-            const clip = parent.getBoundingClientRect();
-            left = Math.max(left, clip.left);
-            top = Math.max(top, clip.top);
-            right = Math.min(right, clip.right);
-            bottom = Math.min(bottom, clip.bottom);
-            radius = Math.max(
-              radius,
-              parseFloat(style.borderTopLeftRadius) || 0,
-            );
-          }
-          // A fullscreen element lives in the top layer and escapes the clips
-          // of its original tile ancestors.
-          if (parent === document.fullscreenElement) break;
-        }
-        const rect: SurfaceRect = {
-          x: box.x + (box.width - width * scale) / 2,
-          y: box.y + (box.height - height * scale) / 2,
-          width: width * scale || 0,
-          height: height * scale || 0,
-          radius,
-        };
-        visible &&=
-          right > left &&
-          bottom > top &&
-          rect.width > 0 &&
-          rect.height > 0;
+        const { rect } = geometry;
+        const visible =
+          active && nativeVisible && geometry.visible;
         surface.visible = visible;
         const ratio = devicePixelRatio;
         const value = {
@@ -365,7 +310,9 @@ export function createNativePresentation(
           y: rect.y * ratio || 0,
           width: rect.width * ratio,
           height: rect.height * ratio,
-          radius: radius * ratio,
+          // The DOM mask clips the container's actual padding edge. Rounding
+          // this fitted image would also round corners inside the black bars.
+          radius: 0,
           visible,
         };
         const serialized = JSON.stringify(value);
@@ -375,21 +322,7 @@ export function createNativePresentation(
           void send();
         }
         if (visible && shown) {
-          const x = Math.max(rect.x, left),
-            y = Math.max(rect.y, top);
-          layout.show(key, video, {
-            x,
-            y,
-            width: Math.max(
-              0,
-              Math.min(rect.x + rect.width, right) - x,
-            ),
-            height: Math.max(
-              0,
-              Math.min(rect.y + rect.height, bottom) - y,
-            ),
-            radius,
-          });
+          layout.show(key, video, geometry);
         } else layout.hide(key, video);
         raf = requestAnimationFrame(position);
       };

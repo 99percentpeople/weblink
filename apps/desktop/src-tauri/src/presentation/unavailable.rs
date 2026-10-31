@@ -32,7 +32,20 @@ pub fn presentation_close(id: String) {
     let _ = id;
 }
 #[tauri::command]
-pub fn presentation_frame(id: String, after: u64) -> Result<tauri::ipc::Response, String> {
-    let _ = (id, after);
+pub fn presentation_frame(
+    id: String,
+    recording_id: String,
+    after: u64,
+) -> Result<tauri::ipc::Response, String> {
+    let _ = (id, recording_id, after);
     Err("Native composition is unavailable".into())
+}
+#[tauri::command]
+pub fn presentation_recording_open(id: String, recording_id: String) -> Result<(), String> {
+    let _ = (id, recording_id);
+    Err("Native composition is unavailable".into())
+}
+#[tauri::command]
+pub fn presentation_recording_close(id: String, recording_id: String) {
+    let _ = (id, recording_id);
 }

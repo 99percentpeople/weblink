@@ -9,6 +9,8 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "runtime_capabilities",
             "presentation_frame",
+            "presentation_recording_open",
+            "presentation_recording_close",
             "presentation_open",
             "presentation_layout",
             "presentation_stats",

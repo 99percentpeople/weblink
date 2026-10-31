@@ -346,7 +346,7 @@
       "readback_buffers_1": "单缓冲",
       "readback_buffers_2": "双缓冲（默认）",
       "readback_buffers_3": "三缓冲",
-      "readback_buffers_description": "更多缓冲可重叠处理帧，但会增加显存占用，也可能增加延迟。下次共享时生效。",
+      "readback_buffers_description": "仅影响发送端需要将 GPU 画面读回 CPU 的场景，不影响接收端录制或 GPU 内嵌显示。更多缓冲可重叠处理帧，但会增加显存占用，也可能增加延迟。下次共享时生效。",
       "color_matrix": "色彩矩阵",
       "color_auto": "自动",
       "color_range": "颜色范围",

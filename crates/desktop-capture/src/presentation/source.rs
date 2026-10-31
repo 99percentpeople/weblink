@@ -2,7 +2,6 @@
 use serde::Serialize;
 use std::{
     collections::HashMap,
-    ffi::c_void,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, Weak,
@@ -10,18 +9,6 @@ use std::{
     time::Instant,
 };
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
-use windows_core::Interface;
-unsafe extern "C" {
-    fn wl_read_nv12(
-        texture: *mut c_void,
-        subresource: u32,
-        crop_x: u32,
-        crop_y: u32,
-        width: u32,
-        height: u32,
-        output: *mut u8,
-    ) -> i32;
-}
 #[derive(Clone)]
 pub struct Texture {
     pub cpu_upload: bool,
@@ -61,7 +48,7 @@ pub struct Source {
     next: AtomicU64,
     sequence: AtomicU64,
     stats: Mutex<Stats>,
-    readback: Mutex<()>,
+    pub(super) readback: Mutex<Weak<super::recording::Pool>>,
 }
 pub struct Subscription {
     source: Weak<Source>,
@@ -162,48 +149,6 @@ impl Source {
         for callback in callbacks {
             callback();
         }
-    }
-    /// Optional CPU pixels for recording; never used to feed the native surface.
-    pub fn read_frame(&self, after: u64) -> Result<Vec<u8>, String> {
-        let _reader = self
-            .readback
-            .try_lock()
-            .map_err(|_| "Native frame read already in progress")?;
-        let Some(frame) = self.latest().filter(|f| f.sequence > after) else {
-            return Ok(Vec::new());
-        };
-        let t = &frame.texture;
-        let (width, height) = t.size;
-        if width < 2
-            || height < 2
-            || width > 3840
-            || height > 2160
-            || width % 2 != 0
-            || height % 2 != 0
-        {
-            return Err("Invalid native readback size".into());
-        }
-        let mut data = vec![0; 24 + (width as usize * height as usize * 3 / 2)];
-        data[..4].copy_from_slice(&width.to_le_bytes());
-        data[4..8].copy_from_slice(&height.to_le_bytes());
-        data[8..16].copy_from_slice(&frame.sequence.to_le_bytes());
-        data[16] = t.bt709 as u8;
-        data[17] = t.full_range as u8;
-        let hr = unsafe {
-            wl_read_nv12(
-                t.texture.as_raw(),
-                t.subresource,
-                t.crop.0,
-                t.crop.1,
-                width,
-                height,
-                data[24..].as_mut_ptr(),
-            )
-        };
-        if hr < 0 {
-            return Err(format!("Native recording readback failed: {hr:#x}"));
-        }
-        Ok(data)
     }
     pub(super) fn presented(&self, queue_ms: f64, submit_ms: f64) {
         let mut stats = self.stats.lock().unwrap();

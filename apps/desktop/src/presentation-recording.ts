@@ -10,8 +10,13 @@ export async function openPresentationRecording(
 ) {
   signal.throwIfAborted();
   const presenter = createPreviewTrack();
+  const recordingId = crypto.randomUUID();
   let closed = false,
+    opened = false,
+    released = false,
+    started = false,
     sequence = 0;
+  let starting: Promise<void> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resolve!: () => void,
     reject!: (error: unknown) => void;
@@ -19,12 +24,21 @@ export async function openPresentationRecording(
     resolve = yes;
     reject = no;
   });
+  const release = () => {
+    if (!opened || released) return;
+    released = true;
+    void invoke("presentation_recording_close", {
+      id,
+      recordingId,
+    }).catch(() => {});
+  };
   const close = () => {
     if (closed) return;
     closed = true;
     clearTimeout(timer);
     signal.removeEventListener("abort", close);
     presenter.close();
+    release();
     reject(
       new DOMException(
         "Recording source closed",
@@ -39,7 +53,7 @@ export async function openPresentationRecording(
         throw new Error("Native video source ended");
       const data = await invoke<ArrayBuffer>(
         "presentation_frame",
-        { id, after: sequence },
+        { id, recordingId, after: sequence },
       );
       if (closed) return;
       if (data.byteLength) {
@@ -78,8 +92,12 @@ export async function openPresentationRecording(
           frame.close();
         }
         resolve();
+      } else {
+        // A generated track does not retain a frame for later consumers. Keep
+        // static recordings alive using the retained pixels, without a GPU copy.
+        await presenter.refresh();
       }
-      if (!closed)
+      if (!closed && (sequence === 0 || started))
         timer = setTimeout(
           () => void pump(),
           Math.max(
@@ -104,10 +122,44 @@ export async function openPresentationRecording(
     close();
   }, 10000);
   try {
-    void pump();
+    // If cancelled while opening, wait for the acknowledgement before closing
+    // the native session so the close cannot overtake its creation.
+    void invoke("presentation_recording_open", {
+      id,
+      recordingId,
+    }).then(
+      () => {
+        opened = true;
+        if (closed) release();
+        else void pump();
+      },
+      (error: unknown) => {
+        if (!closed) {
+          reject(error);
+          close();
+        }
+      },
+    );
     await ready;
     signal.throwIfAborted();
-    return { stream: presenter.stream, close };
+    return {
+      stream: presenter.stream,
+      close,
+      start: () =>
+        (starting ??= (async () => {
+          if (closed)
+            throw new DOMException(
+              "Recording source closed",
+              "AbortError",
+            );
+          // The first native read prepares dimensions/pixels before MediaRecorder
+          // exists. Replay only after it attaches, including very short recordings.
+          await presenter.refresh(true);
+          if (closed) return;
+          started = true;
+          void pump();
+        })()),
+    };
   } catch (error) {
     close();
     throw error;

@@ -91,6 +91,8 @@ export interface PlatformRuntime {
           ended: (error?: Error) => void,
         ) => Promise<{
           stream: MediaStream;
+          /** Seed retained pixels after the recorder has attached its consumer. */
+          start?(): Promise<void>;
           close(): void;
         }>)
       | undefined;

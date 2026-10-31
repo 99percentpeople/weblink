@@ -58,6 +58,9 @@ fn native_hevc(gpu: bool) {
         let answer = receiver.answer(&offer).await.unwrap();
         assert!(answer.contains("H265/90000"), "{answer}");
         media.answer("native-hevc", &answer).await.unwrap();
+        let recording = gpu.then(|| receiver.gpu.as_ref().unwrap().recording());
+        let mut recorded_sequence = 0;
+        let mut recorded_frames = 0;
         let mut cadence = tokio::time::interval(Duration::from_millis(33));
         for index in 0..120 {
             cadence.tick().await;
@@ -70,6 +73,23 @@ fn native_hevc(gpu: bool) {
             frame.data_mut().0.fill(40 + (index % 160) as u8);
             media.publish_frame(&VideoFrame::new(VideoRotation::VideoRotation0,frame));
             assert!(media.error().is_none(), "{:?}", media.error());
+            if let Some(recording) = &recording {
+                let data = recording.read_frame(recorded_sequence).await.unwrap();
+                if !data.is_empty() {
+                    let w = u32::from_le_bytes(data[..4].try_into().unwrap());
+                    let h = u32::from_le_bytes(data[4..8].try_into().unwrap());
+                    recorded_sequence = u64::from_le_bytes(data[8..16].try_into().unwrap());
+                    assert!(matches!((w,h), (640,360) | (1280,720)));
+                    assert_eq!(data.len(), 24 + (w * h * 3 / 2) as usize);
+                    assert!(data[24..24+(w*h) as usize].iter().any(|&y| y > 32));
+                    recorded_frames += 1;
+                }
+            }
+        }
+        if let Some(recording) = recording {
+            assert!(recorded_frames > 20, "Too few recorded HEVC frames: {recorded_frames}");
+            recording.close();
+            eprintln!("Native GPU recording frames: {recorded_frames}");
         }
         let stats = receiver.stats().await.unwrap();
 
@@ -82,12 +102,13 @@ fn native_hevc(gpu: bool) {
             assert_eq!(held.texture.size, (1280,720));
             assert_eq!(source.stats().uploaded_frames, 0, "Hardware decode unexpectedly uploaded CPU frames");
             assert!(inbound["decoderImplementation"].as_str().unwrap_or("").contains("texture"), "{inbound}");
-            let retained = crate::presentation::Source::default();
+            let retained = Arc::new(crate::presentation::Source::default());
             retained.publish(held.texture.clone());
-            let before = retained.read_frame(0).unwrap();
+            let recording = retained.recording();
+            let before = recording.read_frame(0).await.unwrap();
             assert_eq!(before.len(), 24+1280*720*3/2);
             assert!(before[24..24+1280*720].iter().any(|&y| y > 32));
-            Some((retained,before))
+            Some((recording,before))
         } else {
             let mut pixels = vec![0; crate::receive::FRAME_CAPACITY];
             let frame = receiver.copy_frame(0, &mut pixels).unwrap().expect("Decoded presentation frame");
@@ -97,7 +118,7 @@ fn native_hevc(gpu: bool) {
         };
         eprintln!("Native HEVC result {}", json!({"frames":inbound["framesDecoded"],"decoder":inbound["decoderImplementation"],"hardware":inbound["powerEfficientDecoder"]}));
         close_receiver(receiver).await; media.close();
-        if let Some((retained,before)) = retained { assert_eq!(retained.read_frame(0).unwrap(), before, "GPU lease changed after decoder shutdown"); }
+        if let Some((recording,before)) = retained { assert_eq!(recording.read_frame(0).await.unwrap(), before, "GPU lease changed after decoder shutdown"); }
     });
 }
 

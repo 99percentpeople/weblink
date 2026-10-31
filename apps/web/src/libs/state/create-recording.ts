@@ -182,6 +182,7 @@ export function createRecording(app: AppStateContextProps) {
                   ...input.stream.getVideoTracks(),
                   ...audio,
                 ]),
+                start: input.start,
                 close: input.close,
               };
             }
