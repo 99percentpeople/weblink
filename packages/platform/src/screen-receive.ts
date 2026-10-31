@@ -1,5 +1,7 @@
 /** Native receive connections retain standard SDP/ICE and browser presentation. */
 export interface NativeScreenReceive {
+  /** False keeps decode failures and retries on the native receive path. */
+  readonly allowBrowserFallback?: boolean;
   codecs(): Promise<string[]>;
   open(
     configuration: RTCConfiguration,

@@ -58,14 +58,17 @@ export class NativeScreenReceiveService {
     const native = this.nativeCodecs[0]();
     return {
       audio: browser.audio,
-      video: native.length
-        ? [
-            ...new Set([
-              ...(browser.video ?? []),
-              ...native,
-            ]),
-          ]
-        : browser.video,
+      video:
+        this.native?.allowBrowserFallback === false
+          ? native
+          : native.length
+            ? [
+                ...new Set([
+                  ...(browser.video ?? []),
+                  ...native,
+                ]),
+              ]
+            : browser.video,
     };
   }
   readonly createReceiver: ScreenReceiverFactory = (
@@ -88,8 +91,20 @@ export class NativeScreenReceiveService {
       this.disabled.has(codec) ||
       this.busy ||
       !args[3]
-    )
+    ) {
+      if (this.native?.allowBrowserFallback === false) {
+        if (this.busy)
+          throw new Error(
+            "Native screen receive lane is already in use",
+          );
+        throw new ScreenDecodeError(
+          !args[3]
+            ? "Native screen receiving requires trickle ICE"
+            : "No native decoder is available for this screen format",
+        );
+      }
       return new ScreenReceiver(...args);
+    }
     this.busy = true;
     return new NativeReceiver(
       this.native,
@@ -99,6 +114,14 @@ export class NativeScreenReceiveService {
       },
       () => {
         this.disabled.add(codec);
+        if (this.native?.allowBrowserFallback === false) {
+          // Reject only this format. Automatic negotiation can select another
+          // native decoder; fixed sender choices keep their existing semantics.
+          this.nativeCodecs[1]((current) =>
+            current.filter((c) => c !== codec),
+          );
+          return new ScreenDecodeError();
+        }
         // This first native backend is a single receive lane. A failed backend
         // returns subsequent offers to the established browser path for the
         // session, including another codec after HEVC rejection.
@@ -111,6 +134,7 @@ export class NativeScreenReceiveService {
           ? new ScreenDecodeStallError()
           : new ScreenDecodeError();
       },
+      this.native.allowBrowserFallback === false,
     );
   };
 }
@@ -154,6 +178,7 @@ class NativeReceiver
     ]: ConstructorParameters<typeof ScreenReceiver>,
     private readonly released: () => void,
     private readonly rejectCodec: () => Error,
+    private readonly retryNativeDecode: boolean,
   ) {
     super();
     this.changed = changed;
@@ -342,7 +367,13 @@ class NativeReceiver
       this.stopMonitor = monitorScreenDecode(
         this,
         healthy,
-        () => this.decodeFailed(),
+        () => {
+          // Overload/stalls first recreate the native connection and request a
+          // keyframe. The existing sender bounds retries and codec changes.
+          if (this.retryNativeDecode)
+            this.fail(new ScreenDecodeStallError());
+          else this.decodeFailed();
+        },
         { maxProcessingDelayMs: 250 },
       );
   }

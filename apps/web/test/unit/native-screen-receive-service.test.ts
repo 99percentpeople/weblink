@@ -57,7 +57,10 @@ afterEach(() => {
 });
 const offer = (codec = "H265") =>
   `v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 100\r\na=rtpmap:100 ${codec}/90000\r\n`;
-function fixture(codecs = ["video/h265", "video/h264"]) {
+function fixture(
+  codecs = ["video/h265", "video/h264"],
+  allowBrowserFallback = true,
+) {
   let emit!: (event: NativeReceiveEvent) => void;
   const track = {
     kind: "video",
@@ -72,6 +75,7 @@ function fixture(codecs = ["video/h265", "video/h264"]) {
     close: vi.fn(),
   };
   const native: NativeScreenReceive = {
+    allowBrowserFallback,
     codecs: vi.fn(async () => codecs),
     open: vi.fn(async (_config, event) => {
       emit = event;
@@ -113,6 +117,97 @@ it("advertises native formats only after discovery and retains browser audio cap
     "video/h264",
     "video/h265",
   ]);
+});
+
+it("advertises only native video formats when browser fallback is disabled", async () => {
+  const f = fixture(["video/h265"], false);
+  expect(f.service.capabilities().video).toEqual([]);
+  await f.service.ready;
+  expect(f.service.capabilities()).toEqual({
+    video: ["video/h265"],
+    audio: ["audio/opus"],
+  });
+  expect(() => f.create("H264")).toThrow(ScreenDecodeError);
+});
+
+it("does not route unsupported, busy or legacy native-only sessions to the browser", async () => {
+  const unavailable = fixture([], false);
+  await unavailable.service.ready;
+  expect(() => unavailable.create()).toThrow(
+    ScreenDecodeError,
+  );
+  const f = fixture(undefined, false);
+  await f.service.ready;
+  const receiver = f.create();
+  expect(() => f.create("H264")).toThrow("already in use");
+  receiver.close();
+  expect(() =>
+    f.service.createReceiver(
+      offer(),
+      {},
+      f.changed,
+      f.failed,
+    ),
+  ).toThrow("trickle ICE");
+});
+
+it("selects another native codec after failure without opening a browser receiver", async () => {
+  const f = fixture(undefined, false);
+  await f.service.ready;
+  const receiver = f.create();
+  await receiver.answer(offer());
+  f.emit({ type: "error", error: "native decoder failed" });
+  expect(f.failed).toHaveBeenCalledExactlyOnceWith(
+    expect.any(ScreenDecodeError),
+  );
+  expect(f.service.capabilities().video).toEqual([
+    "video/h264",
+  ]);
+  expect(() => f.create()).toThrow(ScreenDecodeError);
+  const replacement = f.create("H264");
+  expect(replacement).not.toBeInstanceOf(ScreenReceiver);
+  await replacement.answer(offer("H264"));
+  expect(f.native.open).toHaveBeenCalledTimes(2);
+  replacement.close();
+});
+
+it("restarts an overloaded native-only receiver without blacklisting its codec", async () => {
+  vi.useFakeTimers();
+  const f = fixture(undefined, false);
+  await f.service.ready;
+  const receiver = f.create();
+  await receiver.answer(offer());
+  f.emit({ type: "state", state: "connected" });
+  let reads = 0;
+  vi.mocked(f.connection.stats).mockImplementation(
+    async () => {
+      reads++;
+      return [
+        {
+          id: "video",
+          type: "inbound-rtp",
+          timestamp: reads * 1000,
+          kind: "video",
+          framesDecoded: reads * 40,
+          bytesReceived: reads * 100000,
+          totalProcessingDelay: reads * 40 * 0.4,
+        },
+      ];
+    },
+  );
+  receiver.monitorDecode(vi.fn());
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(f.failed).toHaveBeenCalledExactlyOnceWith(
+    expect.any(ScreenDecodeStallError),
+  );
+  expect(f.service.capabilities().video).toContain(
+    "video/h265",
+  );
+  const replacement = f.create();
+  expect(replacement).not.toBeInstanceOf(ScreenReceiver);
+  await replacement.answer(offer());
+  replacement.close();
+  expect(vi.getTimerCount()).toBe(0);
 });
 it("queues candidates until the remote description and presents the selected native track", async () => {
   const f = fixture();

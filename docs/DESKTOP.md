@@ -2164,6 +2164,11 @@ MediaStream destination, preserving the existing mute, volume and playback owner
 Browser autoplay policy still applies; user interaction resumes suspended audio.
 
 The receive factory requests zero playout delay and MF low-latency decoding.
+MF GPU output uses an event-driven staging copy: one readback is in flight and
+only the newest pending decoded surface is retained. Completion returns to the
+decoder worker and maps without waiting, reusing staging and bounded NV12 buffers.
+It also completes the final static frame without requiring another input frame.
+Resize and shutdown cancel queued completion tasks and join the native wait callback.
 Decoded video retains only its latest frame, with one shared-memory copy/write
 in flight. Pixel packing retains an immutable frame reference outside the shared
 presentation lock, so it cannot block newer video or audio arrivals. Static
@@ -2174,12 +2179,17 @@ zero-copy GPU compositor, and decode timing alone does not establish end-to-end
 latency. The initial presentation limit is even-sized SDR video up to 3840×2160;
 crop and color metadata accompany the pixels. HDR/Main10 is not advertised.
 
-Web, other platforms, legacy non-trickle sessions and additional simultaneous
-views retain browser reception. A native startup/presentation/decode failure
-disables native reception for the current application session. The existing
-retry policy then selects browser reception or renegotiates a browser-supported
-codec when HEVC is unavailable there. Explicit fixed sender codec choices retain
-their existing failure semantics. Native reception also recovers when consecutive
+Windows desktop advertises native receive formats only and does not automatically
+fall back to browser reception. Legacy non-trickle sessions, unsupported formats
+and additional simultaneous views are rejected by this single-lane backend.
+A native startup/presentation/decode failure excludes that format for the current
+application session; automatic sender selection can negotiate another native format.
+Explicit fixed sender codec choices retain their existing failure semantics.
+Decode stalls and sustained processing overload first recreate the native receiver
+and request a keyframe using the existing bounded recovery policy. Web and other
+platforms retain browser reception, and platform adapters that allow browser
+fallback retain the previous retry behavior.
+Native reception recovers when consecutive
 foreground statistics show interval receive-to-decode processing delay above
 250 ms for at least three seconds, even if frames continue decoding. Missing or
 reset counters, sampling gaps and visibility changes restart that observation

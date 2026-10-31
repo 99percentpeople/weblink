@@ -36,8 +36,20 @@ export function createNativeScreenReceive(
     changed: (visible: boolean) => void,
   ) => () => void,
 ): NativeScreenReceive {
+  // Fail closed until discovery identifies an unsupported desktop platform.
+  // Windows keeps native receiving even when discovery or a decoder fails.
+  let allowBrowserFallback = false;
   return {
-    codecs: () => invoke<string[]>("receive_codecs"),
+    get allowBrowserFallback() {
+      return allowBrowserFallback;
+    },
+    codecs: async () => {
+      const runtime = await invoke<{ os: string }>(
+        "runtime_capabilities",
+      );
+      allowBrowserFallback = runtime.os !== "windows";
+      return invoke<string[]>("receive_codecs");
+    },
     async open(configuration, onEvent, signal) {
       signal.throwIfAborted();
       const webview = (

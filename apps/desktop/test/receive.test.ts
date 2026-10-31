@@ -80,6 +80,38 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it.each(["windows", "linux", "macos"])(
+  "allows browser receiving only on unsupported native platforms: %s",
+  async (os) => {
+    mockIPC((command) => {
+      if (command === "runtime_capabilities") return { os };
+      if (command === "receive_codecs")
+        return os === "windows" ? ["video/h265"] : [];
+    });
+    const receive = createNativeScreenReceive(
+      () => () => {},
+    );
+    expect(receive.allowBrowserFallback).toBe(false);
+    await receive.codecs();
+    expect(receive.allowBrowserFallback).toBe(
+      os !== "windows",
+    );
+  },
+);
+
+it("keeps Windows native-only when decoder discovery fails", async () => {
+  mockIPC((command) => {
+    if (command === "runtime_capabilities")
+      return { os: "windows" };
+    throw new Error("decoder discovery failed");
+  });
+  const receive = createNativeScreenReceive(() => () => {});
+  await expect(receive.codecs()).rejects.toThrow(
+    "decoder discovery failed",
+  );
+  expect(receive.allowBrowserFallback).toBe(false);
+});
+
 it("serializes shared-memory copies and skips accumulated frames while a write is pending", async () => {
   let copies = 0;
   let finish!: () => void;
