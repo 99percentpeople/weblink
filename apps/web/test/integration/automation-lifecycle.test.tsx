@@ -25,6 +25,7 @@ import type {
   ToolCall,
   ToolResult,
 } from "@weblink/automation";
+import { AutomationError } from "@weblink/automation";
 import type { PeerSession } from "@/libs/domain/session";
 const fixture = vi.hoisted(() => ({
   configureShortcut: vi.fn(async (_shortcut: string) => {}),
@@ -310,6 +311,12 @@ beforeEach(() => {
   setAppState("options", "mcpEnabled", false);
   setAppState(
     "options",
+    "automationPolicyGeneration",
+    undefined,
+  );
+  localStorage.clear();
+  setAppState(
+    "options",
     "clientConfigs",
     "peer",
     undefined,
@@ -416,6 +423,7 @@ it.each([true, false])(
         generation: "connection-1",
       }),
       appState.options.clientConfigs.peer?.automation,
+      "",
     );
   },
 );
@@ -451,6 +459,58 @@ it("does not save a native permanent choice after the device reconnects during t
   expect(
     appState.options.clientConfigs.peer?.automation,
   ).toBeUndefined();
+});
+it("cannot restore a remembered allow when emergency revocation overtakes its native reply", async () => {
+  peer();
+  setAppState("options", "clientConfigs", "peer", {
+    automation: { "diagnostics.read": "allow" },
+  });
+  const request = {
+    id: "remembered",
+    principal: {
+      id: "peer",
+      label: "Peer",
+      kind: "peer",
+      generation: "connection-1",
+    },
+    scope: "diagnostics.read",
+    tool: "diagnostics.snapshot",
+    arguments: { target: "local" },
+    expiresAt: Date.now() + 120000,
+  };
+  let generation = "";
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async () => ({
+      ...snapshot(),
+      policyGeneration: generation,
+      pending: [request],
+    }),
+  );
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  vi.mocked(fixture.native.decide).mockImplementationOnce(
+    async () => {
+      generation = "stop-during-reply";
+      vi.mocked(fixture.native.open).mock.calls[0][0]({
+        kind: "policies-reset",
+        generation,
+      });
+    },
+  );
+  await expect(
+    view.runtime.decide(request.id, true, true),
+  ).rejects.toMatchObject({ code: "REQUEST_EXPIRED" });
+  expect(
+    appState.options.clientConfigs.peer?.automation?.[
+      "diagnostics.read"
+    ],
+  ).toBe("ask");
+  expect(
+    JSON.parse(localStorage.getItem("app_options")!)
+      .clientConfigs.peer.automation["diagnostics.read"],
+  ).toBe("ask");
 });
 it("does not reenable automation when shortcut setup finishes after a newer disable", async () => {
   const view = mount();
@@ -835,6 +895,97 @@ function peer() {
     },
   } as unknown as PeerSession;
 }
+
+it("persists an emergency reset before retrying a queued stale allow write", async () => {
+  peer();
+  setAppState("options", "clientConfigs", "peer", {
+    automation: { "diagnostics.read": "allow" },
+  });
+  let generation = "";
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async () => ({
+      ...snapshot(),
+      policyGeneration: generation,
+    }),
+  );
+  let rejectWrite!: (error: Error) => void;
+  vi.mocked(
+    fixture.native.peerPolicy,
+  ).mockImplementationOnce(
+    () =>
+      new Promise((_, reject) => {
+        rejectWrite = reject;
+      }),
+  );
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  const request = incoming();
+  await waitFor(() => expect(rejectWrite).toBeDefined());
+  generation = "stop-1";
+  vi.mocked(fixture.native.open).mock.calls[0][0]({
+    kind: "policies-reset",
+    generation,
+  });
+  expect(
+    JSON.parse(localStorage.getItem("app_options")!)
+      .clientConfigs.peer.automation["diagnostics.read"],
+  ).toBe("ask");
+  rejectWrite(new AutomationError("POLICY_CHANGED"));
+  expect(await request).toMatchObject({ ok: true });
+  expect(
+    fixture.native.peerPolicy,
+  ).toHaveBeenLastCalledWith(
+    "epoch",
+    expect.objectContaining({ id: "peer" }),
+    { "diagnostics.read": "ask" },
+    "stop-1",
+  );
+  expect(fixture.native.disconnect).not.toHaveBeenCalled();
+  expect(fixture.native.decide).not.toHaveBeenCalled();
+});
+
+it("replays a missed emergency snapshot once and preserves a later allow across page recreation", async () => {
+  setAppState("options", "clientConfigs", "peer", {
+    automation: { "diagnostics.read": "allow" },
+  });
+  vi.mocked(fixture.native.snapshot).mockResolvedValue({
+    ...snapshot(),
+    policyGeneration: "stop-1",
+  });
+  const first = mount();
+  await waitFor(() =>
+    expect(first.runtime.ready()).toBe(true),
+  );
+  expect(
+    appState.options.clientConfigs.peer?.automation?.[
+      "diagnostics.read"
+    ],
+  ).toBe("ask");
+  setAppState(
+    "options",
+    "clientConfigs",
+    "peer",
+    "automation",
+    "diagnostics.read",
+    "allow",
+  );
+  first.unmount();
+  const second = mount();
+  await waitFor(() =>
+    expect(second.runtime.ready()).toBe(true),
+  );
+  expect(
+    appState.options.clientConfigs.peer?.automation?.[
+      "diagnostics.read"
+    ],
+  ).toBe("allow");
+  expect(second.runtime.error()).toBe("");
+});
 const incoming = () =>
   fixture.incoming!(
     {
@@ -1016,6 +1167,7 @@ it("applies verified device policies before calls, updates them live, and retain
       generation: "connection-1",
     }),
     { "diagnostics.read": "allow" },
+    "",
   );
   expect(fixture.native.peer).toHaveBeenCalledWith(
     "epoch",
@@ -1052,6 +1204,7 @@ it("applies verified device policies before calls, updates them live, and retain
       {
         "diagnostics.read": "deny",
       },
+      "",
     ),
   );
   view.unmount();
@@ -1187,6 +1340,7 @@ it("waits for a policy changed during registration before admitting the call", a
     {
       "diagnostics.read": "deny",
     },
+    "",
   );
   expect(
     vi.mocked(fixture.native.peerPolicy).mock

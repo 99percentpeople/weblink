@@ -16,17 +16,11 @@ impl Service {
         if p.kind != "peer" || !Self::principal_active(s, p) {
             return Decision::Ask;
         }
-        let decision = s
-            .peer_policies
+        s.peer_policies
             .get(&p.id)
             .and_then(|v| v.get(scope))
             .copied()
-            .unwrap_or_default();
-        if s.policies_suspended && decision == Decision::Allow {
-            Decision::Ask
-        } else {
-            decision
-        }
+            .unwrap_or_default()
     }
 
     pub(super) fn policy_grant(s: &mut State, p: &Principal, scope: &str) {
@@ -61,35 +55,27 @@ impl Service {
         );
     }
 
-    pub(super) fn pause_policies(&self, s: &mut State) {
-        s.policies_suspended = true;
-        s.mcp_suspended = true;
-        let grants: Vec<_> = s
-            .grants
-            .values()
-            .filter(|g| g.source != GrantSource::Consent)
-            .map(|g| g.id.clone())
-            .collect();
-        for id in grants {
-            self.revoke_locked(s, &id);
-        }
-    }
-
     pub(super) fn revoke_grant(&self, s: &mut State, id: &str) {
-        if s.grants
-            .get(id)
-            .is_some_and(|g| g.source != GrantSource::Consent)
-        {
-            self.pause_policies(s);
-        }
+        // Ending one connection/grant does not edit the saved device policy.
         self.revoke_locked(s, id);
     }
 
+    #[cfg(test)]
     pub(super) fn set_peer_policy(
         &self,
         epoch: &str,
         peer: &peers::Identity,
         policy: PeerPolicy,
+    ) -> Result<(), String> {
+        self.set_peer_policy_at_generation(epoch, peer, policy, "")
+    }
+
+    pub(super) fn set_peer_policy_at_generation(
+        &self,
+        epoch: &str,
+        peer: &peers::Identity,
+        policy: PeerPolicy,
+        generation: &str,
     ) -> Result<(), String> {
         if policy.keys().any(|scope| {
             !catalog::tools()
@@ -100,6 +86,10 @@ impl Service {
         }
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
+        // An allow write already queued in the renderer cannot undo a stop.
+        if s.policy_generation != generation {
+            return Err("POLICY_CHANGED".into());
+        }
         let principal = Self::peer_principal(&s, peer)?;
         let id = peer.id.as_str();
         if !Self::current(&s) || principal.kind != "peer" {
@@ -346,7 +336,7 @@ mod tests {
         assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
     }
     #[tokio::test]
-    async fn suspended_policies_cannot_reauthorize_after_stop_or_reconnect() {
+    async fn emergency_reset_rejects_queued_allow_and_requires_fresh_consent() {
         let (service, p) = fixture();
         service
             .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
@@ -354,14 +344,24 @@ mod tests {
         {
             let mut s = service.state.lock().unwrap();
             Service::policy_grant(&mut s, &p, "diagnostics.read");
-            service.pause_policies(&mut s);
+            service.stop_locked(&mut s);
             assert!(s.grants.is_empty());
             assert!(s.peer_policies.contains_key(&p.id));
             assert!(Service::peer_decision(&s, &p, "diagnostics.read") == Decision::Ask);
         }
-        // Resubmitting the saved policy must not bypass an emergency pause.
+        // The renderer must first persist the reset and acknowledge its generation.
+        assert_eq!(
+            service.set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow)),
+            Err("POLICY_CHANGED".into())
+        );
+        let generation = service.state.lock().unwrap().policy_generation.clone();
         service
-            .set_peer_policy("epoch", &peers::Identity::from(&p), policy(Decision::Allow))
+            .set_peer_policy_at_generation(
+                "epoch",
+                &peers::Identity::from(&p),
+                policy(Decision::Ask),
+                &generation,
+            )
             .unwrap();
         let task = tokio::spawn(service.clone().invoke(p, "request".into(), call()));
         until(|| {
@@ -495,6 +495,6 @@ mod tests {
             s.grants.values().next().unwrap().scopes[0],
             "diagnostics.read"
         );
-        assert!(!s.policies_suspended);
+        assert!(s.policy_generation.is_empty());
     }
 }

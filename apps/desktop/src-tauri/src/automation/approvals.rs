@@ -342,8 +342,12 @@ mod tests {
             service.revoke_grant(&mut s, revoked);
             assert!(!s.grants.contains_key(revoked));
             assert!(Service::grant_live(&s, &s.grants[retained]));
-            assert_eq!(s.policies_suspended, !revoke_consent);
-            assert_eq!(s.mcp_suspended, !revoke_consent);
+            assert!(s.policy_generation.is_empty());
+            assert!(!s.mcp_suspended);
+            assert!(
+                Service::peer_decision(&s, &principal, "diagnostics.read")
+                    == policy::Decision::Allow
+            );
         }
     }
 
@@ -372,7 +376,7 @@ mod tests {
                 .unwrap();
             let mut s = service.state.lock().unwrap();
             assert!(!s.grants.contains_key(&id));
-            assert!(!s.policies_suspended);
+            assert!(s.policy_generation.is_empty());
             assert!(!s.mcp_suspended);
             Service::policy_grant(&mut s, &principal, "shell.execute");
             assert_eq!(
@@ -399,7 +403,7 @@ mod tests {
         let s = service.state.lock().unwrap();
         assert!(s.grants.is_empty());
         assert!(s.pending.is_empty());
-        assert!(s.policies_suspended);
+        assert!(!s.policy_generation.is_empty());
         assert!(s.mcp_suspended);
     }
 

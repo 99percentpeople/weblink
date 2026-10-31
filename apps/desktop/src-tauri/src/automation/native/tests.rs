@@ -172,7 +172,7 @@ fn owned_window_blur_keeps_mcp_authority_and_releases_the_input_lease() {
                 "Window blur must not suspend the MCP token"
             );
             Service::token_grant(&mut s, &principal, &json!("local")).unwrap();
-            assert!(!s.policies_suspended);
+            assert!(s.policy_generation.is_empty());
             assert_eq!(serde_json::to_value(&s.grants).unwrap(), grants);
             assert!(s.input_owners.is_empty());
             assert!(!control.automation_active("client"));
@@ -196,7 +196,7 @@ fn owned_window_blur_cannot_hide_a_real_emergency() {
             sync_input_control(&service, control);
             let s = service.state.lock().unwrap();
             assert!(s.mcp_suspended);
-            assert!(s.policies_suspended);
+            assert!(!s.policy_generation.is_empty());
             assert!(s.grants.is_empty());
             assert!(s.input_owners.is_empty());
         });
@@ -227,7 +227,7 @@ fn native_sampler_keeps_the_same_lease_and_permissions_without_renderer_heartbea
         assert!(!control.automation_active("client"));
         let s = service.state.lock().unwrap();
         assert!(s.grants.is_empty());
-        assert!(s.policies_suspended);
+        assert!(!s.policy_generation.is_empty());
     });
 }
 
@@ -257,7 +257,7 @@ fn local_switch_releases_input_and_holds_while_mcp_remains_enabled() {
         assert!(!service.input_holds.lock().unwrap().any(lease));
         let s = service.state.lock().unwrap();
         assert!(s.mcp_enabled);
-        assert!(!s.policies_suspended);
+        assert!(s.policy_generation.is_empty());
         assert!(!s.mcp_suspended);
         assert!(s.input_owners.is_empty());
     });
@@ -301,7 +301,7 @@ fn borrowed_blur_heartbeat_clears_lease_and_holds_but_preserves_all_permissions(
             sync_input_control(&service, control);
             let s = service.state.lock().unwrap();
             assert!(s.input_owners.is_empty());
-            assert!(!s.policies_suspended);
+            assert!(s.policy_generation.is_empty());
             assert_eq!(serde_json::to_value(&s.grants).unwrap(), grants);
             assert!(s
                 .grants
@@ -326,7 +326,7 @@ fn ended_borrowed_lease_preserves_permissions_even_when_the_window_blurs() {
         sync_input_control(&service, control);
         let s = service.state.lock().unwrap();
         assert!(s.input_owners.is_empty());
-        assert!(!s.policies_suspended);
+        assert!(s.policy_generation.is_empty());
         assert!(!s.mcp_suspended);
         assert_eq!(s.grants.len(), 2);
     });
@@ -355,7 +355,7 @@ fn hold_timeout_releases_input_without_suspending_permanent_permissions() {
         assert!(!service.input_holds.lock().unwrap().any(lease));
         let s = service.state.lock().unwrap();
         assert!(s.input_owners.is_empty());
-        assert!(!s.policies_suspended);
+        assert!(s.policy_generation.is_empty());
         assert!(!s.mcp_suspended);
         assert_eq!(s.grants.len(), 2);
     });
@@ -405,7 +405,7 @@ fn native_lease_interruptions_preserve_peer_and_mcp_authority() {
                     let mut s = service.state.lock().unwrap();
                     assert!(s.input_owners.is_empty());
                     assert!(
-                        !s.policies_suspended,
+                        s.policy_generation.is_empty(),
                         "{interruption:?}, borrowed={borrowed}"
                     );
                     assert!(!s.mcp_suspended);
@@ -514,7 +514,7 @@ fn input_cleanup_does_not_hide_an_earlier_external_revoke() {
         assert_eq!(service.state.lock().unwrap().input_owners, vec!["client"]);
         sync_input_control(&service, control);
         let s = service.state.lock().unwrap();
-        assert!(s.policies_suspended);
+        assert!(!s.policy_generation.is_empty());
         assert!(s.grants.is_empty());
     });
 }
@@ -531,7 +531,7 @@ fn input_cleanup_on_blur_preserves_permissions_before_or_after_heartbeat() {
             super::super::input_action::abort_lease(&service, control, "client", lease);
             sync_input_control(&service, control);
             let s = service.state.lock().unwrap();
-            assert!(!s.policies_suspended);
+            assert!(s.policy_generation.is_empty());
             assert_eq!(s.grants.len(), 2);
             assert!(s.input_owners.is_empty());
         });
@@ -572,7 +572,7 @@ fn shared_emergency_survives_cleanup_in_either_order_including_blur() {
             }
             sync_input_control(&service, control);
             let s = service.state.lock().unwrap();
-            assert!(s.policies_suspended);
+            assert!(!s.policy_generation.is_empty());
             assert!(s.grants.is_empty());
             assert!(s.input_owners.is_empty());
             assert!(!service.input_holds.lock().unwrap().any(lease));
@@ -607,9 +607,10 @@ fn shared_emergency_cancels_pending_reviews_and_cannot_reapply_allow_policies() 
         Err(oneshot::error::TryRecvError::Closed)
     ));
     let saved = service.state.lock().unwrap().peer_policies["client"].clone();
-    service
-        .set_peer_policy("epoch", &peers::Identity::from(&principal), saved)
-        .unwrap();
+    assert_eq!(
+        service.set_peer_policy("epoch", &peers::Identity::from(&principal), saved),
+        Err("POLICY_CHANGED".into())
+    );
     let s = service.state.lock().unwrap();
     assert!(s.grants.is_empty());
     assert!(s.pending.is_empty());

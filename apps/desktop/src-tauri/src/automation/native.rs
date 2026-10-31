@@ -65,9 +65,8 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
     // The host can be replaced by room teardown. Keep the same shortcut available
     // for background commands even when automation holds no native input lease.
     let active = s.enabled || s.mcp_enabled;
-    if control.automation_listener(active).is_err() && active {
-        service.stop_locked(&mut s);
-    }
+    let error = control.automation_listener(active).err().filter(|_| active);
+    service.update_native_error(&mut s, error);
     super::input_action::expire_holds(control, service, !s.pending.is_empty());
     s.input_owners
         .retain(|principal| !retire_input_interruption(service, control, principal));

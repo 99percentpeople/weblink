@@ -5,6 +5,7 @@ import {
   permissionGroup,
 } from "@weblink/automation";
 import { setClientConfig } from "./permission-options";
+import { resetAutomationPolicies } from "./automation-policy-reset";
 import { createUuid } from "@/libs/domain/ids";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
@@ -70,8 +71,9 @@ interface NativeSnapshot {
   endpoints: string[];
   server: McpServerConfig;
   serverPending: boolean;
-  policiesSuspended?: boolean;
-  peerPoliciesSuspended?: boolean;
+  mcpSuspended?: boolean;
+  policyGeneration?: string;
+  nativeError?: string | null;
   clients: McpTokenSummary[];
   grants: Grant[];
   pending: Approval[];
@@ -114,8 +116,16 @@ export function createAutomation(
   const [revision, setRevision] = createSignal(0);
   const [nativeState, updateNativeState] =
     createStore<NativeSnapshot>(structuredClone(empty));
-  const setNativeState = (snapshot: NativeSnapshot) =>
+  let policyGeneration = "";
+  const applyPolicyGeneration = (generation: string) => {
+    resetAutomationPolicies(generation);
+    policyGeneration = generation;
+  };
+  const setNativeState = (snapshot: NativeSnapshot) => {
+    if (typeof snapshot.policyGeneration === "string")
+      applyPolicyGeneration(snapshot.policyGeneration);
     updateNativeState(reconcile(snapshot, { key: "id" }));
+  };
   const [error, setError] = createSignal("");
   const [ready, setReady] = createSignal(false);
   const [runtimeCapabilities, setRuntimeCapabilities] =
@@ -220,7 +230,7 @@ export function createAutomation(
     const authority = authorities.get(link);
     if (!authority) return Promise.resolve();
     const policy = policyFor(authority.session);
-    const key = JSON.stringify(policy);
+    const key = `${policyGeneration}:${JSON.stringify(policy)}`;
     if (key !== authority.policy) {
       authority.policy = key;
       authority.pending = authority.pending.then(
@@ -241,11 +251,27 @@ export function createAutomation(
               "TARGET_DISCONNECTED",
             );
           }
-          await native.peerPolicy(
-            epoch,
-            authority.principal,
-            policy,
-          );
+          for (let attempt = 0; ; attempt++) {
+            try {
+              await native.peerPolicy(
+                epoch,
+                authority.principal,
+                policyFor(authority.session),
+                policyGeneration,
+              );
+              break;
+            } catch (error) {
+              if (
+                !(error instanceof AutomationError) ||
+                error.code !== "POLICY_CHANGED" ||
+                attempt >= 1
+              )
+                throw error;
+              // A stop can race a queued settings write. Persist its reset
+              // before retrying with the new generation and current decisions.
+              await readNativeSnapshot();
+            }
+          }
         },
       );
       void authority.pending.catch((e) => {
@@ -1004,7 +1030,15 @@ export function createAutomation(
       if (native)
         try {
           epoch = await native.open((event) => {
-            if (event.kind === "cancel") {
+            if (life.signal.aborted) return;
+            if (event.kind === "policies-reset") {
+              ++snapshotSequence;
+              try {
+                applyPolicyGeneration(event.generation);
+              } catch (e) {
+                setError(String(e));
+              }
+            } else if (event.kind === "cancel") {
               calls
                 .get(event.id)
                 ?.abort(new AutomationError("CANCELLED"));
@@ -1016,11 +1050,7 @@ export function createAutomation(
             await native.close(epoch);
             return;
           }
-          setNativeState(
-            (await native.snapshot(
-              epoch,
-            )) as NativeSnapshot,
-          );
+          await readNativeSnapshot();
         } catch (e) {
           setError(String(e));
         }
@@ -1076,7 +1106,7 @@ export function createAutomation(
     configuredEnabled: () =>
       appState.options.automationEnabled,
     ready,
-    error,
+    error: () => nativeState.nativeError || error(),
     configure,
     configureMcp,
     configureServer: async (config: McpServerConfig) => {
@@ -1177,6 +1207,7 @@ export function createAutomation(
     ) => {
       if (remember) {
         if (native) await readNativeSnapshot();
+        const decisionGeneration = policyGeneration;
         const request = (
           native
             ? nativeState.pending
@@ -1219,6 +1250,8 @@ export function createAutomation(
           await native.decide(epoch, id, accepted, true);
         else
           diagnosticPermissions.decide(id, accepted, true);
+        if (policyGeneration !== decisionGeneration)
+          throw new AutomationError("REQUEST_EXPIRED");
         if (!current())
           throw new AutomationError("TARGET_DISCONNECTED");
         setClientConfig(request.principal.id, {

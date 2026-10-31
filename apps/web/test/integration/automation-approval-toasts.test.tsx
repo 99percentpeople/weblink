@@ -40,8 +40,7 @@ const fixture = vi.hoisted(() => ({
   policy: undefined as
     | Accessor<AutomationPolicy>
     | undefined,
-  policiesSuspended: false,
-  peerPoliciesSuspended: undefined as boolean | undefined,
+  mcpSuspended: false,
   decide: vi.fn(),
   canReceive: vi.fn(),
   enabled: true,
@@ -66,9 +65,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
       decide: fixture.decide,
       snapshot: () => ({
         pending: fixture.pending?.() ?? [],
-        policiesSuspended: fixture.policiesSuspended,
-        peerPoliciesSuspended:
-          fixture.peerPoliciesSuspended,
+        mcpSuspended: fixture.mcpSuspended,
       }),
     },
   }),
@@ -122,8 +119,7 @@ const allowLabel = () => "common.action.allow_session";
 beforeEach(() => {
   [fixture.policy, setPolicy] =
     createSignal<AutomationPolicy>({});
-  fixture.policiesSuspended = false;
-  fixture.peerPoliciesSuspended = undefined;
+  fixture.mcpSuspended = false;
   [fixture.pending, setPending] = createSignal<Approval[]>(
     [],
   );
@@ -141,6 +137,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   toast.dismiss();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -237,9 +234,8 @@ it("retracts an already displayed request immediately when always allow is saved
   expect(fixture.decide).not.toHaveBeenCalled();
 });
 
-it("still requests consent when always allow has been suspended by emergency stop", async () => {
-  setPolicy({ "shell.execute": "allow" });
-  fixture.policiesSuspended = true;
+it("requests consent after emergency stop writes the decision back to ask", async () => {
+  setPolicy({ "shell.execute": "ask" });
   const view = mount({ visible: false, native: true });
   setPending([request()]);
   await waitFor(() =>
@@ -249,8 +245,7 @@ it("still requests consent when always allow has been suspended by emergency sto
 
 it("keeps diagnostic consent visible after emergency stop even with OS automation disabled", async () => {
   fixture.enabled = false;
-  fixture.peerPoliciesSuspended = true;
-  setPolicy({ "diagnostics.read": "allow" });
+  setPolicy({ "diagnostics.read": "ask" });
   const view = mount({ visible: false, native: true });
   setPending([
     {
@@ -265,9 +260,8 @@ it("keeps diagnostic consent visible after emergency stop even with OS automatio
   );
 });
 
-it("does not confuse a paused local MCP token with a paused peer policy", async () => {
-  fixture.policiesSuspended = true;
-  fixture.peerPoliciesSuspended = false;
+it("does not turn an allowed device into an approval when local MCP tokens are paused", async () => {
+  fixture.mcpSuspended = true;
   setPolicy({ "shell.execute": "allow" });
   const view = mount({ visible: false, native: true });
   setPending([request()]);
@@ -516,6 +510,50 @@ it("retries a failed decision and prevents duplicate or conflicting answers whil
         ),
     ).toBe(false),
   );
+});
+
+it("keeps a background approval until its deadline and retracts it without another snapshot", async () => {
+  vi.useFakeTimers();
+  const view = mount({ visible: false, native: true });
+  const pending = request();
+  setPending([pending]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(view.show).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(119999);
+  expect(view.dismiss).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(view.dismiss).toHaveBeenCalledWith(
+    `automation-approval:${pending.id}`,
+  );
+  view.respond("approve");
+  expect(fixture.decide).not.toHaveBeenCalled();
+  expect(view.show).toHaveBeenCalledOnce();
+});
+
+it("retracts a cancelled approval immediately without ending a later request at the old deadline", async () => {
+  vi.useFakeTimers();
+  const view = mount({ visible: false, native: true });
+  const first = request();
+  setPending([first]);
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(30000);
+  setPending([]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(view.dismiss).toHaveBeenCalledWith(
+    `automation-approval:${first.id}`,
+  );
+  const second = request();
+  setPending([second]);
+  await vi.advanceTimersByTimeAsync(90000);
+  expect(view.dismiss).not.toHaveBeenCalledWith(
+    `automation-approval:${second.id}`,
+  );
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(view.dismiss).toHaveBeenCalledWith(
+    `automation-approval:${second.id}`,
+  );
+  expect(view.show).toHaveBeenCalledTimes(2);
+  expect(fixture.decide).not.toHaveBeenCalled();
 });
 
 it.each(["approve", "decline"])(

@@ -221,7 +221,7 @@ it.each(["allow", "deny", "ask"] as const)(
               decide,
               revoke,
               snapshot: () => ({
-                policiesSuspended: false,
+                mcpSuspended: false,
                 pending: [
                   {
                     id: "review",

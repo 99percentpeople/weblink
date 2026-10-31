@@ -243,6 +243,7 @@ impl Service {
                 s.mcp_enabled && !s.mcp_suspended
             } else {
                 (s.enabled || Self::diagnostic_grant(g))
+                    && (s.native_error.is_none() || Self::diagnostic_grant(g))
                     && g.scopes.iter().all(|scope| {
                         let decision = Self::peer_decision(s, &g.principal, scope);
                         decision != policy::Decision::Deny

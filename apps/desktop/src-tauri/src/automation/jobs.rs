@@ -989,7 +989,7 @@ exit 7;
             .unwrap();
         service.expire();
         assert_eq!(ended(&service.jobs, &id).await["status"], "cancelled");
-        assert!(service.state.lock().unwrap().policies_suspended);
+        assert!(!service.state.lock().unwrap().policy_generation.is_empty());
     }
     #[tokio::test]
     async fn run_cancellation_or_dropped_wait_cancels_owned_job() {

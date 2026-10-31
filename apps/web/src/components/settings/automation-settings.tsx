@@ -114,13 +114,13 @@ export default function AutomationSettings() {
               </p>
             </SettingBlock>
           </Show>
-          <Show when={r().snapshot().policiesSuspended}>
+          <Show when={r().snapshot().mcpSuspended}>
             <SettingBlock>
               <p
                 role="status"
                 class="text-muted-foreground text-sm"
               >
-                {t("automation.policies_paused")}
+                {t("automation.mcp_paused")}
               </p>
             </SettingBlock>
           </Show>

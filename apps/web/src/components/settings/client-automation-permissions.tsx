@@ -26,7 +26,7 @@ export default function ClientAutomationPermissions(props: {
       ?.automation;
   return (
     <Show when={runtime}>
-      {(automation) => (
+      {(_automation) => (
         <>
           <SettingGroup
             title={t("automation.title")}
@@ -34,19 +34,6 @@ export default function ClientAutomationPermissions(props: {
               "automation.device_permissions_description",
             )}
           >
-            <Show
-              when={
-                automation().enabled() &&
-                automation().snapshot().policiesSuspended
-              }
-            >
-              <p
-                role="status"
-                class="text-muted-foreground text-sm"
-              >
-                {t("automation.policies_paused")}
-              </p>
-            </Show>
             <For
               each={permissionGroupIds.filter(
                 (group) =>

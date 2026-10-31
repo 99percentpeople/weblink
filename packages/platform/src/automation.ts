@@ -40,7 +40,8 @@ export interface NativeAutomationRequest {
 }
 export type NativeAutomationEvent =
   | NativeAutomationRequest
-  | { kind: "cancel"; id: string };
+  | { kind: "cancel"; id: string }
+  | { kind: "policies-reset"; generation: string };
 /** Verified device identity and the shared connection generation. */
 export interface NativeAutomationPeer {
   id: string;
@@ -97,6 +98,7 @@ export interface NativeAutomation {
     epoch: string,
     principal: NativeAutomationPeer,
     policy: Record<string, "ask" | "allow" | "deny">,
+    generation?: string,
   ): Promise<void>;
   disconnect(
     epoch: string,

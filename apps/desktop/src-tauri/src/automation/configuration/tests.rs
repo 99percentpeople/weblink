@@ -272,11 +272,11 @@ fn mcp_only_emergency_stop_fences_forwarding_and_switches_resume_their_own_autho
         Err(oneshot::error::TryRecvError::Closed)
     ));
     service.configure_locked(&mut s, false, true);
-    assert!(!s.policies_suspended);
+    let generation = s.policy_generation.clone();
+    assert!(!generation.is_empty());
     assert!(s.mcp_suspended);
-    s.policies_suspended = true;
     service.configure_locked(&mut s, true, false);
     service.configure_locked(&mut s, true, true);
     assert!(!s.mcp_suspended);
-    assert!(s.policies_suspended);
+    assert_eq!(s.policy_generation, generation);
 }

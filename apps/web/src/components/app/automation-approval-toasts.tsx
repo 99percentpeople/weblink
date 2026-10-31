@@ -45,19 +45,11 @@ export function AutomationApprovalToasts(props: {
     const decisions = required.map(
       (scope) => policy?.[scope] ?? "ask",
     );
-    const snapshot = automation?.snapshot();
-    const suspended =
-      snapshot?.peerPoliciesSuspended ??
-      snapshot?.policiesSuspended;
     // A policy edit can precede the next native snapshot. Do not display its
-    // obsolete request, but preserve consent after an emergency pause.
+    // obsolete request. Emergency revocation writes the saved decision to ask.
     return (
       !decisions.includes("deny") &&
-      decisions.some(
-        (decision) =>
-          decision === "ask" ||
-          (decision === "allow" && suspended === true),
-      )
+      decisions.includes("ask")
     );
   };
   const pending = () =>
@@ -232,7 +224,17 @@ export function AutomationApprovalToasts(props: {
                 }),
             }),
         );
+        // End both notification channels at the approval deadline rather than
+        // waiting for another native snapshot or the shared cleanup interval.
+        const expiry = setTimeout(
+          () => {
+            active = false;
+            props.notifications.dismiss(id);
+          },
+          Math.max(0, request.expiresAt - Date.now()),
+        );
         onCleanup(() => {
+          clearTimeout(expiry);
           active = false;
           props.notifications.dismiss(id);
         });

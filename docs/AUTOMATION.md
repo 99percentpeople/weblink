@@ -240,7 +240,10 @@ device's policy for the displayed permission group and settle the current reques
 in the same decision. Other devices and permission groups are unchanged. The in-app review
 includes the permission description, tool arguments, reported source and configured
 host emergency stop shortcut. System previews omit tool arguments and respect the
-notification preview preference. Resolved requests dismiss their notifications;
+notification preview preference. Windows approval banners remain until the pending
+request deadline unless answered or manually dismissed. Both notification channels
+close at that deadline without waiting for a refreshed pending-request snapshot.
+Resolved requests dismiss their notifications;
 expired, disconnected or unverified requests cannot be approved from stale actions.
 If a system-notification answer fails while its request remains pending, the
 foreground approval remains available for an explicit retry; native callbacks
@@ -250,8 +253,8 @@ Session-only peer approvals last until the current connection ends and do not ch
 bind a caller identity, target, permission group and current connection lifetime.
 Consent resolves concurrent requests in that same group only. Explicit
 Deny decisions remain excluded from the grant. Changing a device's permission
-setting invalidates affected grants immediately; emergency stop remains the shared
-way to end current access without changing saved settings. Native execution still
+setting invalidates affected grants immediately. Emergency stop resets saved
+automation Allow decisions to Ask; ordinary disconnects preserve them. Native execution still
 checks the exact tool scope. Existing
 remote-control allowlists do not grant automation permissions. In the existing
 remote-device permissions screen, **Always allow** is a persistent remote-control
@@ -366,13 +369,21 @@ listener respects the configured shortcut and works while the app is in the back
 It fences new calls immediately, revokes grants, cancels pending reviews, queued work
 and command process trees, and releases automated input. The tray's local revoke
 action uses the same stop path; automation settings have no separate stop button.
-Emergency stop and explicit revocation of a policy grant pause token calls and automatic Always-allow grants
-until their respective switch is disabled and enabled again: MCP resumes token
-calls, while automation resumes remote-device Always-allow policies. Each switch
-leaves the other pause intact. This pause does not erase saved policies;
-individual timed peer approvals remain available. Window focus loss, capture end,
+Emergency stop changes saved remote-device automation Allow decisions to Ask,
+including saved offline devices; Deny and Ask decisions remain unchanged. The native
+authority cancels current work immediately and rejects policy writes from before
+the reset. The renderer commits the reset to its profile settings before sending
+new policies. Settings and approval notifications use these decisions directly,
+without a separate peer-policy pause. Re-enabling automation does not restore Allow.
+Ordinary disconnects, reconnects, ending an individual grant and closing the app
+retain saved permissions; reconnecting an allowed device does not require consent.
+MCP token calls remain separately paused after an emergency stop until MCP is
+disabled and enabled again. Failure to maintain the native emergency listener is
+reported as a runtime error and cancels active work without editing saved device
+permissions. Native operations remain unavailable until the listener recovers.
+Window focus loss, capture end,
 input interruption and held-input timeout only end the affected input lease and
-release its held keys/buttons; they do not pause automation permissions or unrelated
+release its held keys/buttons; they do not reset automation permissions or unrelated
 command jobs. Reacquiring control still requires a current capture and valid permission.
 Late input cleanup cannot suppress an emergency stop or release
 a replacement lease. Automated input is blocked while permission requests await local review.

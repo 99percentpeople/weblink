@@ -6,6 +6,9 @@ mod tests;
 
 impl Service {
     pub(super) fn call_enabled(s: &State, principal: &Principal, call: &Call) -> bool {
+        if s.native_error.is_some() && !catalog::diagnostic(&call.name) {
+            return false;
+        }
         match principal.kind.as_str() {
             "peer" => s.enabled || catalog::diagnostic(&call.name),
             // Device discovery is needed to address remote targets even when this
@@ -35,9 +38,6 @@ impl Service {
             }
         } else {
             s.enabled = enabled;
-            if enabled {
-                s.policies_suspended = false;
-            }
         }
         if enabled {
             return;

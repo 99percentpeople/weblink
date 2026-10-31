@@ -78,11 +78,12 @@ export const nativeAutomation: NativeAutomation = {
       principal,
       label,
     }),
-  peerPolicy: (epoch, principal, policy) =>
+  peerPolicy: (epoch, principal, policy, generation = "") =>
     invoke("automation_peer_policy", {
       epoch,
       principal,
       policy,
+      generation,
     }),
   disconnect: (epoch, principal) =>
     invoke("automation_disconnect", { epoch, principal }),

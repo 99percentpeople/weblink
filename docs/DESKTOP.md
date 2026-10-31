@@ -473,6 +473,11 @@ The browser uses Web Notifications, with Service Worker actions when available;
 otherwise clicking opens the application conversation. Worker actions target the
 creating page and subscription, never another tab. Windows uses native WinRT
 Toast notifications with inline message replies and approve/decline buttons.
+Windows approval notifications use the reminder scenario so their banners remain
+until answered, manually dismissed or the request expires. Native deadline cleanup
+also removes an already visible reminder while the background WebView is throttled;
+request cancellation and subscription teardown retract it immediately. Ordinary
+message and reply notifications retain the default banner behavior.
 Windows notification status queries are read-only. For a fresh unpackaged app,
 `ToastNotifier.Setting` can return `ERROR_NOT_FOUND` before its first notification.
 That maps to `unknown`, distinct from granted, denied and unavailable. The first

@@ -12,7 +12,14 @@ fn escape(text: &str) -> String {
         .replace('\'', "&apos;")
 }
 pub fn toast(notification: &Notification, icon: Option<&str>) -> String {
-    let mut xml = format!("<toast launch=\"open\"><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text>", escape(&notification.title), escape(&notification.body));
+    // Approval requests stay visible until answered, dismissed or explicitly
+    // expired by the native owner. Chat replies keep the normal banner lifetime.
+    let scenario = if notification.actions.is_empty() {
+        ""
+    } else {
+        " scenario=\"reminder\""
+    };
+    let mut xml = format!("<toast launch=\"open\"{scenario}><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text>", escape(&notification.title), escape(&notification.body));
     if let Some(icon) = icon {
         xml.push_str(&format!(
             "<image placement=\"appLogoOverride\" hint-crop=\"circle\" src=\"{}\"/>",
@@ -43,6 +50,18 @@ pub fn toast(notification: &Notification, icon: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn approval_requests_stay_visible_but_messages_and_replies_use_normal_banners() {
+        let mut n = crate::notifications::tests::notice();
+        assert!(toast(&n, None).contains("scenario=\"reminder\""));
+        n.actions.clear();
+        assert!(!toast(&n, None).contains("scenario="));
+        n.reply = Some(crate::notifications::Reply {
+            title: "Send".into(),
+            placeholder: "Reply".into(),
+        });
+        assert!(!toast(&n, None).contains("scenario="));
+    }
     #[test]
     fn escapes_peer_content_and_keeps_fixed_actions() {
         let mut n = crate::notifications::tests::notice();

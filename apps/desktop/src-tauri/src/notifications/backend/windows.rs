@@ -1,6 +1,7 @@
 use super::super::{Action, Notification};
 use std::path::Path;
 use tauri::Manager;
+use tokio_util::sync::CancellationToken;
 use windows::{
     Data::Xml::Dom::XmlDocument,
     Foundation::{DateTime, IPropertyValue, IReference, PropertyValue, TypedEventHandler},
@@ -65,15 +66,19 @@ pub struct Notice {
     token: i64,
     tag: HSTRING,
     app_id: HSTRING,
+    expiry: CancellationToken,
+}
+fn hide(toast: &ToastNotification, notifier: &ToastNotifier, tag: &HSTRING, app_id: &HSTRING) {
+    let _ = notifier.Hide(toast);
+    if let Ok(history) = ToastNotificationManager::History() {
+        let _ = history.RemoveGroupedTagWithId(tag, &HSTRING::from("weblink"), app_id);
+    }
 }
 impl Drop for Notice {
     fn drop(&mut self) {
+        self.expiry.cancel();
         let _ = self.toast.RemoveActivated(self.token);
-        let _ = self.notifier.Hide(&self.toast);
-        if let Ok(history) = ToastNotificationManager::History() {
-            let _ =
-                history.RemoveGroupedTagWithId(&self.tag, &HSTRING::from("weblink"), &self.app_id);
-        }
+        hide(&self.toast, &self.notifier, &self.tag, &self.app_id);
     }
 }
 pub fn show(
@@ -146,11 +151,37 @@ pub fn show(
         token,
         tag,
         app_id: HSTRING::from(&app.config().identifier),
+        expiry: CancellationToken::new(),
     };
     notice
         .notifier
         .Show(&notice.toast)
         .map_err(|e| e.to_string())?;
+    // ExpirationTime prevents stale OS delivery; also remove an already visible
+    // reminder at its deadline, even while the background WebView is throttled.
+    let (toast, notifier, tag, app_id) = (
+        notice.toast.clone(),
+        notice.notifier.clone(),
+        notice.tag.clone(),
+        notice.app_id.clone(),
+    );
+    let expiry = notice.expiry.clone();
+    let delay = std::time::Duration::from_millis(
+        notification.expires_at.saturating_sub(super::super::now()),
+    );
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::select! {
+            _ = expiry.cancelled() => {},
+            _ = tokio::time::sleep(delay) => {
+                let _ = app.run_on_main_thread(move || {
+                    if !expiry.is_cancelled() {
+                        hide(&toast, &notifier, &tag, &app_id);
+                    }
+                });
+            },
+        }
+    });
     Ok(notice)
 }
 

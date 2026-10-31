@@ -110,6 +110,8 @@ export const resolveClientConfig = (
 });
 
 export type AppOption = {
+  /** Last native emergency reset already committed with device permissions. */
+  automationPolicyGeneration?: string;
   automationEnabled: boolean;
   mcpEnabled: boolean;
   maxConcurrentTransfers: number;
@@ -248,6 +250,7 @@ export const getDefaultAppOptions = (): AppOption => {
   const hasNavigator = typeof navigator !== "undefined";
   return {
     automationEnabled: false,
+    automationPolicyGeneration: undefined,
     mcpEnabled: false,
     maxConcurrentTransfers:
       DEFAULT_MAX_CONCURRENT_TRANSFERS,
