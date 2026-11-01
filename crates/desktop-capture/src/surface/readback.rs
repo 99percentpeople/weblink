@@ -12,7 +12,7 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::DXGI_ERROR_WAS_STILL_DRAWING;
 
-mod completion;
+pub(crate) mod completion;
 
 #[derive(Default)]
 pub(crate) struct Readback {

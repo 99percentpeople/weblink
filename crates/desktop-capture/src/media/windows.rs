@@ -74,6 +74,7 @@ pub struct MediaSession {
     // Worker-owned bounded readbacks; capture only touches the retained source.
     conversion: Mutex<capture::Conversion>,
     gpu_capture: Mutex<gpu_capture::State>,
+    pub gpu_preview: Arc<crate::presentation::Source>,
     gpu_notify: Arc<tokio::sync::Notify>,
     readback_requested: Arc<AtomicBool>,
     readback_buffers: usize,
@@ -308,6 +309,7 @@ impl MediaSession {
             readback: Mutex::new(Readback::default()),
             conversion: Mutex::new(Default::default()),
             gpu_capture: Mutex::new(Default::default()),
+            gpu_preview: Arc::new(Default::default()),
             gpu_notify,
             readback_requested: Arc::new(AtomicBool::new(false)),
             readback_buffers: options.readback_buffers as usize,
@@ -1259,6 +1261,7 @@ impl MediaSession {
         self.closed.store(true, Ordering::Release);
         self.recordings.shutdown();
         self.end_previews();
+        self.gpu_preview.close();
         if let Some(audio) = &self.audio {
             audio.close();
         }

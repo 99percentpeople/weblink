@@ -20,6 +20,19 @@ mod tests {
     use std::sync::Mutex;
 
     #[test]
+    fn gpu_preview_wakes_capture_without_requesting_cpu_pixels() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let _enter = runtime.enter();
+        let media = MediaSession::new(MediaOptions::default()).unwrap();
+        let watch = media.gpu_preview.subscribe(std::sync::Arc::new(|| {}));
+        assert!(media.has_consumers());
+        assert!(!media.has_cpu_consumers());
+        drop(watch);
+        assert!(!media.has_consumers());
+        media.close();
+    }
+
+    #[test]
     fn coalesces_frames_rearms_racing_ack_and_releases_hidden_or_closed_consumers() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let _enter = runtime.enter();
@@ -193,6 +206,7 @@ impl MediaSession {
             .is_empty()
             || !self.hardware.active().is_empty()
             || self.has_visible_previews()
+            || self.gpu_preview.active()
     }
     pub(super) fn has_visible_previews(&self) -> bool {
         self.previews

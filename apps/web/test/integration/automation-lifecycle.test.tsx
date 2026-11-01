@@ -1145,6 +1145,65 @@ it.each([true, false])(
     expect(fixture.handle).not.toHaveBeenCalled();
   },
 );
+it("waits for saved terminal permission on the first command after automatic startup", async () => {
+  peer();
+  setAppState("options", "automationEnabled", true);
+  setAppState("options", "clientConfigs", "peer", {
+    automation: { "shell.execute": "allow" },
+  });
+  let release!: () => void;
+  vi.mocked(
+    fixture.native.peerPolicy,
+  ).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const view = mount();
+  await waitFor(() =>
+    expect(fixture.incoming).toBeDefined(),
+  );
+  expect(view.runtime.enabled()).toBe(true);
+  const call: ToolCall = {
+    name: "commands.run",
+    arguments: { target: "local", script: "echo ready" },
+  };
+  const result = fixture.incoming!(
+    call,
+    new AbortController().signal,
+  );
+  await waitFor(() =>
+    expect(fixture.native.peerPolicy).toHaveBeenCalledWith(
+      "epoch",
+      {
+        id: "peer",
+        label: "Peer",
+        kind: "peer",
+        generation: "connection-1",
+      },
+      { "shell.execute": "allow" },
+      "",
+    ),
+  );
+  expect(fixture.native.call).not.toHaveBeenCalled();
+  release();
+  await expect(result).resolves.toEqual({
+    ok: true,
+    data: {},
+  });
+  expect(fixture.native.call).toHaveBeenCalledWith(
+    "epoch",
+    { id: "peer", generation: "connection-1" },
+    expect.any(String),
+    call,
+  );
+  expect(fixture.native.decide).not.toHaveBeenCalled();
+  expect(
+    fixture.native.configureMcp,
+  ).not.toHaveBeenCalled();
+});
+
 it("applies verified device policies before calls, updates them live, and retains them after disconnect", async () => {
   peer();
   setAppState("options", "clientConfigs", "peer", {

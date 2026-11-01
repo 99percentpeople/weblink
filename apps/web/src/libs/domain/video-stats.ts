@@ -1,3 +1,8 @@
+import {
+  readNativeReceiveStats,
+  type NativeReceivePipelineStats,
+} from "./native-receive-stats";
+
 /** Cumulative counters. Times use seconds; sample timestamps use milliseconds. */
 export interface VideoStatsSample {
   id: string;
@@ -46,6 +51,8 @@ export interface VideoStatsSample {
   packetsSent?: number;
   sendDelaySeconds?: number;
   roundTripSeconds?: number;
+  /** Local bridge timings, separate from RTP/decode and compositor statistics. */
+  nativeReceive?: NativeReceivePipelineStats;
 }
 
 export interface VideoStatsBatch {
@@ -218,6 +225,13 @@ export async function readBrowserVideoStats(
   ).find((item) => item.track === track);
   if (!endpoint) return [];
   const report = await endpoint.getStats();
+  return readVideoStatsReport(report, direction);
+}
+
+export function readVideoStatsReport(
+  report: RTCStatsReport,
+  direction: "send" | "receive",
+): VideoStatsSample[] {
   const samples: VideoStatsSample[] = [];
   report.forEach((entry) => {
     const s = entry as RTCStats & Record<string, unknown>;
@@ -293,6 +307,10 @@ export async function readBrowserVideoStats(
           ? s.powerEfficientDecoder
           : undefined,
       receivedFrames: number(s.framesReceived),
+      nativeReceive:
+        direction === "receive"
+          ? readNativeReceiveStats(s.nativeReceive)
+          : undefined,
       droppedFrames: number(s.framesDropped),
       packetsReceived: number(s.packetsReceived),
       packetsLost: number(s.packetsLost),

@@ -1,4 +1,5 @@
 import type { ExitHandler } from "./presence-scope";
+import { notifyPresentationLayout } from "@weblink/platform";
 import { useViewScopes } from "@/libs/state/view-scopes";
 import {
   createEffect,
@@ -159,6 +160,7 @@ function createMotionComponent(tag: HTMLTag) {
             }
           : {}),
       });
+      notifyPresentationLayout(element);
       return controls.finished;
     };
     const unregister = presence?.register(() =>

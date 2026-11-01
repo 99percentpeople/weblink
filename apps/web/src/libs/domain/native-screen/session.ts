@@ -7,7 +7,11 @@ import {
 import type { PeerCapabilities } from "../protocol/capabilities";
 import { RemotePointer } from "../remote-control/pointer";
 import type { NativeControlContext } from "@weblink/platform";
-import { ScreenReceiver } from "./receiver";
+import {
+  ScreenReceiver,
+  type ScreenReceiveConnection,
+  type ScreenReceiverFactory,
+} from "./receiver";
 import {
   ScreenDecodeError,
   ScreenDecodeStallError,
@@ -15,10 +19,7 @@ import {
 } from "./errors";
 import { bindNativeScreenAudio } from "./tracks";
 import { type ControlCapabilities } from "../protocol/remote-control";
-import {
-  readBrowserVideoStats,
-  type VideoStatsBatch,
-} from "../video-stats";
+import { type VideoStatsBatch } from "../video-stats";
 
 import {
   NativeScreenSender,
@@ -37,6 +38,7 @@ export {
 } from "./signaling";
 
 interface ScreenSessionPort {
+  createReceiver?: ScreenReceiverFactory;
   clientId?: string;
   requestScreen?(
     signal: AbortSignal,
@@ -60,7 +62,7 @@ interface ScreenSessionPort {
 type Incoming = {
   id: string;
   sourceId: string;
-  receiver?: ScreenReceiver;
+  receiver?: ScreenReceiveConnection;
   control?: RemotePointer;
   stream?: MediaStream;
   candidates: RTCIceCandidateInit[];
@@ -171,13 +173,9 @@ export class NativeScreenSession {
       )
         return [
           {
-            key: receiver.pc,
+            key: receiver,
             direction: "receive",
-            samples: await readBrowserVideoStats(
-              receiver.pc,
-              track,
-              "receive",
-            ),
+            samples: await receiver.getVideoStats(track),
           },
         ];
     }
@@ -722,28 +720,29 @@ export class NativeScreenSession {
             candidate,
           });
       };
-      const receiver = (incoming.receiver =
-        new ScreenReceiver(
-          {
-            iceServers: servers,
-            iceTransportPolicy: this.port.relayOnly()
-              ? "relay"
-              : "all",
-          },
-          (stream) => {
-            if (!current()) return;
-            if (stream) bindNativeScreenAudio(stream);
-            incoming.stream = stream ?? undefined;
-            const view = this.views.get(value.sourceId);
-            if (view && stream) view.stream = stream;
-            this.changed();
-          },
-          failed,
-          value.trickleIce === true
-            ? onCandidate
-            : undefined,
-          incoming.control,
-        ));
+      const receiver = (incoming.receiver = (
+        this.port.createReceiver ??
+        ((_sdp, ...args) => new ScreenReceiver(...args))
+      )(
+        value.sdp,
+        {
+          iceServers: servers,
+          iceTransportPolicy: this.port.relayOnly()
+            ? "relay"
+            : "all",
+        },
+        (stream) => {
+          if (!current()) return;
+          if (stream) bindNativeScreenAudio(stream);
+          incoming.stream = stream ?? undefined;
+          const view = this.views.get(value.sourceId);
+          if (view && stream) view.stream = stream;
+          this.changed();
+        },
+        failed,
+        value.trickleIce === true ? onCandidate : undefined,
+        incoming.control,
+      ));
       for (const candidate of incoming.candidates.splice(0))
         await receiver.addIceCandidate(candidate);
       const sdp = await receiver.answer(value.sdp);

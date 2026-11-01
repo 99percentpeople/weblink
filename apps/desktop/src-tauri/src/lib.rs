@@ -1,3 +1,4 @@
+mod presentation;
 use tauri::{
     webview::{NewWindowResponse, PermissionKind, PermissionResponse},
     Manager, Url, WebviewWindowBuilder,
@@ -17,6 +18,7 @@ mod media_permissions;
 mod notifications;
 mod picture_in_picture;
 mod preview;
+mod receive;
 mod remote_control;
 mod staged_files;
 mod updates;
@@ -31,6 +33,8 @@ fn shutdown(app: &tauri::AppHandle) {
     app.state::<notifications::Service>().clear();
     app.state::<keyboard::Shared>().close();
     app.state::<remote_control::Shared>().close();
+    app.state::<presentation::Service>().clear(None);
+    app.state::<receive::Shared>().clear(None);
     app.state::<capture::Service>().shutdown();
 }
 
@@ -76,6 +80,8 @@ pub fn run() {
     builder
         .plugin(application::single_instance::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(std::sync::Arc::new(receive::Service::default()))
+        .manage(presentation::Service::default())
         .manage(file_save::Service::default())
         .manage(filesystem::Service::default())
         .register_asynchronous_uri_scheme_protocol("weblink-file", |context, request, responder| {
@@ -104,8 +110,28 @@ pub fn run() {
                 .open_js_links_on_click(false)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(|invoke| {
+            if receive::release_notification(&invoke) { return true; }
+            let dispatch: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             capabilities::runtime_capabilities,
+            presentation::presentation_frame,
+            presentation::presentation_recording_open,
+            presentation::presentation_recording_close,
+            presentation::presentation_open,
+            presentation::presentation_layout,
+            presentation::presentation_stats,
+            presentation::presentation_close,
+            receive::receive_codecs,
+            receive::receive_open,
+            receive::receive_answer,
+            receive::receive_candidate,
+            receive::receive_stats,
+            receive::receive_renew,
+            receive::receive_send,
+            receive::receive_audio,
+            receive::receive_visible,
+            receive::receive_close,
+
             automation::automation_open,
             automation::automation_heartbeat,
             automation::automation_close,
@@ -237,7 +263,9 @@ pub fn run() {
             capture::capture_answer,
             capture::capture_add_ice_candidate,
             capture::capture_close_peer
-        ])
+        ];
+            dispatch(invoke)
+        })
         .setup(|app| {
             app.state::<remote_control::Shared>().observe_emergency(
                 app.state::<automation::Shared>().emergency_observer(),
@@ -283,6 +311,8 @@ pub fn run() {
             let builder = builder.additional_browser_args("--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows");
             #[cfg(target_os = "macos")]
             let builder = builder.background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled);
+            #[cfg(windows)]
+            let builder = builder.initialization_script(receive::release_script(app.invoke_key(), &media_origins));
             let window = builder
                 .on_permission_request(move |webview, kind| {
                     media_permission(
@@ -297,7 +327,10 @@ pub fn run() {
                         webview.state::<automation::Shared>().close_page();
                         webview.state::<file_save::Service>().clear();
                         webview.state::<filesystem::Service>().clear_page();
+                        webview.state::<presentation::Service>().clear(Some(webview.label()));
                         preview::clear(&webview);
+                        webview.state::<receive::Shared>().clear(Some(webview.label()));
+                        receive::clear_buffers(&webview);
                         webview.state::<capture::Service>().clear_watches();
                         webview.state::<notifications::Service>().clear();
                         if let Some(window) = webview.app_handle().get_webview_window("main") {

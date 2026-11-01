@@ -144,7 +144,9 @@ export function createAutomation(
     AutomationPeerLink,
     Principal
   >();
-  const presentation = new PresentationDiagnostics();
+  const presentation = new PresentationDiagnostics(
+    platform.videoPresentation?.sample,
+  );
   const diagnostics = new AutomationDiagnostics(() =>
     diagnosticSources(state, presentation, platform),
   );

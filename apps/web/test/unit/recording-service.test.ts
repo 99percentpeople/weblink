@@ -713,11 +713,17 @@ it("uses a dedicated native input and releases it without stopping the capture",
   const f = fixture();
   const close = vi.fn();
   const track = new Track();
+  const start = vi.fn(async () => {
+    expect(f.recorder().state).toBe("recording");
+    expect(f.writer.finish).not.toHaveBeenCalled();
+  });
   f.source.open = vi.fn(async () => ({
     stream: new Stream([track]) as unknown as MediaStream,
+    start,
     close,
   }));
   await f.service.start(f.source);
+  expect(start).toHaveBeenCalledOnce();
   expect(f.recorder().stream.getVideoTracks()).toEqual([
     track,
   ]);

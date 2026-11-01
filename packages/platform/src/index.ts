@@ -1,4 +1,7 @@
 export * from "./recording";
+export * from "./presentation-layout";
+export type * from "./screen-receive";
+import type { NativeScreenReceive } from "./screen-receive";
 export type * from "./automation";
 export { DEFAULT_MCP_SERVER } from "./automation";
 import type { NativeAutomation } from "./automation";
@@ -66,6 +69,35 @@ export type FileConflictResolver = (
 ) => Promise<FileConflictAction | null>;
 
 export interface PlatformRuntime {
+  /** Bind an already decoded native source beneath the existing video controls. */
+  readonly videoPresentation?: {
+    sample?(track: MediaStreamTrack):
+      | {
+          read(at?: number): {
+            fps?: number;
+            totalFrames?: number;
+            implementation?: string;
+          };
+          close(): void;
+        }
+      | undefined;
+    bind(
+      track: MediaStreamTrack,
+      video: HTMLVideoElement,
+      active?: boolean,
+    ): (() => void) | undefined;
+    recording?(track: MediaStreamTrack):
+      | ((
+          signal: AbortSignal,
+          ended: (error?: Error) => void,
+        ) => Promise<{
+          stream: MediaStream;
+          /** Seed retained pixels after the recorder has attached its consumer. */
+          start?(): Promise<void>;
+          close(): void;
+        }>)
+      | undefined;
+  };
   readonly automation?: NativeAutomation;
   readonly filesystem?: NativeFileSystem;
   /** Open local content with the system default application. */
@@ -96,6 +128,7 @@ export interface PlatformRuntime {
   readonly supportsServiceWorker: boolean;
   readonly capture?: NativeCapture;
   readonly screenShare?: NativeScreenShare;
+  readonly screenReceive?: NativeScreenReceive;
   /** Initial native visibility and later changes; focus alone does not hide a window.
    * Shared by presentation consumers. Disposing never stops capture or transport. */
   watchVisibility?(

@@ -1,3 +1,4 @@
+import { platform } from "@/libs/platform/runtime";
 import { useContext } from "solid-js";
 import { PresentationDiagnosticsContext } from "@/libs/state/presentation-diagnostics-context";
 import { useViewScopes } from "@/libs/state/view-scopes";
@@ -114,6 +115,11 @@ export const VideoDisplay = (
 
   const [videoRef, setVideoRef] =
     createSignal<HTMLVideoElement | null>(null);
+  // Membership/layout changes can invalidate the getter while its boolean
+  // stays true. Rebinding would hide the native plane and remove its mask.
+  const playbackActive = createMemo(
+    () => props.playbackActive !== false,
+  );
 
   const presentation = useContext(
     PresentationDiagnosticsContext,
@@ -123,6 +129,18 @@ export const VideoDisplay = (
       video = videoRef();
     if (track && video && presentation)
       onCleanup(presentation.watch(track, video));
+  });
+  createEffect(() => {
+    const track = videoTrack(),
+      video = videoRef();
+    if (track && video) {
+      const unbind = platform.videoPresentation?.bind(
+        track,
+        video,
+        playbackActive(),
+      );
+      if (unbind) onCleanup(unbind);
+    }
   });
   let playbackAttempt = 0;
   let playPending = false;
@@ -242,7 +260,7 @@ export const VideoDisplay = (
   createVideoPlaybackRecovery({
     video: videoRef,
     track: videoTrack,
-    active: () => props.playbackActive !== false,
+    active: playbackActive,
     resume: (video, track, restartPending) => {
       const currentStream = videoStream();
       if (

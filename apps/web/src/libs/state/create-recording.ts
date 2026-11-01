@@ -17,6 +17,7 @@ import { createCacheManager } from "@/libs/application/cache-service";
 import { sessionService } from "@/libs/application/session-service";
 import { localFileErrorDetail } from "@/libs/utils/local-file-error";
 import { appState } from "./app-state";
+import { platform } from "@/libs/platform/runtime";
 import type { AppStateContextProps } from "./app-state-context";
 
 interface RecordingPresentation {
@@ -161,8 +162,31 @@ export function createRecording(app: AppStateContextProps) {
       const publication = options.local
         ? getNativeScreenPublication(options.video)
         : undefined;
+      const nativeInput =
+        platform.videoPresentation?.recording?.(
+          options.video,
+        );
       const open =
-        publication?.openRecording?.bind(publication);
+        publication?.openRecording?.bind(publication) ??
+        (nativeInput
+          ? async (
+              signal: AbortSignal,
+              ended: (error?: Error) => void,
+            ) => {
+              const input = await nativeInput(
+                signal,
+                ended,
+              );
+              return {
+                stream: new MediaStream([
+                  ...input.stream.getVideoTracks(),
+                  ...audio,
+                ]),
+                start: input.start,
+                close: input.close,
+              };
+            }
+          : undefined);
       void service
         .start({
           id: options.id,

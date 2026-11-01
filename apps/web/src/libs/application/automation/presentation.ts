@@ -1,6 +1,13 @@
 import { createVideoPresentationStats } from "@/libs/domain/video-presentation-stats";
 /** Read-only player observers, owned by the application diagnostics service. */
 export class PresentationDiagnostics {
+  constructor(
+    private readonly native?: (
+      track: MediaStreamTrack,
+    ) =>
+      | { read(): Record<string, unknown>; close(): void }
+      | undefined,
+  ) {}
   private readonly disposers = new Set<() => void>();
   private readonly readers = new Map<
     MediaStreamTrack,
@@ -10,8 +17,18 @@ export class PresentationDiagnostics {
     track: MediaStreamTrack,
     video: HTMLVideoElement,
   ): () => void {
-    const sampler = createVideoPresentationStats(video);
+    const native = this.native?.(track);
+    const sampler =
+      native ?? createVideoPresentationStats(video);
     const read = () => {
+      if (native)
+        return {
+          ...native.read(),
+          documentVisibility:
+            video.ownerDocument.visibilityState,
+          width: video.videoWidth,
+          height: video.videoHeight,
+        };
       const quality = video.getVideoPlaybackQuality?.();
       return {
         ...sampler.read(),

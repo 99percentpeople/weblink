@@ -322,7 +322,7 @@
       "readback_buffers_1": "Búfer único",
       "readback_buffers_2": "Doble búfer (predeterminado)",
       "readback_buffers_3": "Triple búfer",
-      "readback_buffers_description": "Más búferes permiten procesar fotogramas en paralelo, pero consumen más memoria GPU y pueden aumentar la latencia. Se aplica a la próxima sesión.",
+      "readback_buffers_description": "Solo afecta al emisor cuando necesita leer fotogramas de la GPU a la CPU, no a la grabación del receptor ni a la visualización GPU integrada. Más búferes permiten procesar fotogramas en paralelo, pero consumen más memoria GPU y pueden aumentar la latencia. Se aplica a la próxima sesión.",
       "color_matrix": "Matriz de color",
       "color_auto": "Automático",
       "color_range": "Rango de color",

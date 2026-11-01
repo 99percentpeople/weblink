@@ -8,7 +8,8 @@
     "tauri": "tauri",
     "lint": "tsc --noEmit",
     "check": "cargo check --locked --manifest-path src-tauri/Cargo.toml",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser:recording": "node ../web/scripts/run-browser-check.mjs --native-presentation-recording"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

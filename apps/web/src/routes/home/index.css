@@ -300,14 +300,15 @@
 .meeting-action-glass-layer {
   @apply absolute inset-0;
   border-radius: inherit;
-  background: rgb(12 17 25 / 10%);
-  /* Opacity belongs on each filter, never on an ancestor backdrop root. */
+  background: linear-gradient(
+    135deg,
+    rgb(12 17 25 / 24%),
+    rgb(12 17 25 / 42%)
+  );
   opacity: calc(
     var(--glass-visibility, 1) * var(--action-opacity, 1)
   );
   transition: opacity 0.28s ease;
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  backdrop-filter: blur(var(--glass-blur));
   mask-size: 100% 100%;
   mask-repeat: no-repeat;
 }
@@ -322,9 +323,11 @@
   @apply -z-1 pointer-events-none absolute inset-0;
   content: "";
   border-radius: inherit;
-  background: rgb(12 17 25 / 56%);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: linear-gradient(
+    135deg,
+    rgb(12 17 25 / 40%),
+    rgb(12 17 25 / 56%)
+  );
   box-shadow: 0 3px 12px #0002;
   opacity: var(--action-opacity, 1);
   transition: opacity 0.2s;
@@ -380,7 +383,7 @@
 .meeting-action-fan-surface {
   @apply pointer-events-none absolute;
   visibility: hidden;
-  /* Keep the filtered masks at their final size while the buttons move. */
+  /* Keep the soft contour at its final size while the buttons move. */
   transition: visibility 0s 0.28s;
 }
 .meeting-action-fan-hit {
@@ -431,15 +434,12 @@
   @apply inset-auto bottom-full right-0 flex w-max flex-col gap-1 overflow-auto rounded-xl p-1.5;
   visibility: hidden;
   /* One continuous surface also covers the menu while its content scrolls. */
-  background: rgb(
-    12 17 25 / calc(var(--glass-visibility) * 68%)
+  background: linear-gradient(
+    135deg,
+    rgb(12 17 25 / 52%),
+    rgb(12 17 25 / 68%)
   );
-  -webkit-backdrop-filter: blur(
-    calc(var(--glass-visibility) * 18px)
-  );
-  backdrop-filter: blur(
-    calc(var(--glass-visibility) * 18px)
-  );
+  opacity: var(--glass-visibility);
   box-shadow: 0 8px 24px
     rgb(0 0 0 / calc(var(--glass-visibility) * 18%));
   max-width: var(--menu-width);
@@ -450,8 +450,7 @@
   scrollbar-color: #ffffff40 transparent;
   transition:
     visibility 0s 0.28s,
-    background 0.2s,
-    backdrop-filter 0.2s,
+    opacity 0.2s,
     box-shadow 0.2s;
 }
 .meeting-action-panel.is-list .meeting-tile-action {

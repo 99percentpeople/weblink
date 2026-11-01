@@ -99,7 +99,12 @@ export class AutomationDiagnostics {
                   preview: !!batch.preview,
                   ...state,
                   ...value,
-                  ...(detail ? { counters } : {}),
+                  ...(detail
+                    ? {
+                        counters,
+                        nativeReceive: sample.nativeReceive,
+                      }
+                    : {}),
                 };
               }),
             );

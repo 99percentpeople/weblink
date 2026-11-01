@@ -8,6 +8,7 @@ import {
   type Accessor,
 } from "solid-js";
 import { animate } from "motion/mini";
+import { notifyPresentationLayout } from "@weblink/platform";
 import type { AnimationPlaybackControls } from "motion";
 import { createReducedMotion } from "./reduced-motion";
 import type {
@@ -554,6 +555,9 @@ export function createLayoutTransition(
         for (const reset of scroll) reset();
       };
       cleanup = release;
+      // Native video planes need an explicit wakeup for compositor-only WAAPI.
+      for (const { element } of entries)
+        notifyPresentationLayout(element);
       if (!animations.length) finish();
       else
         void Promise.allSettled(

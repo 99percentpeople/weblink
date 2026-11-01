@@ -322,7 +322,7 @@
       "readback_buffers_1": "シングルバッファ",
       "readback_buffers_2": "ダブルバッファ（既定）",
       "readback_buffers_3": "トリプルバッファ",
-      "readback_buffers_description": "バッファを増やすとフレーム処理を並行できますが、GPUメモリの使用量と遅延が増える場合があります。次回の共有から適用されます。",
+      "readback_buffers_description": "送信側で GPU のフレームを CPU に読み戻す場合にのみ影響し、受信側の録画や GPU による埋め込み表示には影響しません。バッファを増やすとフレーム処理を並行できますが、GPU メモリの使用量と遅延が増える場合があります。次回の共有から適用されます。",
       "color_matrix": "色変換マトリクス",
       "color_auto": "自動",
       "color_range": "色範囲",

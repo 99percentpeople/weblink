@@ -322,7 +322,7 @@
       "readback_buffers_1": "Einzelpuffer",
       "readback_buffers_2": "Doppelter Puffer (Standard)",
       "readback_buffers_3": "Dreifachpuffer",
-      "readback_buffers_description": "Mehr Puffer ermöglichen eine überlappende Frame-Verarbeitung, verbrauchen jedoch mehr GPU-Speicher und können die Latenz erhöhen. Gilt für die nächste Freigabe.",
+      "readback_buffers_description": "Betrifft nur das Zurücklesen von GPU-Bildern zur CPU auf der Senderseite, nicht die Aufnahme auf der Empfängerseite oder die eingebettete GPU-Anzeige. Mehr Puffer ermöglichen eine überlappende Frame-Verarbeitung, verbrauchen jedoch mehr GPU-Speicher und können die Latenz erhöhen. Gilt für die nächste Freigabe.",
       "color_matrix": "Farbmatrix",
       "color_auto": "Automatisch",
       "color_range": "Farbpalette",

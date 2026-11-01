@@ -15,7 +15,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-function setup() {
+function setup(maxProcessingDelayMs?: number) {
   const page = Object.assign(new EventTarget(), {
     visibilityState: "visible",
   });
@@ -23,6 +23,7 @@ function setup() {
   let frames = 100,
     bytes = 1000,
     id = "video";
+  let processing: number | undefined = 0;
   const report = () =>
     new Map([
       [
@@ -32,6 +33,7 @@ function setup() {
           kind: "video",
           framesDecoded: frames,
           bytesReceived: (bytes += 1000),
+          totalProcessingDelay: processing,
         },
       ],
     ]) as unknown as RTCStatsReport;
@@ -45,6 +47,7 @@ function setup() {
     pc as unknown as RTCPeerConnection,
     healthy,
     stalled,
+    { maxProcessingDelayMs },
   );
   disposers.push(stop);
   return {
@@ -54,7 +57,14 @@ function setup() {
     stalled,
     stop,
     report,
-    progress: () => frames++,
+    progress: (count = 1, delayMs = 10) => {
+      frames += count;
+      if (processing !== undefined)
+        processing += (count * delayMs) / 1000;
+    },
+    processing: (value: number | undefined) => {
+      processing = value;
+    },
     replace: () => {
       id = "replacement";
       frames = 0;
@@ -182,3 +192,76 @@ it("ignores late statistics and page events after disposal", async () => {
   expect(f.stalled).not.toHaveBeenCalled();
   expect(f.healthy).not.toHaveBeenCalled();
 });
+
+it("recovers a continuously overloaded native receiver even while frames progress", async () => {
+  const f = setup(250);
+  await vi.advanceTimersByTimeAsync(0);
+  for (let i = 0; i < 3; i++) {
+    f.progress(40, 400);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+  expect(f.stalled).not.toHaveBeenCalled();
+  f.progress(40, 400);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(f.stalled).toHaveBeenCalledOnce();
+  expect(f.healthy).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(f.stalled).toHaveBeenCalledOnce();
+});
+
+it("leaves browser receivers on stall-only recovery", async () => {
+  const f = setup();
+  await vi.advanceTimersByTimeAsync(0);
+  for (let i = 0; i < 15; i++) {
+    f.progress(40, 400);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+  expect(f.stalled).not.toHaveBeenCalled();
+  expect(f.healthy).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "recovered",
+  "missing",
+  "invalid",
+  "reset",
+  "hidden",
+  "suspended",
+])(
+  "requires fresh overload evidence after %s",
+  async (reason) => {
+    const f = setup(250);
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < 3; i++) {
+      f.progress(40, 400);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    if (reason === "missing") f.processing(undefined);
+    if (reason === "invalid") f.processing(Number.NaN);
+    if (reason === "reset") f.processing(0);
+    if (reason === "hidden") {
+      f.page.visibilityState = "hidden";
+      f.page.dispatchEvent(new Event("visibilitychange"));
+    }
+    if (reason === "suspended")
+      vi.setSystemTime(Date.now() + 60000);
+    f.progress(60, 10);
+    await vi.advanceTimersByTimeAsync(1000);
+    if (reason === "hidden") {
+      f.page.visibilityState = "visible";
+      f.page.dispatchEvent(new Event("visibilitychange"));
+    }
+    if (reason === "missing" || reason === "invalid")
+      f.processing(0);
+    for (let i = 0; i < 3; i++) {
+      f.progress(40, 400);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(f.stalled).not.toHaveBeenCalled();
+    for (let i = 0; i < 2; i++) {
+      f.progress(40, 400);
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(f.stalled).toHaveBeenCalledOnce();
+  },
+);

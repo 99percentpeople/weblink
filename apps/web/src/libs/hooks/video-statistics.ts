@@ -15,6 +15,7 @@ import {
   type VideoPresentationStats,
 } from "../domain/video-presentation-stats";
 import { createPresentationVisible } from "./presentation-visible";
+import { platform } from "@/libs/platform/runtime";
 
 export interface VideoStatisticsRow
   extends VideoStatsValue, VideoPresentationStats {
@@ -50,6 +51,7 @@ export function createVideoStatistics(
     setRows([]);
     if (!current || !element || !visible()) return;
     const presentation =
+      platform.videoPresentation?.sample?.(current) ??
       createVideoPresentationStats(element);
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;

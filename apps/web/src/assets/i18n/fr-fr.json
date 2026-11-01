@@ -322,7 +322,7 @@
       "readback_buffers_1": "Tampon unique",
       "readback_buffers_2": "Double tampon (par défaut)",
       "readback_buffers_3": "Triple tampon",
-      "readback_buffers_description": "Un plus grand nombre de tampons permet le traitement des images qui se chevauchent, mais utilise plus de mémoire GPU et peut augmenter la latence. S'applique au prochain partage.",
+      "readback_buffers_description": "Concerne uniquement la lecture des images du GPU vers le CPU côté émetteur, sans effet sur l'enregistrement côté récepteur ni sur l'affichage GPU intégré. Davantage de tampons permettent de traiter les images en parallèle, mais utilisent plus de mémoire GPU et peuvent augmenter la latence. S'applique au prochain partage.",
       "color_matrix": "Matrice de couleurs",
       "color_auto": "Automatique",
       "color_range": "Gamme de couleurs",

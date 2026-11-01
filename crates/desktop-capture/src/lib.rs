@@ -18,6 +18,10 @@ pub use observers::StatusObserver;
 pub mod damage;
 pub mod geometry;
 pub mod media;
+#[cfg(windows)]
+pub mod presentation;
+#[cfg(windows)]
+pub mod receive;
 pub mod snapshot;
 #[cfg(windows)]
 pub mod surface;
