@@ -974,7 +974,7 @@ The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
 encoder bitrate limits, congestion control and retransmission remain active.
 Both options belong to the native screen session's factory, not process-global
 settings. The binding changes and upstream versions are documented in the fork's
-[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/062d494b80b73df4b01b8320f456bf4334ee3608/WEBLINK.md).
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/45c90ead0cfb1ffa01ab3ac53689ed0b8f664347/WEBLINK.md).
 Update the fork first, then the full Cargo revision and lockfile together; normal
 builds never follow the branch tip. Preserve upstream license notices and verify
 native-to-browser RTP when upgrading the bindings.

@@ -43,25 +43,25 @@ extern "C" HRESULT wl_upload_nv12(Upload** state,
     *state = upload.release();
   }
   CHECK((*state)->device->GetDeviceRemovedReason());
-  if (reuse) {
-    // Rust only returns textures after the complete compositor/readback lease
-    // ends. UpdateSubresource snapshots CPU bytes before returning to the caller.
-    (*state)->context->UpdateSubresource(reuse, 0, nullptr, data, width, 0);
-    CHECK((*state)->device->GetDeviceRemovedReason());
-    reuse->AddRef();
-    *result = reuse;
-    return S_OK;
+  ComPtr<ID3D11Texture2D> texture = reuse;
+  if (!texture) {
+    D3D11_TEXTURE2D_DESC td{};
+    td.Width = width;
+    td.Height = height;
+    td.MipLevels = td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_NV12;
+    td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_DEFAULT;
+    // Video processor inputs allow BindFlags = 0. CPU uploads do not need a
+    // decoder output binding or driver-specific creation-time plane uploads.
+    CHECK((*state)->device->CreateTexture2D(&td, nullptr, &texture));
   }
-  D3D11_TEXTURE2D_DESC td{};
-  td.Width = width;
-  td.Height = height;
-  td.MipLevels = td.ArraySize = 1;
-  td.Format = DXGI_FORMAT_NV12;
-  td.SampleDesc.Count = 1;
-  td.Usage = D3D11_USAGE_DEFAULT;
-  td.BindFlags = D3D11_BIND_DECODER;
-  D3D11_SUBRESOURCE_DATA initial{data, width, width * height * 3 / 2};
-  return (*state)->device->CreateTexture2D(&td, &initial, result);
+  // Rust only returns textures after the complete compositor/readback lease
+  // ends. UpdateSubresource snapshots CPU bytes before returning to the caller.
+  (*state)->context->UpdateSubresource(texture.Get(), 0, nullptr, data, width, 0);
+  CHECK((*state)->device->GetDeviceRemovedReason());
+  *result = texture.Detach();
+  return S_OK;
 }
 extern "C" void wl_upload_destroy(Upload* upload) {
   delete upload;

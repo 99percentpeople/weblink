@@ -2502,8 +2502,8 @@ dependencies = [
 
 [[package]]
 name = "libwebrtc"
-version = "0.3.49"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=5926e8c0f8b11b067185508f9395dbe51341f2a4#5926e8c0f8b11b067185508f9395dbe51341f2a4"
+version = "0.3.55"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=45c90ead0cfb1ffa01ab3ac53689ed0b8f664347#45c90ead0cfb1ffa01ab3ac53689ed0b8f664347"
 dependencies = [
  "cxx",
  "jni 0.21.1",
@@ -2697,6 +2697,18 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
 
 [[package]]
 name = "notify"
@@ -5315,6 +5327,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5733,8 +5751,8 @@ dependencies = [
 
 [[package]]
 name = "webrtc-sys"
-version = "0.3.47"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=5926e8c0f8b11b067185508f9395dbe51341f2a4#5926e8c0f8b11b067185508f9395dbe51341f2a4"
+version = "0.3.52"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=45c90ead0cfb1ffa01ab3ac53689ed0b8f664347#45c90ead0cfb1ffa01ab3ac53689ed0b8f664347"
 dependencies = [
  "cc",
  "cxx",
@@ -5747,8 +5765,8 @@ dependencies = [
 
 [[package]]
 name = "webrtc-sys-build"
-version = "0.3.19"
-source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=5926e8c0f8b11b067185508f9395dbe51341f2a4#5926e8c0f8b11b067185508f9395dbe51341f2a4"
+version = "0.3.21"
+source = "git+https://github.com/99percentpeople/rust-sdks.git?rev=45c90ead0cfb1ffa01ab3ac53689ed0b8f664347#45c90ead0cfb1ffa01ab3ac53689ed0b8f664347"
 dependencies = [
  "anyhow",
  "fs2",
@@ -5756,7 +5774,7 @@ dependencies = [
  "reqwest 0.12.28",
  "scratch",
  "semver",
- "zip 0.6.6",
+ "zip 9.2.0",
 ]
 
 [[package]]
@@ -6602,18 +6620,6 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "0.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
-dependencies = [
- "byteorder",
- "crc32fast",
- "crossbeam-utils",
- "flate2",
-]
-
-[[package]]
-name = "zip"
 version = "4.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
@@ -6622,6 +6628,22 @@ dependencies = [
  "crc32fast",
  "indexmap 2.14.2",
  "memchr",
+]
+
+[[package]]
+name = "zip"
+version = "9.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f5b58784007ff6e5f280ec82c8596686a3b9b5dd5836c63288d4479f84728b9"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap 2.14.2",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

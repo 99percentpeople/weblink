@@ -15,6 +15,40 @@ mod startup_probe;
 mod vfr;
 
 #[test]
+fn transport_ceiling_uses_upstream_limits_and_rejects_invalid_or_closed_updates() {
+    for _ in 0..4 {
+        let factory = PeerConnectionFactory::default();
+        let connection = factory
+            .create_peer_connection(RtcConfiguration::default())
+            .unwrap();
+        connection
+            .set_bitrate(BitrateSettings {
+                min_bitrate_bps: Some(10_000_000),
+                max_bitrate_bps: Some(20_000_000),
+                ..Default::default()
+            })
+            .unwrap();
+        let configure = |max_bitrate| {
+            MediaSession::configure_transport_bitrate(
+                &connection,
+                &MediaOptions {
+                    max_bitrate,
+                    ..Default::default()
+                },
+            )
+        };
+        // A max-only update clears the prior API floor without restarting GCC.
+        configure(8_000_000).unwrap();
+        configure(150_000_000).unwrap();
+        for invalid in [0, i32::MAX as u64 + 1, u64::MAX] {
+            assert!(configure(invalid).is_err());
+        }
+        connection.close();
+        assert!(configure(8_000_000).is_err());
+    }
+}
+
+#[test]
 fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         for late in [false, true] {

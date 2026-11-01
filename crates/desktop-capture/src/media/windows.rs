@@ -26,7 +26,7 @@ use crate::surface::{FrameSink, TextureFrame};
 use crate::Result;
 use libwebrtc::{
     media_stream_track::MediaStreamTrack,
-    peer_connection::{IceGatheringState, OfferOptions, PeerConnection},
+    peer_connection::{BitrateSettings, IceGatheringState, OfferOptions, PeerConnection},
     peer_connection_factory::{
         native::PeerConnectionFactoryExt, ContinualGatheringPolicy, IceTransportsType,
         PeerConnectionFactory, RtcConfiguration,
@@ -487,9 +487,16 @@ impl MediaSession {
             .any(|sender| matches!(sender.track(), Some(MediaStreamTrack::Audio(_))));
         // RTP encoding limits alone do not set the transport's probe ceiling.
         // Budget the audio sender too, without imposing a minimum or start rate.
-        let maximum = options.max_bitrate + if has_audio { AUDIO_BITRATE_BPS } else { 0 };
+        let maximum = options
+            .max_bitrate
+            .checked_add(if has_audio { AUDIO_BITRATE_BPS } else { 0 })
+            .filter(|maximum| (1..=i32::MAX as u64).contains(maximum))
+            .ok_or("Maximum transport bitrate must be between 1 and INT_MAX bits per second")?;
         connection
-            .set_max_bitrate(u32::try_from(maximum).map_err(|e| e.to_string())?)
+            .set_bitrate(BitrateSettings {
+                max_bitrate_bps: Some(maximum),
+                ..Default::default()
+            })
             .map_err(|e| e.to_string())
     }
 
