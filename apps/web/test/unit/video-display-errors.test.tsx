@@ -119,6 +119,30 @@ async function setup(
 }
 
 describe("VideoDisplay playback error notifications", () => {
+  it("retains the native binding when first-frame metadata and audio refresh the stream wrapper", async () => {
+    const unbind = vi.fn();
+    nativePresentation.bind.mockReturnValue(unbind);
+    const { source, video, setCurrent, unmount } =
+      await setup(track("native-screen"));
+    const attached = video.srcObject;
+    fireEvent.playing(video);
+    setCurrent(stream(source));
+    await flush();
+    const audio = new Track("native-audio");
+    audio.kind = "audio";
+    setCurrent(
+      new Stream([
+        source,
+        audio as unknown as MediaStreamTrack,
+      ]) as unknown as MediaStream,
+    );
+    await flush();
+    expect(video.srcObject).toBe(attached);
+    expect(nativePresentation.bind).toHaveBeenCalledOnce();
+    expect(unbind).not.toHaveBeenCalled();
+    unmount();
+    expect(unbind).toHaveBeenCalledOnce();
+  });
   it("retains native binding when membership changes without changing playback visibility", async () => {
     const unbind = vi.fn();
     nativePresentation.bind.mockReturnValue(unbind);

@@ -186,7 +186,24 @@ export function readPresentationGeometry(
     if (parent === document.fullscreenElement) break;
   }
   visible &&= right > left && bottom > top;
-  return { rect, clips, local, image, visible, opacity };
+  // Background removal covers the complete element, including its black bars.
+  // A separate fitted-image mask can otherwise leave a light antialiased seam
+  // where the page, placeholder and native plane meet at fractional pixels.
+  const surface: SurfaceRect = {
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+  };
+  return {
+    rect,
+    surface,
+    clips,
+    local,
+    image,
+    visible,
+    opacity,
+  };
 }
 export type PresentationGeometry = ReturnType<
   typeof readPresentationGeometry

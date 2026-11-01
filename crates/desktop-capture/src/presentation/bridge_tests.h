@@ -54,13 +54,14 @@ static HRESULT test_texture(ID3D11Device* device, UINT width, UINT height,
   td.SampleDesc.Count = 1;
   td.BindFlags = D3D11_BIND_DECODER;
   std::vector<BYTE> pixels(width * height * 3 / 2, 128);
-  std::vector<D3D11_SUBRESOURCE_DATA> initial(array_size);
-  for (auto& data : initial) {
-    data.pSysMem = pixels.data();
-    data.SysMemPitch = width;
-    data.SysMemSlicePitch = static_cast<UINT>(pixels.size());
-  }
-  return device->CreateTexture2D(&td, initial.data(), texture);
+  // Fill allocated slices explicitly, like a decoder, instead of relying on
+  // driver-specific creation-time uploads for a multiplanar texture array.
+  CHECK(device->CreateTexture2D(&td, nullptr, texture));
+  ComPtr<ID3D11DeviceContext> context;
+  device->GetImmediateContext(&context);
+  for (UINT i = 0; i < array_size; ++i)
+    context->UpdateSubresource(*texture, i, nullptr, pixels.data(), width, 0);
+  return S_OK;
 }
 extern "C" int wl_composition_test_cache(HWND hwnd) {
   Composition* raw = nullptr;
@@ -74,7 +75,7 @@ extern "C" int wl_composition_test_cache(HWND hwnd) {
   SUCCEED(test_texture(device.Get(), 656, 368, &texture));
   SUCCEED(wl_composition_layout(c.get(), 1, 0, 0, 640, 360, 0, TRUE));
   auto& v = *c->views.at(1);
-  SUCCEED(configure(c.get(), 1, v, texture.Get(), 640, 360));
+  SUCCEED(configure(v, texture.Get(), 640, 360));
   auto processor = v.processor;
   auto output = v.output;
   D3D11_TEXTURE2D_DESC td{};
@@ -89,7 +90,7 @@ extern "C" int wl_composition_test_cache(HWND hwnd) {
   D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC input_desc{};
   second->GetDesc(&input_desc);
   VERIFY(input_desc.Texture2D.ArraySlice == 1);
-  SUCCEED(configure(c.get(), 1, v, texture.Get(), 640, 360));
+  SUCCEED(configure(v, texture.Get(), 640, 360));
   VERIFY(v.processor == processor && v.output == output && v.inputs.size() == 2);
   HANDLE wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
   VERIFY(wake);
@@ -170,8 +171,39 @@ extern "C" int wl_composition_test_cache(HWND hwnd) {
   }
   ComPtr<ID3D11Texture2D> resized;
   SUCCEED(test_texture(device.Get(), 1296, 736, &resized));
-  SUCCEED(configure(c.get(), 1, v, resized.Get(), 1280, 720));
+  SUCCEED(wl_composition_commit(c.get()));
+  auto displayed = v.displayed;
+  SUCCEED(configure(v, resized.Get(), 1280, 720));
+  // Preparing a new resolution must not publish an empty swap chain or resize
+  // the still-visible previous picture before the replacement's first Present.
+  VERIFY(!c->dirty && v.clip_width == 640 && v.clip_height == 360);
+  VERIFY(v.displayed == displayed && v.displayed != v.swap);
   VERIFY(v.inputs.empty() && v.processor != processor && v.output != output && !v.parameters_set);
+  // Other layout updates may commit while the replacement is waiting. They
+  // must still transform/clip the old image until a valid new frame is presented.
+  SUCCEED(wl_composition_layout(c.get(), 1, 10, 20, 1280, 720, 0, TRUE));
+  SUCCEED(wl_composition_commit(c.get()));
+  VERIFY(v.displayed == displayed && v.clip_width == 640 && v.clip_height == 360);
+  {
+    const auto deadline = GetTickCount64() + 4000;
+    HRESULT hr;
+    while ((hr = wl_composition_submit(c.get(), 1, resized.Get(), 0,
+                                        2, 2, 1280, 720, TRUE, FALSE, TRUE)) == S_FALSE) {
+      VERIFY(v.displayed == displayed && !c->dirty);
+      VERIFY(GetTickCount64() < deadline);
+      SUCCEED(wl_composition_wait(c.get(), wake));
+    }
+    SUCCEED(hr);
+    VERIFY(v.displayed == v.swap && v.displayed != displayed && c->dirty);
+    VERIFY(v.clip_width == 1280 && v.clip_height == 720);
+    SUCCEED(wl_composition_commit(c.get()));
+    while ((hr = wl_composition_poll(c.get(), 1)) == S_FALSE) {
+      VERIFY(GetTickCount64() < deadline);
+      SUCCEED(wl_composition_wait(c.get(), wake));
+    }
+    SUCCEED(hr);
+  }
+  displayed = v.displayed;
   processor = v.processor;
   output = v.output;
   ComPtr<ID3D11Device> other;
@@ -179,7 +211,8 @@ extern "C" int wl_composition_test_cache(HWND hwnd) {
       D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
       nullptr, 0, D3D11_SDK_VERSION, &other, nullptr, nullptr));
   SUCCEED(test_texture(other.Get(), 1296, 736, &resized));
-  SUCCEED(configure(c.get(), 1, v, resized.Get(), 1280, 720));
+  SUCCEED(configure(v, resized.Get(), 1280, 720));
+  VERIFY(v.displayed == displayed && v.displayed != v.swap && !c->dirty);
   VERIFY(v.device == other && v.inputs.empty() && v.processor != processor && v.output != output);
   // A hidden view must stop waiting on DXGI availability (which may never signal
   // while occluded), so close/layout updates always remain able to wake it.

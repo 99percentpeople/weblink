@@ -1,4 +1,4 @@
-/** Native receive connections retain standard SDP/ICE and browser presentation. */
+/** Native receive connections retain standard SDP/ICE and a UI-facing media stream. */
 export interface NativeScreenReceive {
   /** False keeps decode failures and retries on the native receive path. */
   readonly allowBrowserFallback?: boolean;

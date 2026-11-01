@@ -14,6 +14,7 @@ it("keeps shared mask resources alive until the last view detaches and recreates
   const rect = { x: 0, y: 0, width: 640, height: 360 };
   const geometry: PresentationGeometry = {
     rect,
+    surface: rect,
     image: rect,
     local: { width: 640, height: 360 },
     clips: [
@@ -38,6 +39,7 @@ it("keeps shared mask resources alive until the last view detaches and recreates
   layout.show(secondKey, second, {
     ...geometry,
     rect: { ...rect, x: 20 },
+    surface: { ...rect, x: 20 },
     opacity: 0.5,
   });
   expect([...mask.querySelectorAll("clipPath")]).toEqual(

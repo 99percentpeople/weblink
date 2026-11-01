@@ -77,6 +77,9 @@ struct View {
   ComPtr<ID3D11VideoProcessorEnumerator> enumerator;
   ComPtr<ID3D11VideoProcessor> processor;
   ComPtr<IDXGISwapChain2> swap;
+  // Keep the last presented image while a replacement swap chain is prepared.
+  ComPtr<IDXGISwapChain2> displayed;
+  UINT displayed_width = 0, displayed_height = 0;
   ComPtr<ID3D11Query> completion;
   ComPtr<ID3D11VideoProcessorOutputView> output;
   ComPtr<ID3D11VideoProcessorInputView> transient_input;
@@ -187,19 +190,20 @@ extern "C" HRESULT wl_composition_layout(Composition* c,
     v->waiting_available = false;
   CHECK(v->visual->SetOffsetX(x));
   CHECK(v->visual->SetOffsetY(y));
-  if (v->width && v->height) {
-    D2D_MATRIX_3X2_F matrix{width / v->width, 0, 0, height / v->height, 0, 0};
+  if (v->displayed_width && v->displayed_height) {
+    D2D_MATRIX_3X2_F matrix{width / v->displayed_width, 0, 0,
+                           height / v->displayed_height, 0, 0};
     CHECK(v->visual->SetTransform(matrix));
-    const UINT clip_width = visible ? v->width : 0;
-    const UINT clip_height = visible ? v->height : 0;
+    const UINT clip_width = visible ? v->displayed_width : 0;
+    const UINT clip_height = visible ? v->displayed_height : 0;
     if (v->clip_width != clip_width || v->clip_height != clip_height) {
       CHECK(v->clip->SetRight(float(clip_width)));
       CHECK(v->clip->SetBottom(float(clip_height)));
       v->clip_width = clip_width;
       v->clip_height = clip_height;
     }
-    const float rx = width > 0 ? radius * v->width / width : 0;
-    const float ry = height > 0 ? radius * v->height / height : 0;
+    const float rx = width > 0 ? radius * v->displayed_width / width : 0;
+    const float ry = height > 0 ? radius * v->displayed_height / height : 0;
     if (v->clip_rx != rx || v->clip_ry != ry) {
       CHECK(v->clip->SetTopLeftRadiusX(rx));
       CHECK(v->clip->SetTopLeftRadiusY(ry));
@@ -215,9 +219,7 @@ extern "C" HRESULT wl_composition_layout(Composition* c,
   }
   return S_OK;
 }
-static HRESULT configure(Composition* c,
-                         UINT64 id,
-                         View& v,
+static HRESULT configure(View& v,
                          ID3D11Texture2D* texture,
                          UINT width,
                          UINT height) {
@@ -314,13 +316,12 @@ static HRESULT configure(Composition* c,
   D3D11_VIDEO_PROCESSOR_COLOR_SPACE rgb{};
   rgb.RGB_Range = 0;
   v.video_context->VideoProcessorSetOutputColorSpace(v.processor.Get(), &rgb);
-  CHECK(v.visual->SetContent(v.swap.Get()));
   v.width = width;
   v.height = height;
   v.input_width = td.Width;
   v.input_height = td.Height;
-  CHECK(wl_composition_layout(c, id, v.x, v.y, v.display_width,
-                               v.display_height, v.radius, v.visible));
+  // Do not alter the visual here. Admission can yield before the first Present,
+  // and another view/layout may commit while this replacement is still empty.
   v.configured = true;
   return S_OK;
 }
@@ -397,7 +398,7 @@ extern "C" HRESULT wl_composition_submit(Composition* c,
   View& v = *it->second;
   if (v.pending)
     return S_FALSE;
-  CHECK(configure(c, id, v, texture, width, height));
+  CHECK(configure(v, texture, width, height));
   CHECK(v.device->GetDeviceRemovedReason());
   if (!v.admitted) {
     DWORD ready = WaitForSingleObject(v.available, 0);
@@ -449,7 +450,18 @@ extern "C" HRESULT wl_composition_submit(Composition* c,
   v.pending = true;
   v.admitted = false;
   // A failed Present still leaves a GPU read in flight; the caller must poll.
-  return v.swap->Present(0, 0);
+  CHECK(v.swap->Present(0, 0));
+  if (v.displayed != v.swap) {
+    CHECK(v.visual->SetContent(v.swap.Get()));
+    v.displayed = v.swap;
+    v.displayed_width = v.width;
+    v.displayed_height = v.height;
+    // Content and its transform/clip become visible in the same composition
+    // commit. Until now, layout updates continued to use the previous image.
+    CHECK(wl_composition_layout(c, id, v.x, v.y, v.display_width,
+                                 v.display_height, v.radius, v.visible));
+  }
+  return S_OK;
 }
 extern "C" HRESULT wl_composition_poll(Composition* c, UINT64 id) {
   auto it = c->views.find(id);

@@ -2166,6 +2166,39 @@ Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
 MediaStream destination, preserving the existing mute, volume and playback owner.
 Browser autoplay policy still applies; user interaction resumes suspended audio.
 
+### Platform boundaries
+
+`packages/platform` owns the receive, presentation binding and recording contracts;
+the web application does not import Tauri or GPU APIs. Its media stream can carry
+either real video pixels or a lifecycle track bound to a native surface. The
+desktop adapter owns this distinction, audio playback and page layout observation.
+Only opaque source IDs and validated layout cross the presentation IPC boundary.
+
+The Tauri `receive` and `presentation` modules select their backend with target
+configuration. Windows implements them; unsupported desktop targets expose no
+native receive codecs and retain browser reception. Windows decoder failures
+remain on the native path. A future platform should advertise codecs only after
+its own decoder and presentation path are available, preserving this distinction.
+
+New desktop platforms can initially use their WebView's `RTCPeerConnection`
+and ordinary video elements for receiving. This reuses the existing signaling,
+codec negotiation, controls and recording path without implementing native
+decoding or a native compositor. Negotiate only formats reported by that WebView;
+do not assume HEVC support. Native sending and native receiving are independent
+capabilities, so native capture/encoding can be added before native reception.
+
+The current `desktop-capture` receive, surface and presentation modules are
+Windows-gated. Their D3D11 texture leases, DirectComposition target and recording
+readback pool are backend implementation details, not portable GPU interfaces.
+When adding another backend, split those internals by platform and retain the
+existing source-ID, lifecycle and recording contracts. Each backend must preserve
+bounded latest-frame admission, frame ownership through GPU completion, explicit
+recording demand and deterministic teardown. Local preview and received video
+must continue to share its presenter; other platforms need their own integration
+and lifecycle tests before being advertised as native-capable.
+
+### GPU presentation and recording
+
 The receive factory requests zero playout delay and MF low-latency decoding.
 Its opt-in GPU mode publishes immutable D3D11 textures with their original MF
 sample leases. The complete frame, not merely a texture COM pointer, remains
@@ -2188,6 +2221,10 @@ Software uploads use the same cache after acquiring a pooled texture lease.
 The output view is reused for the swap chain's logical back buffer. Device or
 size changes rebuild these caches, and crop/color state changes update only the
 affected processor parameters.
+Rebuilding a swap chain keeps the previous presented image attached. The
+replacement is attached only after its first successful Present, with content,
+transform and clip changed in the same composition commit. Frame admission or
+another view's layout commit must not expose an unpresented replacement.
 
 Local preview and native receive share the same window-owned compositor.
 Preview uses the encoding capture pool and GPU conversion, including rotation,
@@ -2205,9 +2242,16 @@ and late returns. Hardware decode retains its direct texture path.
 The swap chain limits queued presentation to one frame. Layout IPC contains only
 validated rectangles and visibility; pixels and native handles stay native.
 Page backgrounds and the black placeholder are masked in video regions, leaving
-HTML control and dialog overlays intact. Fullscreen keeps its backdrop transparent
-and hides the underlying page while preserving controls inside the fullscreen
+HTML control and dialog overlays intact.
+The page-background opening covers the whole video element, including letterbox
+bars; only the black placeholder has the fitted-image cutout. This keeps a light
+page background out of the fractional-pixel join between video and black bars.
+Fullscreen keeps its backdrop transparent and hides the underlying page while
+preserving controls inside the fullscreen
 element; its original tile ancestors no longer clip the surface.
+Native PiP reuses the same WebView and compositor. Its meeting background must
+remain transparent while native video holes are active; the shared masked page
+background supplies the surrounding color without covering the GPU plane.
 Rounded clipping follows each container's padding edge, including border thickness
 and animated transforms; fitted video corners inside black bars remain square.
 Live background masks and native clip objects are reused during layout/fade changes,
@@ -2229,6 +2273,10 @@ receive heartbeat continues to protect the receiver lease.
 The native window backing is opaque black. Composition explicitly uses GPU linear
 interpolation for scaled preview and receive views, instead of DirectComposition's
 nearest-neighbor default; it adds no CPU readback or extra frame queue.
+Video action menus use the same translucent gradients for browser video, local
+preview and native reception. Their soft alpha contour and opening/closing opacity
+are rendered entirely by the page; they do not sample or blur the video background,
+upload masks to the compositor or trigger native repaints of static frames.
 The presentation limit remains even-sized
 SDR video up to 3840×2160. HDR/Main10 is not advertised.
 
@@ -2254,8 +2302,11 @@ and additional simultaneous views are rejected by this single-lane backend.
 A native startup/presentation/decode failure excludes that format for the current
 application session; automatic sender selection can negotiate another native format.
 Explicit fixed sender codec choices retain their existing failure semantics.
-Decode stalls and sustained processing overload first recreate the native receiver
-and request a keyframe using the existing bounded recovery policy. Web and other
+An MF decoder that accepts successive inputs without output first flushes its
+compressed state and requests a fresh keyframe on the existing connection. Its
+last displayed texture stays valid during recovery. If decoding remains stalled
+or processing stays overloaded, the application's bounded recovery policy
+recreates the native receiver. Web and other
 platforms retain browser reception, and platform adapters that allow browser
 fallback retain the previous retry behavior.
 Native reception recovers when consecutive

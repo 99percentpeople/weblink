@@ -35,6 +35,10 @@ html.native-video-active
   background: transparent;
 }
 .meeting-tile-surface:has(video[data-native-video]),
-.meeting-tile-video:has(video[data-native-video]) {
+.meeting-tile-video:has(video[data-native-video]),
+html.native-video-active
+  .meeting.is-native-pip:has(video[data-native-video]) {
+  /* Native PiP reuses this WebView. Its opaque meeting background would cover
+     the GPU plane; native-video-background already fills outside video holes. */
   background: transparent;
 }

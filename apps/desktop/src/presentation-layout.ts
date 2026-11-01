@@ -111,7 +111,7 @@ export function createPresentationLayout() {
     ) {
       ensureMask();
       let hole = holes.get(key);
-      const { rect, clips, local, image } = geometry;
+      const { surface, clips, local, image } = geometry;
       if (!hole) {
         hole = {
           group: svg("g"),
@@ -151,10 +151,10 @@ export function createPresentationLayout() {
         parent.append(hole.path);
         hole.geometry = "";
       }
-      const signature = JSON.stringify([rect, clips]);
+      const signature = JSON.stringify([surface, clips]);
       if (signature !== hole.geometry) {
         hole.geometry = signature;
-        hole.path.setAttribute("d", rectangle(rect));
+        hole.path.setAttribute("d", rectangle(surface));
         clips.forEach((bounds, index) =>
           hole.clips[index]!.setAttribute(
             "d",
