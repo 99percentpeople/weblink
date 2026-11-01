@@ -95,6 +95,8 @@ export async function openPresentationRecording(
       } else {
         // A generated track does not retain a frame for later consumers. Keep
         // static recordings alive using the retained pixels, without a GPU copy.
+        // The native read waits for a frame (or a sparse refresh deadline), so
+        // static sources do not make an IPC round trip on every display tick.
         await presenter.refresh();
       }
       if (!closed && (sequence === 0 || started))

@@ -46,7 +46,10 @@ it("seeds only after recorder attachment and refreshes static pixels without ano
   mockIPC((command, args) => {
     if (command !== "presentation_frame") return;
     reads++;
-    if (args?.after) return new ArrayBuffer(0);
+    if (args?.after)
+      return new Promise<ArrayBuffer>((resolve) => {
+        setTimeout(() => resolve(new ArrayBuffer(0)), 500);
+      });
     copies++;
     return bytes;
   });
@@ -76,6 +79,7 @@ it("seeds only after recorder attachment and refreshes static pixels without ano
   expect(presenter.refresh).toHaveBeenCalledWith(true);
   expect(presenter.refresh).toHaveBeenCalledWith();
   expect(copies).toBe(1);
+  expect(reads).toBeLessThanOrEqual(4);
   expect(presenter.write).toHaveBeenCalledOnce();
   recording.close();
   const calls = presenter.refresh.mock.calls.length;

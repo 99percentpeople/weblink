@@ -87,12 +87,17 @@ async function run() {
             source.copies() === 1,
             "Static refresh requested another native pixel copy",
           );
+          assert(
+            source.reads() <= 2 + Math.ceil(duration / 500),
+            "Static recording kept polling native pixels",
+          );
           measurements.push({
             canvas,
             duration,
             recordedDuration,
             bytes: bytes.length,
             nativeCopies: source.copies(),
+            nativeReads: source.reads(),
           });
         } finally {
           input.dispose();

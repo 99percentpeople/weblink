@@ -49,6 +49,95 @@ fn pool(recording: &Recording) -> Arc<Pool> {
 }
 
 #[test]
+fn waiting_read_wakes_for_publish_close_and_errors_without_empty_polling() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let (device, _) = windows_capture::d3d11::create_d3d_device().unwrap();
+        let source = Arc::new(Source::default());
+        let recording = Arc::new(source.recording());
+        let reader = recording.clone();
+        let read = tokio::spawn(async move { reader.read_frame(0).await });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(
+            !read.is_finished(),
+            "Empty source was polled instead of awaited"
+        );
+        source.publish(texture(&device, 68, 40));
+        assert!(!read.await.unwrap().unwrap().is_empty());
+        // A racing publication before registration must also be retained.
+        source.publish(texture(&device, 68, 40));
+        assert!(!recording.read_frame(1).await.unwrap().is_empty());
+        let start = Instant::now();
+        assert!(recording.read_frame(2).await.unwrap().is_empty());
+        assert!(start.elapsed() >= REFRESH);
+        for event in 0..3 {
+            let source = Arc::new(Source::default());
+            let recording = Arc::new(source.recording());
+            let reader = recording.clone();
+            let read = tokio::spawn(async move { reader.read_frame(0).await });
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            match event {
+                0 => recording.close(),
+                1 => source.close(),
+                _ => source.fail("Device removed".into()),
+            }
+            let error = tokio::time::timeout(Duration::from_millis(200), read)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap_err();
+            assert!(!error.is_empty());
+        }
+        // Aborting a waiter releases its single-reader admission immediately.
+        let reader = recording.clone();
+        let read = tokio::spawn(async move { reader.read_frame(2).await });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        read.abort();
+        assert!(read.await.unwrap_err().is_cancelled());
+        source.publish(texture(&device, 68, 40));
+        assert!(!recording.read_frame(2).await.unwrap().is_empty());
+        recording.close();
+    });
+}
+
+#[test]
+fn frame_interest_is_separate_from_demand_and_restores_retained_dimensions() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    let (device, _) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let source = Arc::new(Source::default());
+    let weak = Arc::downgrade(&source);
+    let calls = Arc::new(AtomicU64::new(0));
+    let count = calls.clone();
+    let dimensions = Arc::new(Mutex::new(None));
+    let sizes = dimensions.clone();
+    let display = source.subscribe(Arc::new(move || {
+        let source = weak.upgrade().unwrap();
+        *sizes.lock().unwrap() = source.latest().map(|frame| frame.texture.size);
+        count.fetch_add(1, Ordering::Relaxed);
+    }));
+    let recording = source.recording();
+    display.set_active(false);
+    display.set_frames(false);
+    assert!(
+        source.active(),
+        "Hidden display must not cancel recording demand"
+    );
+    // Binding a receiver before its first frame must not suppress initial size.
+    source.publish(texture(&device, 68, 40));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    assert_eq!(*dimensions.lock().unwrap(), Some((64, 36)));
+    source.publish(texture(&device, 132, 76));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+    display.set_frames(true);
+    assert_eq!(*dimensions.lock().unwrap(), Some((128, 72)));
+    assert_eq!(calls.load(Ordering::Relaxed), 3);
+    display.set_frames(false);
+    source.fail("test".into());
+    source.close();
+    assert_eq!(calls.load(Ordering::Relaxed), 5);
+    recording.close();
+}
+
+#[test]
 fn recording_reuses_staging_and_preserves_cropped_nv12_pixels() {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         let (device, _) = windows_capture::d3d11::create_d3d_device().unwrap();

@@ -3,6 +3,7 @@ mod compositor;
 mod recording;
 mod source;
 pub mod upload;
+mod wake;
 pub use compositor::{Compositor, Layout};
 pub use recording::Recording;
 pub use source::{Frame, Source, Stats, Subscription, Texture};

@@ -125,16 +125,24 @@ fn native_hevc(gpu: bool) {
 #[test]
 #[ignore = "Requires Windows codec transforms; uses synthetic pixels only"]
 fn native_receiver_decodes_remaining_formats() {
+    native_formats(false);
+}
+#[test]
+#[ignore = "Requires Windows codec transforms; uses synthetic pixels only"]
+fn native_receiver_uploads_remaining_formats_for_gpu_presentation() {
+    native_formats(true);
+}
+fn native_formats(gpu: bool) {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         for codec in ["video/h264", "video/vp8", "video/vp9", "video/av1"] {
             let media = MediaSession::new(MediaOptions {encoder: "software".into(), codec: Some(codec.into()), max_width:320,max_height:180,frame_rate:20,..Default::default()}).unwrap();
             let candidates = Arc::new(Mutex::new(Vec::new()));
             let gathered = candidates.clone();
-            let receiver = Receiver::new(vec![],false,Arc::new(move |event| {
+            let receiver = Receiver::new_with_presentation(vec![],false,Arc::new(move |event| {
                 if event["type"] == "candidate" {gathered.lock().unwrap().push(event["candidate"].clone());}
                 if event["type"] == "error" {eprintln!("Receive error: {event}");}
                 true
-            })).unwrap();
+            }), gpu).unwrap();
             let offer = media.offer_configured("formats".into(),vec![],false,false,None,None,None).await.unwrap();
             let answer = receiver.answer(&offer).await.unwrap();
             media.answer("formats",&answer).await.unwrap();
@@ -151,6 +159,19 @@ fn native_receiver_decodes_remaining_formats() {
             let inbound = stats.as_array().unwrap().iter().find(|s|s["type"]=="inbound-rtp" && s["kind"]=="video").unwrap();
             assert!(inbound["framesDecoded"].as_u64().unwrap_or(0)>10,"{codec}: {inbound}");
             assert_processing_delay(inbound);
+            if let Some(source) = &receiver.gpu {
+                assert!(source.stats().error.is_none(), "{:?}", source.stats().error);
+                let frame = source.latest().expect("No GPU upload published");
+                assert_eq!(frame.texture.size, (320,180));
+                if codec == "video/vp8" {
+                    assert!(source.stats().uploaded_frames > 10, "Software decoder did not upload");
+                }
+                let recording = source.recording();
+                let data = recording.read_frame(0).await.unwrap();
+                assert_eq!(data.len(), 24 + 320 * 180 * 3 / 2);
+                assert!(data[24..24+320*180].iter().any(|&y| y > 32));
+                recording.close();
+            }
             let mut pixels=vec![0;crate::receive::FRAME_CAPACITY];
             let frame=receiver.copy_frame(0,&mut pixels).unwrap().expect(codec);
             assert_eq!((frame.width,frame.height),(320,180));

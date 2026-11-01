@@ -361,7 +361,10 @@ impl Receiver {
                     owner: pixels.clone(),
                 }
             } else {
-                self.upload.lock().unwrap().frame(&pixels.frame)?
+                let Some(texture) = self.upload.lock().unwrap().frame(&pixels.frame)? else {
+                    return Ok(());
+                };
+                texture
             };
             source.publish(texture);
         } else if notify {

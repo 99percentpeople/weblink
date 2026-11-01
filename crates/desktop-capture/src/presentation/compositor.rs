@@ -1,4 +1,5 @@
 //! One render worker and DirectComposition target per window, with latest-frame admission.
+use super::wake::Wake;
 use super::{Frame, Source, Subscription};
 use serde::Deserialize;
 use std::{
@@ -6,7 +7,7 @@ use std::{
     ffi::c_void,
     sync::{mpsc, Arc, Mutex},
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
+    time::Instant,
 };
 use windows_core::Interface;
 #[derive(Clone, Copy, Default, Debug, PartialEq, Deserialize)]
@@ -36,16 +37,18 @@ impl Layout {
 struct Binding {
     source: Arc<Source>,
     layout: Layout,
-    _watch: Subscription,
+    watch: Subscription,
 }
 #[derive(Default)]
 struct State {
     bindings: HashMap<u64, Binding>,
     closed: bool,
+    #[cfg(test)]
+    cycles: u64,
 }
 pub struct Compositor {
     state: Arc<Mutex<State>>,
-    wake: mpsc::SyncSender<()>,
+    wake: Arc<Wake>,
     worker: Option<JoinHandle<()>>,
 }
 unsafe extern "C" {
@@ -72,10 +75,12 @@ unsafe extern "C" {
         height: u32,
         bt709: i32,
         full_range: i32,
+        cache_input: i32,
     ) -> i32;
     fn wl_composition_poll(c: *mut c_void, id: u64) -> i32;
     fn wl_composition_remove(c: *mut c_void, id: u64) -> i32;
     fn wl_composition_commit(c: *mut c_void) -> i32;
+    fn wl_composition_wait(c: *mut c_void, wake: *mut c_void) -> i32;
 }
 struct Native(*mut c_void);
 impl Drop for Native {
@@ -92,7 +97,8 @@ impl Compositor {
     /// HWND must remain valid until this compositor is dropped.
     pub fn new(hwnd: usize) -> Result<Self, String> {
         let state = Arc::new(Mutex::new(State::default()));
-        let (wake, receive) = mpsc::sync_channel(1);
+        let wake = Arc::new(Wake::new()?);
+        let receive = wake.clone();
         let (ready, initialized) = mpsc::sync_channel(1);
         let shared = state.clone();
         let worker = thread::Builder::new()
@@ -111,7 +117,7 @@ impl Compositor {
                 });
                 if hr >= 0 {
                     let native = Native(ptr);
-                    run(&native, &shared, receive);
+                    run(&native, &shared, &receive);
                     drop(native);
                 }
                 if com {
@@ -137,6 +143,7 @@ impl Compositor {
                 return Err("Native view source changed".into());
             }
             binding.layout = layout;
+            binding.watch.set_frames(layout.visible);
         } else {
             if state.bindings.len() >= 16 {
                 return Err("Native video view limit reached".into());
@@ -144,25 +151,26 @@ impl Compositor {
             let wake = self.wake.clone();
             let watch = source.observe(
                 Arc::new(move || {
-                    let _ = wake.try_send(());
+                    wake.signal();
                 }),
                 false,
             );
+            watch.set_frames(layout.visible);
             state.bindings.insert(
                 id,
                 Binding {
                     source,
                     layout,
-                    _watch: watch,
+                    watch,
                 },
             );
         }
-        let _ = self.wake.try_send(());
+        self.wake.signal();
         Ok(())
     }
     pub fn remove(&self, id: u64) {
         self.state.lock().unwrap().bindings.remove(&id);
-        let _ = self.wake.try_send(());
+        self.wake.signal();
     }
 }
 impl Drop for Compositor {
@@ -172,27 +180,33 @@ impl Drop for Compositor {
             state.closed = true;
             state.bindings.clear();
         }
-        let _ = self.wake.try_send(());
+        self.wake.signal();
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }
     }
 }
-fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
+fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
     let mut views: HashMap<u64, View> = HashMap::new();
+    let mut bindings = HashMap::new();
     loop {
-        let (closed, bindings) = {
-            let state = shared.lock().unwrap();
-            (
-                state.closed,
+        let closed = {
+            #[allow(unused_mut)]
+            let mut state = shared.lock().unwrap();
+            #[cfg(test)]
+            {
+                state.cycles += 1;
+            }
+            // Reuse the snapshot allocation. No shared lock crosses driver calls.
+            bindings.clear();
+            bindings.extend(
                 state
                     .bindings
                     .iter()
-                    .map(|(&id, b)| (id, (b.source.clone(), b.layout)))
-                    .collect::<HashMap<_, _>>(),
-            )
+                    .map(|(&id, b)| (id, (b.source.clone(), b.layout))),
+            );
+            state.closed
         };
-        let mut pending = false;
         for &id in bindings.keys() {
             views.entry(id).or_insert_with(|| View {
                 submitted: 0,
@@ -202,10 +216,14 @@ fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
         }
         views.retain(|&id, view| unsafe {
             if view.lease.is_some() {
-                if wl_composition_poll(native.0, id) == 1 {
-                    pending = true;
-                } else {
+                let hr = wl_composition_poll(native.0, id);
+                if hr != 1 {
                     view.lease = None;
+                    if hr < 0 {
+                        if let Some((source, _)) = bindings.get(&id) {
+                            source.fail(format!("Native video completion: {hr:#x}"));
+                        }
+                    }
                 }
             }
             let binding = bindings.get(&id).filter(|(source, _)| !source.closed());
@@ -254,9 +272,9 @@ fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
                 t.size.1,
                 t.bt709 as i32,
                 t.full_range as i32,
+                1, // Both decoder textures and leased software uploads are pooled.
             );
             if hr == 1 {
-                pending = true;
                 return true;
             }
             view.submitted = frame.sequence;
@@ -266,7 +284,6 @@ fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
                 source.presented(queue_ms, start.elapsed().as_secs_f64() * 1000.);
             }
             view.lease = Some(frame);
-            pending = true;
             true
         });
         // Layout, removal and swap-chain changes share one composition commit.
@@ -281,10 +298,18 @@ fn run(native: &Native, shared: &Mutex<State>, wake: mpsc::Receiver<()>) {
         if closed && views.is_empty() {
             break;
         }
-        if pending {
-            let _ = wake.recv_timeout(Duration::from_millis(2));
-        } else if wake.recv().is_err() {
-            break;
+        let hr = unsafe { wl_composition_wait(native.0, wake.handle().0) };
+        if hr < 0 {
+            for (source, _) in bindings.values() {
+                source.fail(format!("Native video wait: {hr:#x}"));
+            }
+            // A wait failure is exceptional. Keep pending leases protected;
+            // the native watchdog still checks device removal before release.
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 }
+
+#[cfg(all(test, debug_assertions))]
+#[path = "compositor_tests.rs"]
+mod tests;

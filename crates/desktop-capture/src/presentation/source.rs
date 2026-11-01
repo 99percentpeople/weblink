@@ -27,10 +27,15 @@ pub struct Frame {
     pub(super) ready: Instant,
 }
 type Wake = Arc<dyn Fn() + Send + Sync>;
+struct Watcher {
+    wake: Wake,
+    demand: bool,
+    frames: bool,
+}
 #[derive(Default)]
 struct SourceState {
     latest: Option<Arc<Frame>>,
-    watchers: HashMap<u64, (Wake, bool)>,
+    watchers: HashMap<u64, Watcher>,
     closed: bool,
 }
 #[derive(Default, Clone, Serialize)]
@@ -57,8 +62,25 @@ pub struct Subscription {
 impl Subscription {
     pub fn set_active(&self, active: bool) {
         if let Some(source) = self.source.upgrade() {
-            if let Some((_, demand)) = source.state.lock().unwrap().watchers.get_mut(&self.id) {
-                *demand = active;
+            if let Some(watcher) = source.state.lock().unwrap().watchers.get_mut(&self.id) {
+                watcher.demand = active;
+            }
+        }
+    }
+    /// Frame interest is independent of capture demand. Hidden consumers still
+    /// receive close/error; resuming refreshes retained dimensions/static frames.
+    pub fn set_frames(&self, enabled: bool) {
+        if let Some(source) = self.source.upgrade() {
+            let wake = {
+                let mut state = source.state.lock().unwrap();
+                state.watchers.get_mut(&self.id).and_then(|watcher| {
+                    let changed = watcher.frames != enabled;
+                    watcher.frames = enabled;
+                    (changed && enabled).then(|| watcher.wake.clone())
+                })
+            };
+            if let Some(wake) = wake {
+                wake();
             }
         }
     }
@@ -80,6 +102,10 @@ impl Source {
             if state.closed {
                 return;
             }
+            // Even a view bound while dimensions are still unknown needs the
+            // first frame's metadata to bootstrap its placeholder/layout. After
+            // that, hidden observers only wake on restore, close or error.
+            let first = state.latest.is_none();
             state.latest = Some(Arc::new(Frame {
                 sequence: self.sequence.fetch_add(1, Ordering::Relaxed) + 1,
                 texture,
@@ -88,7 +114,8 @@ impl Source {
             state
                 .watchers
                 .values()
-                .map(|(wake, _)| wake.clone())
+                .filter(|watcher| first || watcher.frames)
+                .map(|watcher| watcher.wake.clone())
                 .collect::<Vec<_>>()
         };
         for callback in callbacks {
@@ -100,7 +127,7 @@ impl Source {
     }
     pub fn active(&self) -> bool {
         let state = self.state.lock().unwrap();
-        !state.closed && state.watchers.values().any(|(_, active)| *active)
+        !state.closed && state.watchers.values().any(|watcher| watcher.demand)
     }
     pub fn closed(&self) -> bool {
         self.state.lock().unwrap().closed
@@ -113,7 +140,7 @@ impl Source {
             state
                 .watchers
                 .values()
-                .map(|(wake, _)| wake.clone())
+                .map(|watcher| watcher.wake.clone())
                 .collect::<Vec<_>>()
         };
         for callback in callbacks {
@@ -125,11 +152,14 @@ impl Source {
     }
     pub(super) fn observe(self: &Arc<Self>, wake: Wake, active: bool) -> Subscription {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.state
-            .lock()
-            .unwrap()
-            .watchers
-            .insert(id, (wake.clone(), active));
+        self.state.lock().unwrap().watchers.insert(
+            id,
+            Watcher {
+                wake: wake.clone(),
+                demand: active,
+                frames: true,
+            },
+        );
         wake();
         Subscription {
             source: Arc::downgrade(self),
@@ -144,7 +174,7 @@ impl Source {
             .unwrap()
             .watchers
             .values()
-            .map(|(wake, _)| wake.clone())
+            .map(|watcher| watcher.wake.clone())
             .collect::<Vec<_>>();
         for callback in callbacks {
             callback();

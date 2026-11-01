@@ -24,7 +24,7 @@ export interface GpuSurface {
   open(): Promise<void>;
   ready: Promise<void>;
   close(): void;
-  stats(): Promise<GpuStats>;
+  stats(force?: boolean): Promise<GpuStats>;
   layout(
     value: Record<string, number | boolean>,
   ): Promise<void>;
@@ -100,6 +100,7 @@ export function createNativePresentation(
         | ReturnType<typeof setInterval>
         | undefined;
       let renewing = false;
+      let statsRequest: Promise<GpuStats> | undefined;
       const draw = () => {
         if (surface.closed || !surface.size.width) return;
         // Mark the already-black canvas dirty for a newly attached consumer.
@@ -239,15 +240,37 @@ export function createNativePresentation(
             );
           return layoutTail;
         },
-        async stats() {
-          const stats = await invoke<GpuStats>(
+        stats(force = false) {
+          if (statsRequest) return statsRequest;
+          const cached = surface.latestStats;
+          const maxAge = !surface.visible
+            ? 15000
+            : cached?.presentedFrames
+              ? 1000
+              : 100;
+          if (
+            !force &&
+            cached &&
+            performance.now() - surface.statsAt < maxAge
+          )
+            return Promise.resolve(cached);
+          // Receive diagnostics and the bound view share one query/lease renewal.
+          statsRequest = invoke<GpuStats>(
             "presentation_stats",
             { id },
-          );
-          surface.latestStats = stats;
-          surface.statsAt = performance.now();
-          if (stats.error) throw new Error(stats.error);
-          return stats;
+          )
+            .then((stats) => {
+              if (stats.error) throw new Error(stats.error);
+              if (!surface.closed) {
+                surface.latestStats = stats;
+                surface.statsAt = performance.now();
+              }
+              return stats;
+            })
+            .finally(() => {
+              statsRequest = undefined;
+            });
+          return statsRequest;
         },
       };
       sources.set(placeholder, surface);
@@ -276,21 +299,44 @@ export function createNativePresentation(
       let unwatch: (() => void) | undefined;
       const lifetime = new AbortController();
       let check: ReturnType<typeof setTimeout> | undefined;
-      const poll = async () => {
+      let polling = false,
+        refreshStats = false;
+      const poll = async (force = false) => {
+        if (stopped) return;
+        if (polling) {
+          refreshStats ||= force;
+          return;
+        }
+        polling = true;
+        let succeeded = false;
         try {
-          const stats = await surface.stats();
+          const stats = await surface.stats(force);
           if (stopped) return;
           const presented = stats.presentedFrames > 0;
           if (shown !== presented) {
             shown = presented;
             observer?.request();
           }
-          check = setTimeout(
-            () => void poll(),
-            shown ? 1000 : 100,
-          );
+          succeeded = true;
         } catch (error) {
           if (!stopped) surface.fail(error);
+        } finally {
+          polling = false;
+          if (!stopped && succeeded)
+            check = setTimeout(
+              () => {
+                const force = refreshStats;
+                refreshStats = false;
+                void poll(force);
+              },
+              refreshStats
+                ? 0
+                : !surface.visible
+                  ? 15000
+                  : shown
+                    ? 1000
+                    : 100,
+            );
         }
       };
       const send = async () => {
@@ -319,7 +365,15 @@ export function createNativePresentation(
         const { rect } = geometry;
         const visible =
           active && nativeVisible && geometry.visible;
+        const visibilityChanged =
+          surface.visible !== visible;
         surface.visible = visible;
+        if (visibilityChanged) {
+          clearTimeout(check);
+          // Restore immediately even when the source is static; hidden views
+          // only renew their native lease, independent of the receive heartbeat.
+          void poll(visible);
+        }
         const ratio = devicePixelRatio;
         const value = {
           x: rect.x * ratio || 0,

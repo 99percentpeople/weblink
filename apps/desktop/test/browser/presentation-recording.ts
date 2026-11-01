@@ -23,14 +23,26 @@ export async function staticRecordingInput(
   new Uint8Array(bytes, 24, 160 * 90).fill(90);
   new Uint8Array(bytes, 24 + 160 * 90).fill(128);
   let copies = 0,
-    closes = 0;
+    closes = 0,
+    reads = 0;
+  let wake: (() => void) | undefined;
   const errors: unknown[] = [];
   mockIPC((command, args) => {
-    if (command === "presentation_recording_close")
+    if (command === "presentation_recording_close") {
       closes++;
+      wake?.();
+    }
     if (command !== "presentation_frame") return;
+    reads++;
     if (!args || !("after" in args) || args.after !== 0)
-      return new ArrayBuffer(0);
+      return new Promise<ArrayBuffer>((resolve) => {
+        const timer = setTimeout(() => wake?.(), 500);
+        wake = () => {
+          clearTimeout(timer);
+          wake = undefined;
+          resolve(new ArrayBuffer(0));
+        };
+      });
     copies++;
     return bytes.slice(0);
   });
@@ -44,6 +56,7 @@ export async function staticRecordingInput(
     return {
       ...input,
       copies: () => copies,
+      reads: () => reads,
       closes: () => closes,
       errors,
       dispose() {

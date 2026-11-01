@@ -226,9 +226,12 @@ it("updates native visibility immediately without waiting for a background anima
     },
   );
   const layouts: { visible: boolean }[] = [];
+  let statsReads = 0;
   mockIPC((command, payload) => {
-    if (command === "presentation_stats")
+    if (command === "presentation_stats") {
+      statsReads++;
       return { presentedFrames: 1 };
+    }
     if (command === "presentation_layout")
       layouts.push(
         (payload as { layout: { visible: boolean } })
@@ -267,9 +270,16 @@ it("updates native visibility immediately without waiting for a background anima
   visibility(false);
   await tick();
   expect(layouts.at(-1)?.visible).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  const hiddenReads = statsReads;
+  await vi.advanceTimersByTimeAsync(14000);
+  expect(statsReads).toBe(hiddenReads);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(statsReads).toBe(hiddenReads + 1);
   visibility(true);
   await tick();
   expect(layouts.at(-1)?.visible).toBe(true);
+  expect(statsReads).toBe(hiddenReads + 2);
   // The top layer escapes a tile whose old ancestor now clips all content.
   const ancestor = document.createElement("div");
   document.body.append(ancestor);
@@ -303,4 +313,48 @@ it("updates native visibility immediately without waiting for a background anima
   expect(vi.getTimerCount()).toBe(0);
   surface.close();
   await tick();
+});
+
+it("shares pending and recent statistics and ignores late completion after close", async () => {
+  let finish!: (value: { presentedFrames: number }) => void;
+  let reads = 0;
+  mockIPC((command) => {
+    if (command === "presentation_stats") {
+      reads++;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    }
+  });
+  const surface = createNativePresentation().create(
+    "receiver",
+    false,
+    vi.fn(),
+    vi.fn(),
+    vi.fn(),
+  );
+  const first = surface.stats();
+  expect(surface.stats()).toBe(first);
+  finish({ presentedFrames: 1 });
+  await first;
+  for (let n = 0; n < 10; n++) {
+    await vi.advanceTimersByTimeAsync(1000);
+    await surface.stats();
+  }
+  expect(reads).toBe(1); // Hidden diagnostics do not add per-second native IPC.
+  surface.visible = true;
+  const restored = surface.stats(true);
+  expect(surface.stats()).toBe(restored);
+  finish({ presentedFrames: 2 });
+  await restored;
+  expect(reads).toBe(2);
+  await surface.stats();
+  expect(reads).toBe(2);
+  const late = surface.stats(true);
+  surface.close();
+  finish({ presentedFrames: 3 });
+  await late;
+  expect(surface.latestStats?.presentedFrames).toBe(2);
+  await tick();
+  expect(vi.getTimerCount()).toBe(0);
 });

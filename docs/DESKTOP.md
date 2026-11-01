@@ -2174,12 +2174,34 @@ per view and a replaceable latest frame bound the queue. Resizing, hiding and
 removing views preserve in-flight leases until GPU completion. Decoder shutdown
 cannot invalidate a texture still held by a reader.
 
+The compositor waits on source/layout notifications, GPU completion events and
+the swap chain's frame-latency handle instead of periodically polling GPU work.
+A consumed swap-chain signal admits exactly one submission. A slow device-removal
+watchdog runs only while GPU or swap-chain work remains pending; an idle compositor
+sleeps until notified. Hidden or removed views cancel swap-chain waits while still
+retaining any in-flight sample until GPU completion.
+Video-processor input views are cached by texture and subresource, with at most
+16 entries and four distinct texture allocations per view; the cache retains COM
+resources, not decoder sample leases. An allocation is evicted before creating a
+replacement view, so cache misses do not temporarily exceed these limits.
+Software uploads use the same cache after acquiring a pooled texture lease.
+The output view is reused for the swap chain's logical back buffer. Device or
+size changes rebuild these caches, and crop/color state changes update only the
+affected processor parameters.
+
 Local preview and native receive share the same window-owned compositor.
 Preview uses the encoding capture pool and GPU conversion, including rotation,
 cursor and color handling; merely showing a preview does not request CPU pixels.
 Hardware receive uses the decoder texture directly. Native software decode
 uploads its output for the same compositor, without browser decoding. Each
 source uses its own D3D11 device; the composition tree contains its swap chain.
+The software upload pool reuses one CPU NV12 packing buffer and at most four textures,
+including outstanding leases from old dimensions. NV12 input avoids I420 conversion;
+other software formats use the encoder's SIMD I420-to-NV12 packing routine.
+A texture returns only when the latest frame, compositor and recording readers
+release its complete owner. Exhaustion drops presentation work instead of queuing
+or blocking decoding; resize/device changes discard incompatible idle resources
+and late returns. Hardware decode retains its direct texture path.
 The swap chain limits queued presentation to one frame. Layout IPC contains only
 validated rectangles and visibility; pixels and native handles stay native.
 Page backgrounds and the black placeholder are masked in video regions, leaving
@@ -2197,6 +2219,13 @@ that preserve a video's playback state keep its native binding and mask alive.
 The black lifecycle track refreshes on attachment, playback recovery and source
 resize, independently of native presentation and recording frame delivery. An
 unbound live surface still renews its native lease without periodic pixel work.
+Hidden surfaces stop frame notifications to the compositor and dimension observer
+after the initial frame supplies dimensions;
+close/error notifications and independent recording demand remain active. Restoring
+visibility immediately refreshes retained dimensions and the latest frame.
+Presentation statistics share pending/recent IPC results across view and receive
+diagnostics. Hidden or unbound views renew at a sparse cadence while the separate
+receive heartbeat continues to protect the receiver lease.
 The native window backing is opaque black. Composition explicitly uses GPU linear
 interpolation for scaled preview and receive views, instead of DirectComposition's
 nearest-neighbor default; it adds no CPU readback or extra frame queue.
@@ -2246,6 +2275,11 @@ The recording input replays its retained first frame after MediaRecorder attache
 then refreshes static pixels sparsely with fresh timestamps. These repeats do not
 request another GPU readback; generated tracks otherwise lose a pre-attachment
 frame and can produce empty output when recording stops.
+Each recording read waits for a source notification with a 500 ms static-refresh
+deadline, rather than polling for empty frames at display rate. Close and source
+failure wake pending reads; registration precedes the latest-frame check to avoid
+losing a racing publication. Active recording still admits at most 60 reads per
+second and honors writer backpressure.
 This pool is independent of the sender's **GPU readback buffers** setting: that
 setting only controls sender paths requiring GPU-to-CPU readback and applies to
 the next share. Recording supplies real pixels instead of recording the placeholder,

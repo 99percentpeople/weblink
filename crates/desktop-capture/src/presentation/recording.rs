@@ -20,6 +20,9 @@ use windows::{
 };
 
 const TIMEOUT: Duration = Duration::from_secs(2);
+// Return occasionally so a static recording can refresh its retained VideoFrame.
+// New frames and cancellation wake immediately; there is no empty-frame polling.
+const REFRESH: Duration = Duration::from_millis(500);
 // Independent of the sender's readbackBuffers setting. A consumer has one read
 // in flight; two consumers may overlap work without an unbounded GPU queue.
 const SLOTS: usize = 2;
@@ -28,6 +31,7 @@ pub struct Recording {
     source: Arc<Source>,
     state: Mutex<Option<(Arc<Pool>, Subscription)>>,
     reading: Arc<Semaphore>,
+    changed: Arc<Notify>,
 }
 
 impl Source {
@@ -35,10 +39,16 @@ impl Source {
         let mut weak = self.readback.lock().unwrap();
         let pool = weak.upgrade().unwrap_or_else(|| Arc::new(Pool::default()));
         *weak = Arc::downgrade(&pool);
+        let changed = Arc::new(Notify::new());
+        let wake = changed.clone();
         Recording {
             source: self.clone(),
-            state: Mutex::new(Some((pool, self.subscribe(Arc::new(|| {}))))),
+            state: Mutex::new(Some((
+                pool,
+                self.subscribe(Arc::new(move || wake.notify_one())),
+            ))),
             reading: Arc::new(Semaphore::new(1)),
+            changed,
         }
     }
 }
@@ -48,6 +58,33 @@ impl Recording {
         // In-flight copies own their pool and complete frame lease until the GPU
         // signals completion. Idle buffers disappear when the last reader closes.
         self.state.lock().unwrap().take();
+        self.changed.notify_one();
+    }
+
+    async fn next_frame(&self, after: u64) -> Result<Option<Arc<Frame>>, String> {
+        let deadline = tokio::time::Instant::now() + REFRESH;
+        loop {
+            // Register before reading state: publication/close between the check
+            // and await must not be lost, including the first frame of a source.
+            let notified = self.changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.state.lock().unwrap().is_none() {
+                return Err("Native recording closed".into());
+            }
+            if self.source.closed() {
+                return Err("Native video source ended".into());
+            }
+            if let Some(error) = self.source.stats().error {
+                return Err(error);
+            }
+            if let Some(frame) = self.source.latest().filter(|f| f.sequence > after) {
+                return Ok(Some(frame));
+            }
+            if tokio::time::timeout_at(deadline, notified).await.is_err() {
+                return Ok(None);
+            }
+        }
     }
 
     pub async fn read_frame(&self, after: u64) -> Result<Vec<u8>, String> {
@@ -63,10 +100,7 @@ impl Recording {
             .as_ref()
             .map(|(pool, _)| pool.clone())
             .ok_or("Native recording closed")?;
-        if self.source.closed() {
-            return Err("Native video source ended".into());
-        }
-        let Some(frame) = self.source.latest().filter(|f| f.sequence > after) else {
+        let Some(frame) = self.next_frame(after).await? else {
             return Ok(Vec::new());
         };
         let permit = pool

@@ -171,6 +171,7 @@ pub fn presentation_layout(
         .ok_or("Native presentation closed")?;
     entry.renewed = Instant::now();
     entry.subscription.set_active(layout.visible);
+    entry.subscription.set_frames(layout.visible);
     if layout.visible {
         if let Some(media) = entry.media.as_ref().and_then(|m| m.upgrade()) {
             media.wake_gpu_preview();
