@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.5] - 2026-11-01
+
+Weblink 1.3.5 adds native screen reception and GPU playback to Windows desktop, connects native video to the existing recording controls, and simplifies remembered automation permissions and emergency revocation.
+
+### Windows native screen playback
+
+- **Native decoding:** receive screen streams through native WebRTC, including H.265 Main 8-bit when a compatible Windows decoder and driver are available. H.264, VP8, VP9 and AV1 are also supported, with hardware decoding where available. Windows screen reception no longer depends on WebView2's codec support; Web clients continue using browser decoding.
+- **Embedded GPU presentation:** local screen preview and received native video share the same GPU presentation path inside the existing interface, including fullscreen and picture-in-picture. Keep video controls, audio playback and remote input integrated with the current layout, and use GPU interpolation when scaling native video.
+- **Bounded, demand-driven processing:** reuse frame buffers and GPU textures, present the latest available frame, and suspend unnecessary work for static layouts and hidden views. Hardware-decoded frames stay on the GPU for display; CPU readback is requested by consumers such as recording.
+
+### Recording and video controls
+
+- **Native video recording:** record native screen playback with audio through the existing controls. Use pooled asynchronous readback for recordings and retain static frames while live playback continues through the GPU presenter.
+- **Consistent action menus:** use translucent gradients and matching opening and closing transitions for video controls across browser playback, local preview and native reception.
+- **Clearer readback settings:** clarify that GPU readback buffers only affects sender paths that need GPU-to-CPU readback, applies to the next share, and does not configure received-video recording or embedded GPU display.
+
+### Automation permissions and approvals
+
+- **Explicit emergency revocation:** emergency stop now resets saved automation Always allow decisions to Ask, including offline devices, while preserving Deny decisions. Ordinary disconnects, reconnects, app restarts and ending individual grants retain saved permissions. Re-enabling automation does not restore permissions revoked by an emergency stop; MCP token calls remain separately paused until MCP is turned off and on again.
+- **Consistent permission state:** remove the separate pause state for remembered device permissions. Temporary failures of the Windows emergency listener cancel active work and report an error without changing saved device decisions.
+- **Approval notification lifetime:** keep Windows approval notifications available until answered, dismissed or expired, and dismiss both system and in-app requests at their approval deadline. Simplify Deny labels across supported languages.
+
+### Maintenance
+
+- Update the pinned native SDK to libwebrtc 0.3.55, retain Weblink's native media extensions, and use upstream implementations for behavior now covered by the official SDK.
+
 ## [1.3.4] - 2026-10-29
 
 Weblink 1.3.4 adds saved receiver video-quality settings, simplifies screen-sharing and control lifetimes, and improves streaming stability, video controls and desktop update progress.
