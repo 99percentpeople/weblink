@@ -9,8 +9,13 @@ permissions:
 jobs:
   windows:
     name: Windows desktop
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.ref == 'refs/heads/public' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.deleted != true
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     environment: Preview
     env:
       WEBLINK_BUILD_CHANNEL: dev
@@ -19,7 +24,7 @@ jobs:
       WEBLINK_STUN_SERVERS: ${{ vars.WEBLINK_STUN_SERVERS }}
       VITE_TURN_SERVERS: ${{ secrets.VITE_TURN_SERVERS }}
       # Keep native media optimized, but avoid the release profile's expensive fat LTO.
-      # Tests and the executable share one dependency build and a smaller cache.
+      # Tests and the executable share one dependency build within this job.
       CARGO_PROFILE_RELEASE_LTO: "off"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
       CARGO_PROFILE_RELEASE_DEBUG: "0"
@@ -42,11 +47,18 @@ jobs:
           rustc --edition=2021 --test apps/desktop/src-tauri/src/updates/test_http.rs -o "$env:RUNNER_TEMP/weblink-http-tests.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:RUNNER_TEMP/weblink-http-tests.exe"
-      - uses: Swatinem/rust-cache@v2
+      # Public-repository caches are readable from fork PRs. Cache only public
+      # registry packages, never private Git checkouts or native build outputs.
+      - uses: actions/cache@v4
         with:
-          shared-key: windows-dev-release
-          cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/public' }}
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: public-crates-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: public-crates-${{ runner.os }}-
+      - uses: ./.github/actions/private-sdk
+        with:
+          ssh-key: ${{ secrets.NATIVE_SDK_READ_KEY }}
       - run: bun install --frozen-lockfile
       - name: Verify desktop build configuration
         run: bun apps/web/scripts/check-build-env.ts desktop

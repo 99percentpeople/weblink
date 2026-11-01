@@ -44,6 +44,22 @@ Cargo also fetches the patched WebRTC bindings from the
 [Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/weblink-native-media),
 pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
 No vendored source or separate dependency preparation step is needed.
+The fork is private. Local desktop builders need Git credentials with read access;
+ordinary Web builds and TypeScript checks do not fetch this SDK.
+Official desktop Actions use the repository secret `NATIVE_SDK_READ_KEY`, an SSH
+deploy key with read-only access to this SDK repository alone. Both native crates
+must pin the same full commit. The checkout action removes authentication before
+Cargo fetches that commit from the local checkout, so compilation does not retain
+the private key. Rotating it requires replacing the SDK deploy key and this secret.
+
+Native CI runs only for the official `public` branch's push/manual builds and
+validated release tags. PRs and forks still run Web/TypeScript checks without SDK
+access. Public Actions caches contain only crates.io index/archive files: private
+Git sources and native build outputs must not be cached because fork PRs can
+restore base-branch caches. Do not upload the Cargo Git directory, SDK checkout or
+native debug artifacts. Removing native build caches increases desktop CI time.
+An SDK read failure fails only the desktop job; Web deployment remains independent.
+
 The fork uses `main` for official upstream history and `weblink-native-media`
 for integrated Weblink changes. Feature work can pin a published feature commit
 before integration. Rebase the complete Weblink patch series onto updated `main`
@@ -85,7 +101,7 @@ frontend before Rust tests; `tauri.ci.conf.json` skips rebuilding it during
 packaging. Normal local builds retain their frontend build hook. Dev CI disables
 LTO and uses 16 codegen units to reduce compilation and cache overhead.
 Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
-machine needs WebView2 installed. Only `public` builds save this dependency cache.
+machine needs WebView2 installed. Only public registry dependencies are cached.
 
 For an opt-in Windows x64 build optimized for size, install the pinned nightly
 toolchain and its standard-library sources, then use the size build command:

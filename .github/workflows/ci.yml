@@ -60,6 +60,9 @@ jobs:
       - name: Run desktop adapter tests
         run: bun run --cwd apps/desktop test
 
+      - name: Check native SDK pin validation
+        run: bun test ./scripts/test/private-sdk-pin.test.mjs
+
       - name: Run integration tests
         run: bun run test:integration
 
@@ -90,7 +93,13 @@ jobs:
   desktop-dev:
     name: Desktop development build
     needs: checks
-    if: github.ref_type != 'tag'
+    # Private SDK access is reserved for reviewed code on the official branch.
+    # PRs (including forks) retain Web/TypeScript checks without SDK credentials.
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.ref == 'refs/heads/public' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.deleted != true
     uses: ./.github/workflows/desktop-dev.yml
     secrets: inherit
 

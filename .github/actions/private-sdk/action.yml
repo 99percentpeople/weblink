@@ -1,0 +1,38 @@
+name: Fetch private native SDK
+description: Fetch the pinned SDK with a repository-scoped read-only deploy key
+inputs:
+  ssh-key:
+    description: Read-only deploy key for 99percentpeople/rust-sdks
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Read immutable SDK revision
+      id: sdk
+      shell: pwsh
+      run: |
+        $revision = bun scripts/private-sdk-pin.mjs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        "revision=$revision" >> $env:GITHUB_OUTPUT
+    - name: Check out private SDK
+      uses: actions/checkout@v5
+      with:
+        repository: 99percentpeople/rust-sdks
+        ref: ${{ steps.sdk.outputs.revision }}
+        ssh-key: ${{ inputs.ssh-key }}
+        # Cargo fetches from this local repository; it must not be shallow.
+        fetch-depth: 0
+        path: .tmp/private-sdk
+        persist-credentials: false
+    - name: Populate Cargo dependencies without retaining credentials
+      shell: pwsh
+      run: |
+        $source = [System.Uri]::new((Resolve-Path .tmp/private-sdk).Path).AbsoluteUri
+        $env:CARGO_NET_GIT_FETCH_WITH_CLI = 'true'
+        # Limit URL rewriting to this process and this exact SDK repository.
+        $env:GIT_CONFIG_COUNT = '1'
+        $env:GIT_CONFIG_KEY_0 = "url.$source.insteadOf"
+        $env:GIT_CONFIG_VALUE_0 = 'https://github.com/99percentpeople/rust-sdks.git'
+        $env:GIT_TERMINAL_PROMPT = '0'
+        cargo fetch --locked --target x86_64-pc-windows-msvc
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -9,8 +9,14 @@ permissions:
 jobs:
   windows:
     name: Windows desktop
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.event_name == 'push' &&
+      github.ref_type == 'tag' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      github.event.deleted != true
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     environment: production
     env:
       WEBLINK_BUILD_CHANNEL: stable
@@ -29,10 +35,17 @@ jobs:
           bun-version: 1.4.2
       - name: Install Rust
         run: rustup toolchain install
-      - uses: Swatinem/rust-cache@v2
+      # Only public crates.io archives/index may enter the public Actions cache.
+      - uses: actions/cache@v4
         with:
-          shared-key: windows-production-release
-          cache-on-failure: true
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+          key: public-crates-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: public-crates-${{ runner.os }}-
+      - uses: ./.github/actions/private-sdk
+        with:
+          ssh-key: ${{ secrets.NATIVE_SDK_READ_KEY }}
       - run: bun install --frozen-lockfile
       - name: Verify desktop build configuration
         run: bun apps/web/scripts/check-build-env.ts desktop
