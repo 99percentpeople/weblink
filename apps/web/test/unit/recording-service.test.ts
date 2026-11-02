@@ -275,6 +275,7 @@ it.each(["auto", "mkv", "mp4"] as const)(
     expect(f.port.remuxRecorder).toHaveBeenCalledWith(
       f.recorder(),
       container,
+      undefined,
     );
     await f.service.stop();
     expect(f.writer.finish).toHaveBeenCalledWith(
@@ -289,6 +290,68 @@ it.each(["auto", "mkv", "mp4"] as const)(
     );
   },
 );
+
+it("records a received silent screen without looking up or opening a host subscription", async () => {
+  const f = fixture();
+  f.source.receivedNativeScreen = true;
+  f.source.audio = [];
+  f.source.encodedVideoSources = vi.fn(() => {
+    throw new Error("Unexpected host recording lookup");
+  });
+  await f.service.start(f.source);
+  expect(
+    f.source.encodedVideoSources,
+  ).not.toHaveBeenCalled();
+  expect(f.recorder().stream.getTracks()).toEqual([
+    f.video,
+  ]);
+  expect(f.recorder().options.mimeType).toBeUndefined();
+  expect(f.port.remuxRecorder).toHaveBeenCalledWith(
+    f.recorder(),
+    "auto",
+    { hasAudio: false },
+  );
+  await f.service.stop();
+  expect(f.port.complete).toHaveBeenCalledOnce();
+  expect(f.video.stop).not.toHaveBeenCalled();
+});
+
+it("records the received screen and its original audio without a host or audio mixer", async () => {
+  const f = fixture();
+  f.source.receivedNativeScreen = true;
+  f.source.encodedVideoSources = vi.fn(() => {
+    throw new Error("Unexpected host recording lookup");
+  });
+  f.source.recordingAudioSkew = vi.fn(async () => 0.02);
+  vi.stubGlobal(
+    "AudioContext",
+    class {
+      constructor() {
+        throw new Error("Preview audio unavailable");
+      }
+    },
+  );
+  await f.service.start(f.source);
+  expect(
+    f.source.encodedVideoSources,
+  ).not.toHaveBeenCalled();
+  expect(f.recorder().stream.getTracks()).toEqual([
+    f.video,
+    f.audio,
+  ]);
+  expect(f.port.remuxRecorder).toHaveBeenCalledWith(
+    f.recorder(),
+    "auto",
+    {
+      hasAudio: true,
+      audioSkew: f.source.recordingAudioSkew,
+    },
+  );
+  await f.service.stop();
+  expect(f.port.complete).toHaveBeenCalledOnce();
+  expect(f.audio.stop).not.toHaveBeenCalled();
+  expect(f.video.stop).not.toHaveBeenCalled();
+});
 
 it.each(["unavailable", "rejected"])(
   "falls back before creating output when encoded recording is %s",

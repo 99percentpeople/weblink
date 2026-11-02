@@ -4,6 +4,7 @@ import {
   ALL_FORMATS,
   BufferSource,
   BufferTarget,
+  EncodedAudioPacketSource,
   EncodedPacket,
   EncodedPacketSink,
   EncodedVideoPacketSource,
@@ -55,7 +56,10 @@ class Recorder
   });
 }
 
-async function fixture(kind: "webm" | "mkv" | "mp4") {
+async function fixture(
+  kind: "webm" | "mkv" | "mp4",
+  withAudio = false,
+) {
   const data =
     kind === "webm"
       ? new Uint8Array([
@@ -108,7 +112,31 @@ async function fixture(kind: "webm" | "mkv" | "mp4") {
   });
   const video = new EncodedVideoPacketSource(format.codec);
   output.addVideoTrack(video, { frameRate: 1 });
+  const audio = withAudio
+    ? new EncodedAudioPacketSource("opus")
+    : undefined;
+  if (audio) output.addAudioTrack(audio);
   await output.start();
+  if (audio) {
+    for (let i = 0; i < 3; ++i) {
+      await audio.add(
+        new EncodedPacket(
+          new Uint8Array([0xf8, 0xff, 0xfe]),
+          "key",
+          i * 0.02,
+          0.02,
+        ),
+        {
+          decoderConfig: {
+            codec: "opus",
+            numberOfChannels: 1,
+            sampleRate: 48000,
+          },
+        },
+      );
+    }
+    audio.close();
+  }
   for (const timestamp of [0, 1, 2])
     await video.add(
       new EncodedPacket(
@@ -130,9 +158,16 @@ async function fixture(kind: "webm" | "mkv" | "mp4") {
   };
 }
 
-it.each(["webm", "mkv", "mp4"] as const)(
-  "copies %s input into both containers, retaining the final chunk, timestamps and seek index",
-  async (kind) => {
+it.each([
+  ["webm", false],
+  ["mkv", false],
+  ["mp4", false],
+  ["webm", true],
+  ["mkv", true],
+  ["mp4", true],
+] as const)(
+  "copies %s input (receiver video only: %s), retaining the final chunk, timestamps and seek index",
+  async (kind, receiverVideoOnly) => {
     const source = await fixture(kind);
     for (const container of [
       "auto",
@@ -140,7 +175,11 @@ it.each(["webm", "mkv", "mp4"] as const)(
       "mp4",
     ] as const) {
       const raw = new Recorder();
-      const recorder = remuxRecording(raw, container);
+      const recorder = remuxRecording(
+        raw,
+        container,
+        receiverVideoOnly ? { hasAudio: false } : undefined,
+      );
       const chunks: Blob[] = [],
         errors: unknown[] = [];
       recorder.addEventListener("dataavailable", (event) =>
@@ -219,6 +258,90 @@ it.each(["webm", "mkv", "mp4"] as const)(
     }
   },
 );
+
+it("shifts the video timeline once by the receiver skew and observed Opus packet duration", async () => {
+  vi.stubGlobal("navigator", { userAgent: "Chrome/156.0" });
+  const raw = new Recorder(),
+    audioSkew = vi.fn(async () => 0.015);
+  const recorder = remuxRecording(raw, "mkv", {
+    hasAudio: true,
+    audioSkew,
+  });
+  try {
+    const source = await fixture("webm", true);
+    const chunks: Blob[] = [];
+    recorder.addEventListener("dataavailable", (e) =>
+      chunks.push((e as BlobEvent).data),
+    );
+    const done = new Promise<void>((resolve, reject) => {
+      recorder.addEventListener("stop", () => resolve());
+      recorder.addEventListener("error", (e) =>
+        reject((e as Event & { error: unknown }).error),
+      );
+    });
+    recorder.start();
+    raw.last = new Blob([source.data]);
+    recorder.stop();
+    await done;
+    expect(audioSkew).toHaveBeenCalledOnce();
+    const bytes = new Uint8Array(
+      await new Blob(chunks).arrayBuffer(),
+    );
+    for (const patch of recorder.getPatches!())
+      bytes.set(patch.data, patch.offset);
+    const input = new Input({
+      formats: ALL_FORMATS,
+      source: new BufferSource(bytes),
+    });
+    try {
+      const video = new EncodedPacketSink(
+        (await input.getPrimaryVideoTrack())!,
+      );
+      expect(
+        (await video.getFirstPacket())?.timestamp,
+      ).toBeCloseTo(0.035, 5);
+      expect(
+        (await video.getKeyPacket(2.1))?.timestamp,
+      ).toBeCloseTo(2.035, 5);
+      const audio = new EncodedPacketSink(
+        (await input.getPrimaryAudioTrack())!,
+      );
+      expect(
+        (await audio.getFirstPacket())?.timestamp,
+      ).toBe(0);
+    } finally {
+      input.dispose();
+    }
+  } finally {
+    await recorder.dispose!();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("reports a missing selected audio track instead of publishing a silent file", async () => {
+  const raw = new Recorder();
+  const recorder = remuxRecording(raw, "mkv", {
+    hasAudio: true,
+    audioSkew: async () => 0,
+  });
+  try {
+    const fixtureData = await fixture("webm");
+    const failed = vi.fn();
+    recorder.addEventListener("error", failed);
+    const stopped = new Promise<void>((resolve) =>
+      recorder.addEventListener("stop", () => resolve(), {
+        once: true,
+      }),
+    );
+    recorder.start();
+    raw.last = new Blob([fixtureData.data]);
+    recorder.stop();
+    await stopped;
+    expect(failed).toHaveBeenCalledOnce();
+  } finally {
+    await recorder.dispose!();
+  }
+});
 
 it("cancels a pending header read and releases the recorder without waiting for more data", async () => {
   const raw = new Recorder();

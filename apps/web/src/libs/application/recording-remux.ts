@@ -1,18 +1,28 @@
 import {
   ALL_FORMATS,
   Conversion,
+  EncodedAudioPacketSource,
+  EncodedPacketSink,
+  EncodedVideoPacketSource,
+  type InputVideoTrack,
+  type InputAudioTrack,
   Input,
   Output,
   ReadableStreamSource,
-  StreamTarget,
 } from "mediabunny";
 import type { RecordingEngine } from "./recording-engine";
+import { RecordingVideoWriter } from "./recording-video-cadence";
 import { RecordingMuxerWrites } from "./recording-muxer-writes";
 import { recordingContainer } from "./recording-container";
 import {
   recordingContainerForCodec,
   type RecordingContainer,
 } from "./recording-options";
+
+interface ReceivedScreen {
+  hasAudio: boolean;
+  audioSkew?(): Promise<number | undefined>;
+}
 
 const MAX_PENDING = 32 * 1024 * 1024;
 
@@ -32,8 +42,6 @@ class RemuxedRecording
   private converting?: Promise<void>;
   private finishing?: Promise<void>;
   private pending = 0;
-  private chunks: Uint8Array<ArrayBuffer>[] = [];
-  private bytes = 0;
   private timer?: ReturnType<typeof setInterval>;
   private failed = false;
   private disposed = false;
@@ -42,6 +50,7 @@ class RemuxedRecording
   constructor(
     private readonly recorder: RecordingEngine,
     private readonly container: RecordingContainer,
+    private readonly screen?: ReceivedScreen,
   ) {
     super();
     // The first demuxed video track chooses automatic output. VFS publishes the
@@ -103,8 +112,9 @@ class RemuxedRecording
         video.codec,
       ),
     );
+    const tracks = await this.input!.getTracks();
     const configs = await Promise.all(
-      (await this.input!.getTracks()).map((track) =>
+      tracks.map((track) =>
         track.getCodecParameterString(),
       ),
     );
@@ -112,23 +122,25 @@ class RemuxedRecording
     this.mimeType = `${format.mimeType};codecs=${configs.join(",")}`;
     this.output = new Output({
       format,
-      target: new StreamTarget(
-        new WritableStream({
-          write: (chunk) => {
-            const bytes = this.writes.write(chunk);
-            if (
-              !bytes.length ||
-              this.disposed ||
-              this.failed
-            )
-              return;
-            this.chunks.push(bytes);
-            this.bytes += bytes.length;
-            if (this.bytes >= 1024 * 1024) this.flush();
-          },
-        }),
-      ),
+      target: this.writes.createTarget(() => this.flush()),
     });
+    if (this.screen && tracks.length === 1) {
+      if (this.screen.hasAudio)
+        throw new Error(
+          "Screen recording has no audio track",
+        );
+      return this.copyScreen(video);
+    }
+    if (
+      this.screen?.audioSkew &&
+      tracks.length === 2 &&
+      /Chrom(?:e|ium)\//.test(navigator.userAgent)
+    ) {
+      const audio =
+        await this.input!.getPrimaryAudioTrack();
+      if (audio?.codec === "opus")
+        return this.copyScreen(video, audio);
+    }
     this.conversion = await Conversion.init({
       input: this.input!,
       output: this.output!,
@@ -146,16 +158,102 @@ class RemuxedRecording
     await this.conversion.execute();
   }
 
-  private flush(): void {
-    if (!this.bytes || this.disposed || this.failed) return;
-    const data = new Blob(this.chunks, {
-      type: this.mimeType,
-    });
-    this.chunks = [];
-    this.bytes = 0;
-    this.dispatchEvent(
-      Object.assign(new Event("dataavailable"), { data }),
+  private async copyScreen(
+    video: InputVideoTrack,
+    audio?: InputAudioTrack,
+  ): Promise<void> {
+    const packets = new EncodedPacketSink(video);
+    const [first, config, rotation] = await Promise.all([
+      packets.getFirstKeyPacket(),
+      video.getDecoderConfig(),
+      video.getRotation(),
+    ]);
+    if (!first || !config || !video.codec)
+      throw new Error(
+        "Missing screen recording keyframe or video configuration",
+      );
+    if (this.disposed || this.failed) return;
+    const output = this.output!;
+    const copy = new EncodedVideoPacketSource(video.codec);
+    output.addVideoTrack(copy, { rotation });
+    const audioPackets =
+      audio && new EncodedPacketSink(audio);
+    const [firstAudio, audioConfig, skew] =
+      await Promise.all([
+        audioPackets?.getFirstPacket(),
+        audio?.getDecoderConfig(),
+        audio ? this.screen?.audioSkew?.() : undefined,
+      ]);
+    if (this.disposed || this.failed) return;
+    if (audio && (!firstAudio || !audioConfig))
+      throw new Error("Missing screen recording audio");
+    const audioCopy =
+      audio?.codec &&
+      new EncodedAudioPacketSource(audio.codec);
+    if (audioCopy) output.addAudioTrack(audioCopy);
+    // Chromium dates a batched Opus packet near the end of the PCM it consumed.
+    // Use the duration in this recording and one paired clock observation.
+    // A constant translation preserves frame spacing through pause and resume.
+    // A valid Opus packet contains at most 120 ms of audio.
+    const batch = firstAudio?.duration ?? 0;
+    const shift =
+      (batch > 0 && batch <= 0.12 ? batch : 0) +
+      (skew !== undefined &&
+      Number.isFinite(skew) &&
+      Math.abs(skew) < 1
+        ? skew
+        : 0);
+    const origin = Math.min(
+      first.timestamp + shift,
+      firstAudio?.timestamp ?? Infinity,
     );
+    const writer = new RecordingVideoWriter((packet) =>
+      copy.add(packet, { decoderConfig: config }),
+    );
+    await output.start();
+    await Promise.all([
+      (async () => {
+        for await (const packet of packets.packets(first)) {
+          if (this.disposed || this.failed) return;
+          await writer.add(
+            packet.clone({
+              timestamp: packet.timestamp + shift - origin,
+            }),
+            true,
+          );
+        }
+        await writer.finish();
+        copy.close();
+      })(),
+      (async () => {
+        if (
+          !audioPackets ||
+          !firstAudio ||
+          !audioCopy ||
+          !audioConfig
+        )
+          return;
+        for await (const packet of audioPackets.packets(
+          firstAudio,
+        )) {
+          if (this.disposed || this.failed) return;
+          await audioCopy.add(
+            packet.clone({
+              timestamp: packet.timestamp - origin,
+            }),
+            { decoderConfig: audioConfig },
+          );
+        }
+        audioCopy.close();
+      })(),
+    ]);
+    if (this.disposed || this.failed) return;
+    await output.finalize();
+  }
+
+  private flush(): void {
+    if (!this.disposed && !this.failed)
+      this.writes.flushTo(this);
   }
 
   private accept(blob: Blob): void {
@@ -222,6 +320,7 @@ class RemuxedRecording
   private fail(error: unknown): void {
     if (this.failed || this.disposed) return;
     this.failed = true;
+    this.writes.discard();
     // Reject pending reads/writes before waiting for the recorder's final event.
     this.input?.dispose();
     void this.writer?.abort(error).catch(() => {});
@@ -246,14 +345,14 @@ class RemuxedRecording
     if (this.output?.state !== "finalized")
       await this.output?.cancel();
     await this.recorder.dispose?.();
-    this.chunks = [];
-    this.bytes = 0;
+    this.writes.discard();
   }
 }
 
 export function remuxRecording(
   recorder: RecordingEngine,
   container: RecordingContainer,
+  screen?: ReceivedScreen,
 ): RecordingEngine {
-  return new RemuxedRecording(recorder, container);
+  return new RemuxedRecording(recorder, container, screen);
 }

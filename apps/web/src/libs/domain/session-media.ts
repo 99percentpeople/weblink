@@ -5,6 +5,7 @@ import type {
 import {
   RtpEncodedMediaTrack,
   RtpEncodedMediaWorkers,
+  type MediaReceivePurpose,
 } from "./rtp-encoded-media";
 import type { EncodedVideoSource } from "./encoded-video";
 import { recordingMediaSources } from "./recording-media-sources";
@@ -31,6 +32,8 @@ export type RemoteMediaTrackBinding = {
 };
 
 export interface PeerSessionMediaOptions {
+  /** Dedicated encoded recording only; never toggle on a viewing connection. */
+  readonly receivePurpose?: MediaReceivePurpose;
   acceptsContent?(): boolean;
   targetClientId(): string;
   getPeerConnection(): RTCPeerConnection | null;
@@ -152,9 +155,12 @@ export class PeerSessionMediaController {
     }
   >();
 
+  private readonly receivePurpose: MediaReceivePurpose;
   constructor(
     private readonly options: PeerSessionMediaOptions,
-  ) {}
+  ) {
+    this.receivePurpose = options.receivePurpose ?? "view";
+  }
 
   private notifyLocalStreamState(
     stream: MediaStream | null,
@@ -380,7 +386,10 @@ export class PeerSessionMediaController {
       this.options.acceptsContent?.() !== false;
     event.track.enabled = allowed;
     const receiver = event.receiver;
-    if (!this.encodedReceivers.has(receiver)) {
+    if (
+      this.receivePurpose === "recording" &&
+      !this.encodedReceivers.has(receiver)
+    ) {
       const tap = RtpEncodedMediaTrack.install(
         receiver,
         this.options.getPeerConnection()!,

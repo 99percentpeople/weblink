@@ -26,6 +26,7 @@ const f = vi.hoisted(() => ({
   pause: vi.fn(),
   resume: vi.fn(),
   sources: vi.fn(() => []),
+  audioSkew: vi.fn(async () => 0.02),
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: { session: { clientViewData: f.clients } },
@@ -38,7 +39,10 @@ vi.mock("@/libs/application/cache-service", () => ({
   }),
 }));
 vi.mock("@/libs/application/session-service", () => ({
-  sessionService: { getRecordingVideoSources: f.sources },
+  sessionService: {
+    getRecordingVideoSources: f.sources,
+    getScreenRecordingAudioClock: () => f.audioSkew,
+  },
 }));
 vi.mock("@/libs/application/native-screen-service", () => ({
   getNativeScreenPublication: () => undefined,
@@ -108,12 +112,8 @@ it.each(["camera", "screen"])(
     const microphone = track("microphone", "audio");
     const screenAudio = track("screen-audio", "audio");
     f.clients.peer = {
-      stream: stream(
-        camera,
-        display,
-        microphone,
-        screenAudio,
-      ),
+      stream: stream(camera, microphone),
+      nativeScreenStream: stream(display, screenAudio),
       audioTracks: [
         { trackId: microphone.id, mid: "0" },
         { trackId: screenAudio.id, mid: "1" },
@@ -152,6 +152,12 @@ it.each(["camera", "screen"])(
       video: kind === "camera" ? camera : display,
       audio: kind === "camera" ? [] : [screenAudio],
     });
+    expect(f.source?.receivedNativeScreen).toBe(
+      kind === "screen",
+    );
+    expect(f.source?.recordingAudioSkew).toBe(
+      kind === "screen" ? f.audioSkew : undefined,
+    );
     expect(f.source?.audio).toEqual([
       kind === "camera" ? microphone : screenAudio,
     ]);

@@ -445,8 +445,14 @@ may select concrete infrastructure implementations.
     viewers reuse the same worker but keep independent RTP feedback/output ports.
     Recording pins its worker and uses capture PCM audio; viewer departure cannot
     end either recording track. Software/browser encoding remains WebRTC-owned.
-    Ordinary meeting and native-screen receive connections expose selected tracks
-    through the same source interface in Web and Tauri. Video dimensions absent on
+    Browser meeting and native-screen viewing connections do not install encoded
+    transforms. Their recording path uses MediaRecorder with automatic MIME selection
+    and the existing streaming remuxer; the original received tracks remain live
+    through recording start, pause, resume and stop. This preserves the browser's
+    encoded-video passthrough where supported; audio may be mixed and encoded.
+    Dedicated encoded meeting connections opt into `receivePurpose: "recording"`
+    before their tracks arrive. Browser native-screen receivers expose their viewing
+    tracks directly to MediaRecorder. Video dimensions absent on
     received delta frames inherit the last known dimensions for that SSRC. When
     receiver keyframe metadata omits dimensions, existing inbound decode statistics
     provide them; recording never opens a decoder to discover the size.
@@ -484,6 +490,15 @@ may select concrete infrastructure implementations.
     encoder; an unsupported track fails rather than silently losing audio.
     MKV's AVC/HEVC configuration is derived from one keyframe using the common
     muxer/demuxer, and subsequent NAL units only change their length framing.
+    The MKV recorder holds one encoded video frame until the next presentation
+    timestamp defines its BlockDuration for precise paused seeking. In dense runs
+    of native desktop capture, the file's video presentation time is the centered
+    mean of up to three neighbors on each side and the frame itself, bounded by
+    the adjacent capture midpoints. This reduces short display intervals without
+    forcing a constant FPS. The first and last frames of each run keep their
+    capture times. Gaps of at least 1/60 s, segment changes and the byte limit
+    end a run. Only the recording muxer buffers these frames; audio continues
+    to use its original capture clock.
     VP9/AV1 profiles, bit depth and color configuration are read from the first
     validated keyframe through the same muxer/demuxer, without creating a decoder.
     Keyframe configuration changes stop the recording before mixing incompatible
@@ -515,9 +530,21 @@ may select concrete infrastructure implementations.
     changing the original sender. Unsupported native sources retain the local
     receiver/MediaRecorder fallback, including real source audio.
     Each resume waits for a keyframe and removes paused time from both tracks.
+    Web viewers record a native screen directly from its received tracks. Starting,
+    pausing and stopping a recording are local operations. Automatic MIME selection
+    allows Chromium to reuse the received video. A single selected screen audio
+    track goes directly to MediaRecorder. Multiple selected tracks use the audio mixer.
+    On Chromium, the remuxer aligns Opus and video once using the observed Opus
+    packet duration and the difference between the tracks' estimated playout times
+    from one WebRTC stats report. Before both RTCP sender reports arrive, receivers
+    can use the optional Absolute Capture Time extension on Windows audio/video RTP.
+    If neither clock is available, alignment uses only the observed Opus packet
+    duration. The file retains the relative timing between successive audio
+    packets and smooths high-rate video presentation.
     Capture shutdown, a borrowed remote source disconnect or video configuration
     changes finish the current file; a viewer leaving local packet recording does not.
-    incompatible audio formats or missing clocks stop recording with an error.
+    For native packet recording, incompatible audio formats or missing capture
+    clocks stop recording with an error.
     Incompatible streams are never spliced together. Stop drains accepted packets
     and final muxer writes, then applies bounded metadata patches through VFS close.
     Recording never stops the meeting's borrowed video/audio tracks.

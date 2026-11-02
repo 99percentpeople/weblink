@@ -58,7 +58,8 @@ export async function checkRecordingAudioSync(
       } finally {
         sample.close();
       }
-      if (checked >= 3) break;
+      // Continue through the resumed segment; checking only the first pulses
+      // misses audio/video offsets introduced by pause/resume.
       time += 0.4;
     }
     if (!checked)

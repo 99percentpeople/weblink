@@ -180,6 +180,44 @@ function setup() {
   return { session, channel, port };
 }
 
+it("reads the recording clock only for tracks from the same live screen", async () => {
+  const { session, channel } = setup();
+  const caps = {
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: false,
+    },
+  };
+  session.setRemoteCapabilities(caps);
+  channel.receive({
+    type: "offer",
+    id: "remote",
+    sourceId: "screen",
+    sdp: "offer",
+  });
+  await flush();
+  const stream = mediaStream("incoming");
+  receivers.at(-1).changed(stream);
+  const track = stream.getVideoTracks()[0],
+    audio = stream.getAudioTracks();
+  const read = vi.fn(async () => 0.02);
+  receivers.at(-1).recordingAudioSkew = read;
+  expect(
+    await session.recordingAudioClock(track, audio[0])?.(),
+  ).toBe(0.02);
+  expect(
+    session.recordingAudioClock(
+      track,
+      mediaStream("other").getAudioTracks()[0],
+    ),
+  ).toBeUndefined();
+  session.dispose();
+  expect(
+    session.recordingAudioClock(track, audio[0]),
+  ).toBeUndefined();
+});
+
 it("applies shared decoder snapshots without another media hello", async () => {
   const { session, channel } = setup();
   const before = channel.sent.length;

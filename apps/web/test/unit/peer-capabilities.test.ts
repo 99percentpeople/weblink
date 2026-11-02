@@ -624,6 +624,32 @@ it("bounds the envelope without interpreting feature-version payloads", () => {
     ).toBe(false);
 });
 
+it("accepts the optional recording flag from older screen hosts", () => {
+  const screen = {
+    decode: {
+      video: ["video/h265"],
+      audio: ["audio/opus"],
+    },
+    multiScreen: true,
+    trickleIce: true,
+  };
+  expect(validCurrentCapability("screen", screen)).toBe(
+    true,
+  );
+  expect(
+    validCurrentCapability("screen", {
+      ...screen,
+      recording: true,
+    }),
+  ).toBe(true);
+  expect(
+    validCurrentCapability("screen", {
+      ...screen,
+      recording: "true",
+    }),
+  ).toBe(false);
+});
+
 it("shares a stable connection generation until the main channel resets", async () => {
   const s = setup();
   const first = s.service.generation(s.session);

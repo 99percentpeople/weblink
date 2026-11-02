@@ -61,6 +61,8 @@ export interface PeerCapabilities {
     decode: MediaDecodeCapabilities;
     trickleIce: boolean;
     multiScreen: boolean;
+    /** Legacy hosts may still advertise sender-assisted recording. */
+    recording?: boolean;
   };
   control?: ControlCapability;
   clipboard?: { inlineText: boolean };
@@ -165,6 +167,8 @@ const validators: Record<
   screen: (v) =>
     record(v) &&
     flags(v, ["trickleIce", "multiScreen"]) &&
+    (v.recording === undefined ||
+      typeof v.recording === "boolean") &&
     !!parseMediaDecodeCapabilities(v.decode),
   control: (v) =>
     record(v) &&

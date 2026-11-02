@@ -4,12 +4,14 @@ import type {
 } from "@/libs/domain/file-storage";
 import type { StoredFile } from "@weblink/platform";
 import type { EncodedVideoSource } from "@/libs/domain/encoded-video";
-import type { RecordingEngine } from "./recording-engine";
+import {
+  createBrowserRecorder,
+  type RecordingEngine,
+} from "./recording-engine";
 import { createRecordingAudio } from "./recording-audio";
 import { WebmRecordingMetadata } from "./recording-webm";
 import {
   recordingFormat,
-  recordingVideoBitrate,
   resolveRecordingContainer,
   type RecordingContainer,
 } from "./recording-options";
@@ -24,6 +26,9 @@ export interface RecordingSource {
   id: string;
   name: string;
   local?: boolean;
+  /** A native screen received by this participant on its viewing connection. */
+  receivedNativeScreen?: boolean;
+  recordingAudioSkew?(): Promise<number | undefined>;
   video: MediaStreamTrack;
   audio: readonly MediaStreamTrack[];
   available(): boolean;
@@ -163,156 +168,83 @@ export class RecordingService {
       void this.stop();
     };
     try {
-      // Resume inside the start gesture, before permission/native-stream awaits.
+      const { signal } = session.controller;
+      // Looking up sources is synchronous. Subscriptions open only after storage consent.
+      const receivedScreen =
+        !!source.receivedNativeScreen && !source.open;
+      const directTracks =
+        receivedScreen && source.audio.length <= 1;
+      const sources =
+        !receivedScreen && (!source.open || source.local)
+          ? (source.encodedVideoSources?.() ?? [])
+          : [];
       if (
+        !directTracks &&
         source.audio.length &&
         typeof AudioContext !== "undefined"
       )
-        session.audio = createRecordingAudio(
-          session.controller.signal,
-        );
-      // Permission request must precede preparation and native connection awaits.
-      // A new recording cannot reuse old content; a full directory scan only
-      // delays capture. Ordinary imports still refresh before deduplication.
+        session.audio = createRecordingAudio(signal);
       await this.port.storage.authorizeDefault({
         refresh: false,
       });
-      session.controller.signal.throwIfAborted();
-      // Native sources supply encoded video and PCM directly. Try that before
-      // opening the fallback local WebRTC receiver or touching preview audio.
-      if (
-        source.local &&
-        source.open &&
-        source.encodedVideoSources
-      ) {
-        const sources = source.encodedVideoSources();
-        if (sources.length) {
-          const create =
-            this.port.encodedRecorder ??
-            (await import("./recording-encoded"))
-              .createEncodedRecording;
-          try {
-            session.recorder = await create(
-              sources,
-              new MediaStream(),
-              session.controller.signal,
-              container,
-            );
-          } catch {
-            session.controller.signal.throwIfAborted();
-          }
-        }
-      }
-      session.input = session.recorder
-        ? { stream: new MediaStream(), close() {} }
-        : source.open
-          ? await source.open(
-              session.controller.signal,
-              (error) => {
-                if (error) fail(error);
-                else void this.stop();
-              },
-            )
-          : {
-              stream: new MediaStream([
-                source.video,
-                ...source.audio,
-              ]),
-              close() {},
-            };
-      session.controller.signal.throwIfAborted();
+      signal.throwIfAborted();
       if (!source.available())
         throw new Error(
           "The selected video source has ended",
         );
-      if (
-        session.input.stream.getAudioTracks().length &&
-        !session.audio &&
-        typeof AudioContext !== "undefined"
-      )
-        session.audio = createRecordingAudio(
-          session.controller.signal,
-        );
-      await session.audio?.ready;
-      session.controller.signal.throwIfAborted();
-      const stream = session.audio
-        ? await session.audio.stream(session.input.stream)
-        : session.input.stream;
-      session.controller.signal.throwIfAborted();
-      if (!source.open && source.encodedVideoSources) {
-        const sources = source.encodedVideoSources();
-        if (sources.length) {
-          try {
-            const create =
-              this.port.encodedRecorder ??
-              (await import("./recording-encoded"))
-                .createEncodedRecording;
-            session.recorder = await create(
-              sources,
-              stream,
-              session.controller.signal,
-              container,
-            );
-          } catch {
-            // Capability, worker and format failures before output fall back.
-            session.controller.signal.throwIfAborted();
-          }
-        }
-      }
-      session.controller.signal.throwIfAborted();
-      const Constructor =
-        this.port.recorder ?? MediaRecorder;
-      const audio =
-        session.input.stream.getAudioTracks().length > 0;
-      const videoBitsPerSecond = recordingVideoBitrate(
-        stream.getVideoTracks()[0]?.getSettings?.(),
-      );
-      let cause: unknown = new Error(
-        "No supported recording format",
-      );
-      for (const mimeType of [
-        // Raw local capture needs an encoder. An explicit container lets
-        // Chromium choose from its accelerated codec profiles; an empty type
-        // falls back to VP8. Matroska also permits hardware H.264 encoders.
-        // Native screen inputs opened over WebRTC still need pass-through.
-        ...(source.local && !source.open
-          ? ["video/x-matroska"]
-          : []),
-        // An explicit MIME disables Chromium's encoded WebRTC pass-through.
-        // Let the browser reuse received frames before requesting an encoder.
-        undefined,
-        audio
-          ? "video/webm;codecs=vp8,opus"
-          : "video/webm;codecs=vp8",
-        "video/webm",
-        "video/mp4",
-      ]) {
-        if (session.recorder) break;
-        if (
-          mimeType &&
-          !Constructor.isTypeSupported(mimeType)
-        )
-          continue;
+
+      const openStream = () =>
+        directTracks
+          ? new MediaStream([source.video, ...source.audio])
+          : this.openStream(session, (error) => {
+              if (error) fail(error);
+              else void this.stop();
+            });
+      let stream: MediaStream | undefined;
+      if (sources.length) {
+        // Local native packet capture already supplies its own audio.
+        if (!source.open) stream = await openStream();
         try {
-          session.recorder = new Constructor(stream, {
-            ...(mimeType ? { mimeType } : {}),
-            videoBitsPerSecond,
-          });
-          break;
-        } catch (error) {
-          cause = error;
+          const create =
+            this.port.encodedRecorder ??
+            (await import("./recording-encoded"))
+              .createEncodedRecording;
+          signal.throwIfAborted();
+          session.recorder = await create(
+            sources,
+            stream ?? new MediaStream(),
+            signal,
+            container,
+          );
+        } catch {
+          signal.throwIfAborted();
         }
       }
-      if (!session.recorder) throw cause;
+      signal.throwIfAborted();
+      if (!session.recorder) {
+        stream ??= await openStream();
+        signal.throwIfAborted();
+        session.recorder = createBrowserRecorder(
+          this.port.recorder ?? MediaRecorder,
+          stream,
+          !!source.local && !source.open,
+        );
+      }
       if (!session.recorder.getPatches) {
         const remux =
           this.port.remuxRecorder ??
           (await import("./recording-remux"))
             .remuxRecording;
-        session.controller.signal.throwIfAborted();
+        signal.throwIfAborted();
         session.recorder = remux(
           session.recorder,
           container,
+          directTracks
+            ? {
+                hasAudio: source.audio.length === 1,
+                audioSkew: source.recordingAudioSkew,
+              }
+            : undefined,
         );
       }
       const recorder = session.recorder;
@@ -333,9 +265,9 @@ export class RecordingService {
       session.writer =
         await this.port.storage.createWritableFile({
           ...session.output,
-          signal: session.controller.signal,
+          signal,
         });
-      session.controller.signal.throwIfAborted();
+      signal.throwIfAborted();
       let formatKnown = false;
       recorder.addEventListener(
         "dataavailable",
@@ -418,7 +350,7 @@ export class RecordingService {
       for (const track of new Set([
         source.video,
         ...source.audio,
-        ...session.input.stream.getTracks(),
+        ...(session.input?.stream.getTracks() ?? []),
       ]))
         track.addEventListener(
           "ended",
@@ -440,13 +372,40 @@ export class RecordingService {
         500,
       );
       this.update(session);
-      await session.input.start?.();
+      await session.input?.start?.();
     } catch (error) {
       if (!session.stopping || session.error)
         session.error ??= error;
       await this.finish(session, false);
       if (session.error) throw session.error;
     }
+  }
+  private async openStream(
+    session: Session,
+    ended: (error?: Error) => void,
+  ): Promise<MediaStream> {
+    const {
+      source,
+      controller: { signal },
+    } = session;
+    if (source.open)
+      session.input = await source.open(signal, ended);
+    signal.throwIfAborted();
+    if (!source.available())
+      throw new Error(
+        "The selected video source has ended",
+      );
+    const stream =
+      session.input?.stream ??
+      new MediaStream([source.video, ...source.audio]);
+    if (!stream.getAudioTracks().length) return stream;
+    if (typeof AudioContext === "undefined") return stream;
+    session.audio ??= createRecordingAudio(signal);
+    await session.audio.ready;
+    signal.throwIfAborted();
+    const mixed = await session.audio.stream(stream);
+    signal.throwIfAborted();
+    return mixed;
   }
   pause(): void {
     const session = this.session;

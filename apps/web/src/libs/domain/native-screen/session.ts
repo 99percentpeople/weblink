@@ -131,15 +131,28 @@ export class NativeScreenSession {
   private incoming = new Map<string, Incoming>();
   private views = new Map<string, NativeScreenView>();
   constructor(private readonly port: ScreenSessionPort) {}
-  getRecordingMediaSources(
-    track: MediaStreamTrack,
-    audio: readonly MediaStreamTrack[],
+  recordingAudioClock(
+    video: MediaStreamTrack,
+    audio: MediaStreamTrack,
   ) {
-    return [...this.incoming.values()].flatMap(
-      ({ receiver }) =>
-        receiver?.getRecordingMediaSources(track, audio) ??
-        [],
-    );
+    for (const {
+      stream,
+      receiver,
+      retired,
+    } of this.incoming.values()) {
+      if (
+        !retired &&
+        stream
+          ?.getVideoTracks()
+          .some((track) => track === video) &&
+        stream
+          .getAudioTracks()
+          .some((track) => track === audio) &&
+        receiver?.recordingAudioSkew
+      ) {
+        return receiver.recordingAudioSkew.bind(receiver);
+      }
+    }
   }
 
   decodeFailed(track: MediaStreamTrack): void {

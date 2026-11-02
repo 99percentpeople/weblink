@@ -127,16 +127,16 @@ export function createRecording(app: AppStateContextProps) {
         avatar: options.avatar,
         sourceLabel: options.sourceLabel,
       };
+      const remote = () =>
+        appState.session.clientViewData[
+          options.participantId ?? ""
+        ];
       const streams = () =>
         options.local
           ? [app.localStream()]
           : [
-              appState.session.clientViewData[
-                options.participantId ?? ""
-              ]?.stream,
-              appState.session.clientViewData[
-                options.participantId ?? ""
-              ]?.nativeScreenStream,
+              remote()?.stream,
+              remote()?.nativeScreenStream,
             ];
       const allTracks = () =>
         streams().flatMap(
@@ -153,9 +153,7 @@ export function createRecording(app: AppStateContextProps) {
                     "microphone"
                   : !getRemoteAudioVideoTrackId(
                       track.id,
-                      appState.session.clientViewData[
-                        options.participantId ?? ""
-                      ] ?? {},
+                      remote() ?? {},
                     )),
             )
           : [...options.audio];
@@ -187,11 +185,26 @@ export function createRecording(app: AppStateContextProps) {
               };
             }
           : undefined);
+      const receivedNativeScreen =
+        !options.local &&
+        remote()
+          ?.nativeScreenStream?.getVideoTracks()
+          .some((track) => track === options.video);
       void service
         .start({
           id: options.id,
           name: options.name,
           local: options.local,
+          receivedNativeScreen,
+          recordingAudioSkew:
+            receivedNativeScreen &&
+            !open &&
+            audio.length === 1
+              ? sessionService?.getScreenRecordingAudioClock(
+                  options.video,
+                  audio[0],
+                )
+              : undefined,
           video: options.video,
           audio,
           encodedVideoSources: () => {

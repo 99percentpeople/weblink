@@ -149,6 +149,7 @@ function setup(
     preferredVideoCodec: null,
     preferredAudioCodec: null,
   }),
+  receivePurpose?: PeerSessionMediaOptions["receivePurpose"],
 ) {
   const state = {
     pc: null as PeerConnection | null,
@@ -160,6 +161,7 @@ function setup(
   const remoteAudioBindings = vi.fn();
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
+    receivePurpose,
     targetClientId: () => "peer",
     acceptsContent: () => state.allowed,
     getPeerConnection: () =>
@@ -234,7 +236,33 @@ it("installs encoded recording with the sender and keeps forwarding resources un
   }
 });
 
-it("exposes paired receiver audio/video and releases only recording subscriptions until connection disposal", () => {
+it("keeps viewing receivers transform-free and exposes their live tracks for recording", () => {
+  const install = vi.spyOn(RtpEncodedMediaTrack, "install");
+  try {
+    const { controller, bind, remote } = setup();
+    const { pc } = bind();
+    const video = new Track("video", "remote-screen");
+    const audio = new Track("audio", "remote-audio");
+    pc.receive(video);
+    pc.receive(audio);
+    expect(install).not.toHaveBeenCalled();
+    expect(
+      controller.getRecordingMediaSources(asTrack(video), [
+        asTrack(audio),
+      ]),
+    ).toEqual([]);
+    expect(
+      remote.mock.calls.at(-1)?.[0]?.getTracks(),
+    ).toEqual([video, audio]);
+    expect(video.stop).not.toHaveBeenCalled();
+    expect(audio.stop).not.toHaveBeenCalled();
+    controller.dispose();
+  } finally {
+    install.mockRestore();
+  }
+});
+
+it("exposes paired encoded audio/video only on dedicated recording connections", () => {
   const taps: {
     dispose: ReturnType<typeof vi.fn>;
     end: ReturnType<typeof vi.fn>;
@@ -252,7 +280,12 @@ it("exposes paired receiver audio/video and releases only recording subscription
       return tap as unknown as RtpEncodedMediaTrack;
     });
   try {
-    const { controller, bind } = setup();
+    const { controller, bind } = setup(
+      undefined,
+      undefined,
+      undefined,
+      "recording",
+    );
     const { pc } = bind();
     const video = new Track("video", "remote-camera"),
       audio = new Track("audio", "remote-mic");

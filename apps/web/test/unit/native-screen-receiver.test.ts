@@ -8,6 +8,7 @@ import {
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import { ScreenDecodeError } from "@/libs/domain/native-screen/errors";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
+import { RtpEncodedMediaTrack } from "@/libs/domain/rtp-encoded-media";
 
 class Stream {
   tracks: any[] = [];
@@ -47,8 +48,80 @@ const announce = (
     receiver,
   });
   screen.pc.dispatchEvent(event);
-  return track;
+  return track as unknown as MediaStreamTrack;
 };
+it("keeps viewing audio/video outside encoded transforms and available to MediaRecorder", () => {
+  const install = vi.spyOn(RtpEncodedMediaTrack, "install");
+  try {
+    const changed = vi.fn();
+    const screen = new ScreenReceiver({}, changed, vi.fn());
+    const video = announce(screen, "video", {});
+    const audio = announce(screen, "audio", {});
+    expect(install).not.toHaveBeenCalled();
+    expect(screen.stream.getTracks()).toEqual([
+      video,
+      audio,
+    ]);
+    expect(video.stop).not.toHaveBeenCalled();
+    expect(audio.stop).not.toHaveBeenCalled();
+    screen.close();
+  } finally {
+    install.mockRestore();
+  }
+});
+it("prefers paired playout reports and falls back to absolute capture time", async () => {
+  const receiver = new ScreenReceiver({}, vi.fn(), vi.fn());
+  const getStats = vi.fn(
+    async () =>
+      new Map([
+        [
+          "a",
+          {
+            type: "inbound-rtp",
+            kind: "audio",
+            estimatedPlayoutTimestamp: 5000,
+          },
+        ],
+        [
+          "v",
+          {
+            type: "inbound-rtp",
+            kind: "video",
+            estimatedPlayoutTimestamp: 5027,
+          },
+        ],
+      ]),
+  );
+  const getReceivers = vi.fn(() => [
+    {
+      track: { kind: "audio" },
+      getSynchronizationSources: () => [
+        { timestamp: 1220, captureTimestamp: 5200 },
+      ],
+    },
+    {
+      track: { kind: "video" },
+      getSynchronizationSources: () => [
+        { timestamp: 1110, captureTimestamp: 5100 },
+      ],
+    },
+  ]);
+  Object.assign(receiver.pc, { getReceivers, getStats });
+  expect(await receiver.recordingAudioSkew()).toBeCloseTo(
+    0.027,
+  );
+  expect(getReceivers).not.toHaveBeenCalled();
+  getStats.mockResolvedValue(new Map());
+  expect(await receiver.recordingAudioSkew()).toBeCloseTo(
+    0.01,
+  );
+  getReceivers.mockReturnValue([]);
+  expect(
+    await receiver.recordingAudioSkew(),
+  ).toBeUndefined();
+  receiver.close();
+});
+
 it("verifies decoded video before accepting a reused native sender", async () => {
   vi.useFakeTimers();
   const screen = new ScreenReceiver({}, vi.fn(), vi.fn());

@@ -298,16 +298,22 @@ export class SessionService {
     track: MediaStreamTrack,
     audio: readonly MediaStreamTrack[] = [],
   ): EncodedVideoSource[] {
-    return Object.values(this.sessions).flatMap(
-      (session) => {
-        return [
-          ...session.getRecordingMediaSources(track, audio),
-          ...(this.nativeScreens
-            .get(session)
-            ?.getRecordingMediaSources(track, audio) ?? []),
-        ];
-      },
+    return Object.values(this.sessions).flatMap((session) =>
+      session.getRecordingMediaSources(track, audio),
     );
+  }
+
+  getScreenRecordingAudioClock(
+    video: MediaStreamTrack,
+    audio: MediaStreamTrack,
+  ) {
+    for (const screen of this.nativeScreens.values()) {
+      const clock = screen.recordingAudioClock(
+        video,
+        audio,
+      );
+      if (clock) return clock;
+    }
   }
 
   setStream(stream: MediaStream | null) {

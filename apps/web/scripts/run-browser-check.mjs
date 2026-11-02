@@ -171,6 +171,8 @@ async function main() {
       recordingQuery.set("audioCodecsOnly", "1");
     if (process.env.RECORDING_TEST_ENCODED_ONLY)
       recordingQuery.set("encodedOnly", "1");
+    if (process.env.RECORDING_TEST_ENCODED_RECEIVE)
+      recordingQuery.set("encodedReceive", "1");
     if (process.env.RECORDING_TEST_DURATION_MS)
       recordingQuery.set(
         "duration",

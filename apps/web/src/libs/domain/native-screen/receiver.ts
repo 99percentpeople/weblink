@@ -4,15 +4,12 @@ import {
   ScreenDecodeStallError,
 } from "./errors";
 import { monitorScreenDecode } from "./decode-monitor";
-import {
-  RtpEncodedMediaTrack,
-  RtpEncodedMediaWorkers,
-} from "../rtp-encoded-media";
-import { recordingMediaSources } from "../recording-media-sources";
 import { readBrowserVideoStats } from "../video-stats";
 
 export interface ScreenReceiveConnection {
   readonly stream: MediaStream;
+  /** Audio delivery lag relative to video in seconds, sampled for recording. */
+  recordingAudioSkew?(): Promise<number | undefined>;
   answer(sdp: string): Promise<string>;
   addIceCandidate(
     candidate: RTCIceCandidateInit,
@@ -24,10 +21,6 @@ export interface ScreenReceiveConnection {
   getVideoStats(
     track: MediaStreamTrack,
   ): ReturnType<typeof readBrowserVideoStats>;
-  getRecordingMediaSources(
-    track: MediaStreamTrack,
-    audio: readonly MediaStreamTrack[],
-  ): ReturnType<typeof recordingMediaSources>;
 }
 
 export type ScreenReceiverFactory = (
@@ -37,6 +30,51 @@ export type ScreenReceiverFactory = (
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
+  async recordingAudioSkew(): Promise<number | undefined> {
+    try {
+      // Both RTCP estimates are taken at the same instant. They describe the
+      // media actually in playout, including the audio jitter buffer.
+      const reports = await this.pc.getStats();
+      const inbound = Array.from(reports.values()).filter(
+        (r) => r.type === "inbound-rtp",
+      );
+      const playout = (kind: string): number | undefined =>
+        inbound.find((r) => r.kind === kind)
+          ?.estimatedPlayoutTimestamp;
+      const audioPlayout = playout("audio"),
+        videoPlayout = playout("video");
+      if (
+        audioPlayout &&
+        videoPlayout &&
+        Number.isFinite(videoPlayout - audioPlayout)
+      )
+        return (videoPlayout - audioPlayout) / 1000;
+
+      // Absolute Capture Time is usable before the first pair of RTCP reports.
+      const receivers = this.pc.getReceivers();
+      const delay = (kind: string) => {
+        const source = receivers
+          .find((r) => r.track.kind === kind)
+          ?.getSynchronizationSources?.()[0] as
+          | (RTCRtpSynchronizationSource & {
+              captureTimestamp?: number;
+            })
+          | undefined;
+        if (source?.captureTimestamp !== undefined)
+          return source.timestamp - source.captureTimestamp;
+      };
+      const audio = delay("audio"),
+        video = delay("video");
+      if (
+        audio !== undefined &&
+        video !== undefined &&
+        Number.isFinite(audio - video)
+      )
+        return (audio - video) / 1000;
+    } catch {
+      // Recording can still copy the browser timestamps if a receiver disappears.
+    }
+  }
   getVideoStats(track: MediaStreamTrack) {
     return readBrowserVideoStats(this.pc, track, "receive");
   }
@@ -47,21 +85,6 @@ export class ScreenReceiver {
   private remoteReady = false;
   private candidates: RTCIceCandidateInit[] = [];
   private stopDecodeMonitor?: () => void;
-  private readonly encoded = new Map<
-    MediaStreamTrack,
-    RtpEncodedMediaTrack
-  >();
-  private readonly encodedWorkers =
-    new RtpEncodedMediaWorkers();
-  getRecordingMediaSources(
-    track: MediaStreamTrack,
-    audio: readonly MediaStreamTrack[],
-  ) {
-    return recordingMediaSources(
-      this.encoded.get(track),
-      audio.map((track) => this.encoded.get(track)),
-    );
-  }
   constructor(
     configuration: RTCConfiguration,
     private readonly changed: (
@@ -130,13 +153,6 @@ export class ScreenReceiver {
             // Older WebViews can expose an unsupported experimental setter.
           }
         }
-        const tap = RtpEncodedMediaTrack.install(
-          event.receiver,
-          this.pc,
-          this.encodedWorkers,
-          "receive",
-        );
-        if (tap) this.encoded.set(event.track, tap);
         this.stream.addTrack(event.track);
         event.track.addEventListener(
           "ended",
@@ -339,8 +355,6 @@ export class ScreenReceiver {
   }
   close(): void {
     if (this.lifetime.signal.aborted) return;
-    for (const tap of this.encoded.values()) tap.dispose();
-    this.encoded.clear();
     this.control?.close();
     this.lifetime.abort();
     this.candidates = [];

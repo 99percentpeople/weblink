@@ -6,6 +6,9 @@ import type {
 import SenderWorker from "./rtp-encoded-media.worker?worker&inline";
 import { RecordingReceiverClock } from "./recording-receiver-clock";
 
+/** Fixed for the connection lifetime; viewing records through MediaRecorder. */
+export type MediaReceivePurpose = "view" | "recording";
+
 type Consumer = Parameters<
   EncodedVideoSource["subscribe"]
 >[0];

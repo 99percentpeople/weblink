@@ -358,9 +358,6 @@ class NativeReceiver
       "receive",
     );
   }
-  getRecordingMediaSources() {
-    return [];
-  }
   monitorDecode(healthy: () => void) {
     this.stopMonitor?.();
     if (!this.lifetime.signal.aborted)

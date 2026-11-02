@@ -1,4 +1,10 @@
 import { checkNativeRecordingPackets } from "./recording-native-packets";
+import {
+  ALL_FORMATS,
+  BufferSource,
+  EncodedPacketSink,
+  Input,
+} from "mediabunny";
 import { checkRtpRecordingAudio } from "./recording-rtp-audio";
 import { checkRecordingAudioSync } from "./recording-audio-sync";
 import {
@@ -35,6 +41,11 @@ const sleep = (ms: number) =>
 const container = resolveRecordingContainer(
   new URL(location.href).searchParams.get("container"),
 );
+// Ordinary viewing records with MediaRecorder; retain explicit coverage for
+// dedicated encoded recording connections without changing them while live.
+const encodedReceive = new URL(
+  location.href,
+).searchParams.has("encodedReceive");
 async function waitFor(
   ready: () => boolean | Promise<boolean>,
   timeout = 10000,
@@ -50,6 +61,7 @@ async function waitFor(
 async function seekFrame(
   player: HTMLVideoElement,
   target: number,
+  expected?: number,
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     let ended = false;
@@ -61,6 +73,11 @@ async function seekFrame(
     };
     const complete = () => {
       if (!ended || frameTime === undefined) return;
+      if (
+        expected !== undefined &&
+        Math.abs(frameTime - expected) > 0.0005
+      )
+        return;
       cleanup();
       resolve(frameTime);
     };
@@ -68,17 +85,21 @@ async function seekFrame(
       ended = true;
       complete();
     };
-    const callback = player.requestVideoFrameCallback(
-      (_, frame) => {
-        frameTime = frame.mediaTime;
-        complete();
-      },
-    );
+    const observe: VideoFrameRequestCallback = (
+      _,
+      frame,
+    ) => {
+      frameTime = frame.mediaTime;
+      callback = player.requestVideoFrameCallback(observe);
+      complete();
+    };
+    let callback =
+      player.requestVideoFrameCallback(observe);
     const timer = setTimeout(() => {
       cleanup();
       reject(
         new Error(
-          `Recording seek/decode timed out: target=${target}, current=${player.currentTime}`,
+          `Recording seek/decode timed out: target=${target}, expected=${expected}, displayed=${frameTime}, current=${player.currentTime}`,
         ),
       );
     }, 10000);
@@ -327,7 +348,7 @@ async function run() {
             track,
             receiver: endpoint,
           }) => {
-            if (remote) {
+            if (remote && encodedReceive) {
               const tap = RtpEncodedMediaTrack.install(
                 endpoint,
                 receiver,
@@ -387,10 +408,18 @@ async function run() {
           }
           const stream = remote ? incoming : local;
           if (reuse || remote) {
-            assert(
-              taps.get(stream.getVideoTracks()[0]),
-              "Sender encoded transform unavailable",
-            );
+            if (reuse || encodedReceive)
+              assert(
+                taps.get(stream.getVideoTracks()[0]),
+                "Encoded recording transform unavailable",
+              );
+            else
+              assert(
+                receiver
+                  .getReceivers()
+                  .every((entry) => !entry.transform),
+                "Viewing connection installed a transform",
+              );
             viewer.srcObject = incoming;
             await viewer.play();
           }
@@ -409,7 +438,7 @@ async function run() {
           let completions = 0;
           let error: unknown;
           let state: RecordingState | null = null;
-          let encoders = 0;
+          let mediaRecorders = 0;
           if (
             (reuse || remote) &&
             VideoEncoderConstructor
@@ -442,7 +471,7 @@ async function run() {
               options?: MediaRecorderOptions,
             ) {
               super(stream, options);
-              encoders++;
+              mediaRecorders++;
             }
           }
           service = new RecordingService({
@@ -458,6 +487,13 @@ async function run() {
             },
             changed: (value) => {
               state = value;
+              if (remote && !encodedReceive)
+                assert(
+                  receiver
+                    .getReceivers()
+                    .every((entry) => !entry.transform),
+                  "Recording changed a viewing connection's transform",
+                );
             },
             failed: (cause) => {
               error = cause;
@@ -489,7 +525,7 @@ async function run() {
             audio: stream.getAudioTracks(),
             available: () => true,
             encodedVideoSources:
-              reuse || remote
+              reuse || (remote && encodedReceive)
                 ? () =>
                     recordingMediaSources(
                       {
@@ -541,12 +577,18 @@ async function run() {
           };
           await service.start(selected);
           assert(
-            !(reuse || remote) ||
-              (encoders === 0 &&
+            !(reuse || (remote && encodedReceive)) ||
+              (mediaRecorders === 0 &&
                 webCodecsEncoders === 0 &&
                 (!remote || audioEncoders === 0)),
-            `${remote ? "Receiver" : "Sender"} ${negotiatedCodec} recording fell back: recorders=${encoders}, video=${webCodecsEncoders}, audio=${audioEncoders}, frames=${JSON.stringify(firstFrames)}, audioFrames=${JSON.stringify(firstAudio)}`,
+            `${remote ? "Receiver" : "Sender"} ${negotiatedCodec} recording fell back: recorders=${mediaRecorders}, video=${webCodecsEncoders}, audio=${audioEncoders}, frames=${JSON.stringify(firstFrames)}, audioFrames=${JSON.stringify(firstAudio)}`,
           );
+          if (remote && !encodedReceive)
+            assert(
+              mediaRecorders === 1 &&
+                webCodecsEncoders === 0,
+              "Viewing recording did not use the MediaRecorder path",
+            );
           const prepareMs = Math.round(
             performance.now() - preparing,
           );
@@ -694,7 +736,7 @@ async function run() {
               "live",
             "Recorder stopped the original audio",
           );
-          if (remote)
+          if (remote && encodedReceive)
             assert(
               audioEncoders === 0,
               `Audio fell back: frames=${JSON.stringify(firstFrames)}, audio=${JSON.stringify(firstAudio)}, sync=${JSON.stringify(receiver.getReceivers().map((entry) => entry.getSynchronizationSources()))}`,
@@ -736,7 +778,7 @@ async function run() {
                   } as Record<string, string>
                 )[negotiatedCodec!],
               ),
-              `Remote ${codec} was unnecessarily transcoded: ${file.type}`,
+              `Recorded video codec differs from ${negotiatedCodec}: ${file.type}`,
             );
           }
           const measurement = {
@@ -745,11 +787,13 @@ async function run() {
             remote,
             camera,
             codec,
-            senderEncodingReused: reuse,
-            receiverEncodingReused: remote,
-            additionalAudioEncoders: audioEncoders,
-            additionalVideoEncoders:
-              encoders + webCodecsEncoders,
+            // MediaRecorder's internal encoders are not observable from JS.
+            mediaRecorders,
+            receiverTransform: receiver
+              .getReceivers()
+              .some((entry) => !!entry.transform),
+            webCodecsAudioEncoders: audioEncoders,
+            webCodecsVideoEncoders: webCodecsEncoders,
             type: file.type,
             bytes: file.size,
             prepareMs,
@@ -877,6 +921,14 @@ async function run() {
           );
           // Exercise the same preview entry point as the UI, including paged IndexedDB files.
           const url = await fileObjectUrl(file);
+          const seekInput =
+            (reuse || (remote && encodedReceive)) &&
+            file.name.endsWith(".mkv")
+              ? new Input({
+                  formats: ALL_FORMATS,
+                  source: new BufferSource(content),
+                })
+              : undefined;
           try {
             player.src = url;
             await waitFor(() => player.readyState >= 1);
@@ -898,11 +950,27 @@ async function run() {
               "Recorded resolution changed",
             );
             player.pause();
+            const track =
+              await seekInput?.getPrimaryVideoTrack();
+            const sink =
+              track && new EncodedPacketSink(track);
             for (const fraction of [0.8, 0.2, 0.6]) {
-              const target = player.duration * fraction;
+              const at = player.duration * fraction;
+              const packet = await sink?.getPacket(at, {
+                metadataOnly: true,
+              });
+              if (seekInput)
+                assert(
+                  packet && packet.duration > 0,
+                  "MKV seek target has no frame interval",
+                );
+              const target = packet
+                ? packet.timestamp + packet.duration / 2
+                : at;
               const decoded = await seekFrame(
                 player,
                 target,
+                packet?.timestamp,
               );
               assert(
                 Math.abs(player.currentTime - target) <
@@ -914,6 +982,7 @@ async function run() {
               measurement.seeks.push({ target, decoded });
             }
           } finally {
+            seekInput?.dispose();
             player.pause();
             player.removeAttribute("src");
             player.load();
@@ -924,7 +993,7 @@ async function run() {
             kind === "indexeddb" &&
             negotiatedCodec === "video/VP8"
           ) {
-            // The same sender transform must survive several recordings.
+            // The same connection must survive several recordings.
             await service.start(selected);
             await sleep(400);
             await service.stop();
@@ -1009,11 +1078,13 @@ async function run() {
               "Recording disposal stopped the original camera",
             );
             assert(
-              webCodecsEncoders === 0 && encoders === 0,
-              "A repeated recording added a video encoder",
+              webCodecsEncoders === 0 &&
+                mediaRecorders ===
+                  (remote && !encodedReceive ? 3 : 0),
+              "Repeated recording used the wrong recording path",
             );
             passed.push(
-              `${remote ? "receiver" : "sender"} reuse survives repeated recordings and quota failure; connection disposal automatically saves without stopping borrowed capture`,
+              `${remote ? "receiver" : "sender"} supports repeated recordings and quota failure; connection disposal automatically saves without stopping borrowed capture`,
             );
           }
           passed.push(
