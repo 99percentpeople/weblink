@@ -145,15 +145,16 @@ it.each(
     try {
       recorder!.start();
       await queue;
-      timestamp += 3000;
+      timestamp += 582;
       await send();
       recorder!.pause();
       expect(recorder!.state).toBe("paused");
       timestamp += 900000;
       recorder!.resume();
       await queue;
-      timestamp += 3000;
+      timestamp += 1164;
       await send();
+      recorder!.pause();
       recorder!.stop();
       recorder!.stop();
       await done;
@@ -187,10 +188,18 @@ it.each(
         expect(packets).toHaveLength(4);
         expect(packets.map((p) => p.timestamp)).toEqual([
           0,
-          expect.closeTo(1 / 30, 2),
-          expect.closeTo(2 / 30, 2),
-          expect.closeTo(3 / 30, 2),
+          expect.closeTo(582 / 90000, 3),
+          expect.closeTo(1164 / 90000, 3),
+          expect.closeTo(2328 / 90000, 3),
         ]);
+        // The third frame has a different capture interval. Even the tail
+        // must have a duration when the recording stops while paused.
+        if (container !== "mp4")
+          expect(
+            packets.map((p) =>
+              Math.round(1000 * p.duration),
+            ),
+          ).toEqual([6, 7, 13, 13]);
         for (const saved of packets)
           expect(saved.data).toEqual(
             new Uint8Array(packet(codec, encoded).data),

@@ -171,6 +171,10 @@ export class RecordingRtpTimeline {
   private step = 1 / 30;
   private segmentOrigin = 0;
   private segmentTime = 0;
+  /** Same estimate used at a segment splice when no next frame is available. */
+  get estimatedEnd(): number {
+    return this.time + this.step;
+  }
   next(
     packet: EncodedVideoPacket,
     audioEnd?: number,
@@ -182,7 +186,7 @@ export class RecordingRtpTimeline {
         );
       if (this.segment !== -1) {
         this.time = Math.max(
-          this.time + this.step,
+          this.estimatedEnd,
           audioEnd ?? 0,
         );
       }

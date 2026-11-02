@@ -5,9 +5,9 @@ import {
   EncodedPacket,
   EncodedVideoPacketSource,
   MediaStreamAudioTrackSource,
+  MkvOutputFormat,
   Output,
   NullTarget,
-  StreamTarget,
 } from "mediabunny";
 import type {
   EncodedVideoPacket,
@@ -33,6 +33,7 @@ import {
   RecordingRtpTimeline,
 } from "./recording-encoded-format";
 import { RecordingEncodedAudio } from "./recording-encoded-audio";
+import { RecordingVideoWriter } from "./recording-video-cadence";
 
 /** Muxes borrowed video and, when available, the original audio codec. Other audio uses the selected-source mix. */
 class EncodedRecording
@@ -48,6 +49,7 @@ class EncodedRecording
   private output?: Output;
   private container?: ReturnType<typeof recordingContainer>;
   private video?: EncodedVideoPacketSource;
+  private timedVideo?: RecordingVideoWriter;
   private audio?: MediaStreamAudioTrackSource;
   private encodedAudio?: RecordingEncodedAudio;
   private firstAudio?: {
@@ -60,8 +62,6 @@ class EncodedRecording
   private minimumSegment = 0;
   private segment = -1;
   private timeline = new RecordingRtpTimeline();
-  private chunks: Uint8Array<ArrayBuffer>[] = [];
-  private bytes = 0;
   private writes = new RecordingMuxerWrites();
   private incompatible = false;
   private timer?: ReturnType<typeof setInterval>;
@@ -195,23 +195,17 @@ class EncodedRecording
       this.mimeType = `${this.container.mimeType};codecs=${this.format.config.codec}${this.encodedAudio ? `,${this.encodedAudio.codec}` : audio || pcmFormat ? ",opus" : ""}`;
       this.output = new Output({
         format: this.container,
-        target: new StreamTarget(
-          new WritableStream({
-            write: (chunk) => {
-              const data = this.writes.write(chunk);
-              if (!data.length) return;
-              this.chunks.push(data);
-              this.bytes += data.length;
-              if (this.started && this.bytes >= 1024 * 1024)
-                this.flush();
-            },
-          }),
+        target: this.writes.createTarget(() =>
+          this.flush(),
         ),
       });
       this.video = new EncodedVideoPacketSource(
         this.format.codec,
       );
       this.output.addVideoTrack(this.video);
+      this.timedVideo = new RecordingVideoWriter((frame) =>
+        this.addVideoPacket(frame),
+      );
       if (this.encodedAudio) {
         this.output.addAudioTrack(this.encodedAudio.source);
       } else if (pcmFormat) {
@@ -351,16 +345,34 @@ class EncodedRecording
       ),
     );
     if (this.segment !== packet.segment) {
+      await this.timedVideo!.drainCadence();
       this.segment = packet.segment;
       this.encodedAudio?.startSegment(packet, timestamp);
       if (this.state === "recording") this.audio?.resume();
     }
     const data = this.format!.bytes(packet);
-    this.writes.accountPacket(data.length);
-    await this.video!.add(
-      new EncodedPacket(data, packet.type, timestamp, 0),
-      { decoderConfig: this.format!.config },
+    this.writes.accountPacket(data.byteLength);
+    const frame = new EncodedPacket(
+      data,
+      packet.type,
+      timestamp,
+      0,
     );
+    const nativeCapture = packet.timestampScale === 1000000;
+    if (
+      nativeCapture ||
+      this.container instanceof MkvOutputFormat
+    )
+      await this.timedVideo!.add(frame, nativeCapture);
+    else await this.addVideoPacket(frame);
+  }
+
+  private addVideoPacket(
+    frame: EncodedPacket,
+  ): Promise<void> {
+    return this.video!.add(frame, {
+      decoderConfig: this.format!.config,
+    });
   }
 
   private encodedAudioFrame(packet: EncodedAudioPacket) {
@@ -509,6 +521,14 @@ class EncodedRecording
           throw new Error(
             "Recording ended before the first video frame",
           );
+        await this.timedVideo!.finish(
+          Math.max(
+            this.timeline.estimatedEnd,
+            this.audioEnd,
+            this.pcmEnd,
+            this.encodedAudio?.end ?? 0,
+          ),
+        );
         await this.output?.finalize();
         this.flush();
       } catch (error) {
@@ -520,18 +540,8 @@ class EncodedRecording
       }
     })();
   }
-  private flush() {
-    if (!this.bytes || !this.started) return;
-    const data = new Blob(this.chunks, {
-      type: this.mimeType,
-    });
-    this.chunks = [];
-    this.initial = [];
-    this.initialBytes = 0;
-    this.bytes = 0;
-    this.dispatchEvent(
-      Object.assign(new Event("dataavailable"), { data }),
-    );
+  private flush(): void {
+    if (this.started) this.writes.flushTo(this);
   }
   getPatches(): readonly VfsWrite[] {
     return this.writes.patches;
@@ -558,7 +568,8 @@ class EncodedRecording
     await this.finishing;
     if (this.output?.state !== "finalized")
       await this.output?.cancel();
-    this.chunks = [];
+    this.writes.discard();
+    this.timedVideo = undefined;
   }
 }
 

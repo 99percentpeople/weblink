@@ -1,5 +1,5 @@
 diff --git a/dist/bundles/mediabunny.cjs b/dist/bundles/mediabunny.cjs
-index af443b9f053075ccf280e9cf7424149b3e5e722a..363e78a01fd9b5c6adfdd33a3d88672c0630af8f 100644
+index af443b9f053075ccf280e9cf7424149b3e5e722a..c4b4599df83857a74e1123877cd850fb794f6b48 100644
 --- a/dist/bundles/mediabunny.cjs
 +++ b/dist/bundles/mediabunny.cjs
 @@ -4757,7 +4757,8 @@ var Mediabunny = (() => {
@@ -105,6 +105,17 @@ index af443b9f053075ccf280e9cf7424149b3e5e722a..363e78a01fd9b5c6adfdd33a3d88672c
        const newTrackData = {
          track,
          type: "audio",
+@@ -33681,8 +33724,8 @@ ${cue.notes ?? ""}`;
+       const view2 = new DataView(prelude.buffer);
+       view2.setUint8(0, 128 | trackData.track.id);
+       view2.setInt16(1, relativeTimestamp, false);
+-      const msDuration = Math.round(1e3 * chunk.duration);
+-      const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle";
++      const msDuration = trackData.type === "video" ? Math.round(1e3 * (chunk.timestamp + chunk.duration)) - msTimestamp : Math.round(1e3 * chunk.duration);
++      const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle" || (trackData.type === "video" && msDuration > 0);
+       if (!needsBlockGroup) {
+         view2.setUint8(3, Number(chunk.type === "key") << 7);
+         const simpleBlock = { id: 163 /* SimpleBlock */, data: [
 @@ -39131,7 +39174,7 @@ ${cue.notes ?? ""}`;
      getSupportedCodecs() {
        return [
@@ -142,7 +153,7 @@ index af443b9f053075ccf280e9cf7424149b3e5e722a..363e78a01fd9b5c6adfdd33a3d88672c
        ];
      }
 diff --git a/dist/bundles/mediabunny.mjs b/dist/bundles/mediabunny.mjs
-index 4234c31ad73fb6cfc8b7f28ab65df11bed368b20..c3497a5e8b871e7965d9b479542a0b989f826953 100644
+index 4234c31ad73fb6cfc8b7f28ab65df11bed368b20..667bd788904abb00c523e9e8aac4d145e91d4d80 100644
 --- a/dist/bundles/mediabunny.mjs
 +++ b/dist/bundles/mediabunny.mjs
 @@ -4600,7 +4600,8 @@ var NON_PCM_AUDIO_CODECS = [
@@ -250,6 +261,17 @@ index 4234c31ad73fb6cfc8b7f28ab65df11bed368b20..c3497a5e8b871e7965d9b479542a0b98
      const newTrackData = {
        track,
        type: "audio",
+@@ -33524,8 +33567,8 @@ ${cue.notes ?? ""}`;
+     const view2 = new DataView(prelude.buffer);
+     view2.setUint8(0, 128 | trackData.track.id);
+     view2.setInt16(1, relativeTimestamp, false);
+-    const msDuration = Math.round(1e3 * chunk.duration);
+-    const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle";
++    const msDuration = trackData.type === "video" ? Math.round(1e3 * (chunk.timestamp + chunk.duration)) - msTimestamp : Math.round(1e3 * chunk.duration);
++    const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle" || (trackData.type === "video" && msDuration > 0);
+     if (!needsBlockGroup) {
+       view2.setUint8(3, Number(chunk.type === "key") << 7);
+       const simpleBlock = { id: 163 /* SimpleBlock */, data: [
 @@ -38974,7 +39017,7 @@ var Mp4OutputFormat = class extends IsobmffOutputFormat2 {
    getSupportedCodecs() {
      return [
@@ -287,7 +309,7 @@ index 4234c31ad73fb6cfc8b7f28ab65df11bed368b20..c3497a5e8b871e7965d9b479542a0b98
      ];
    }
 diff --git a/dist/bundles/mediabunny.node.cjs b/dist/bundles/mediabunny.node.cjs
-index 90ff7d356a4829edd1b30b2d51f553f995f01789..97e6e22f021123d52e86a5aa3ce3e85022008652 100644
+index 90ff7d356a4829edd1b30b2d51f553f995f01789..d97d0b0db3061ea71f7513916da8dc65b7a7de63 100644
 --- a/dist/bundles/mediabunny.node.cjs
 +++ b/dist/bundles/mediabunny.node.cjs
 @@ -4754,7 +4754,8 @@ var Mediabunny = (() => {
@@ -393,6 +415,17 @@ index 90ff7d356a4829edd1b30b2d51f553f995f01789..97e6e22f021123d52e86a5aa3ce3e850
        const newTrackData = {
          track,
          type: "audio",
+@@ -33683,8 +33726,8 @@ ${cue.notes ?? ""}`;
+       const view2 = new DataView(prelude.buffer);
+       view2.setUint8(0, 128 | trackData.track.id);
+       view2.setInt16(1, relativeTimestamp, false);
+-      const msDuration = Math.round(1e3 * chunk.duration);
+-      const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle";
++      const msDuration = trackData.type === "video" ? Math.round(1e3 * (chunk.timestamp + chunk.duration)) - msTimestamp : Math.round(1e3 * chunk.duration);
++      const needsBlockGroup = !!chunk.additions || trackData.type === "subtitle" || (trackData.type === "video" && msDuration > 0);
+       if (!needsBlockGroup) {
+         view2.setUint8(3, Number(chunk.type === "key") << 7);
+         const simpleBlock = { id: 163 /* SimpleBlock */, data: [
 @@ -39133,7 +39176,7 @@ ${cue.notes ?? ""}`;
      getSupportedCodecs() {
        return [
@@ -472,7 +505,7 @@ index 97dfdf3d959b46be1c7d6dcc297fbe4ff6341c6f..271fc2895b4fde9e395b037a4833974a
   * List of known subtitle codecs, ordered by encoding preference.
   * @group Codecs
 diff --git a/dist/modules/src/codec.js b/dist/modules/src/codec.js
-index 65c2ed9707caad721db3d828e44e93eeaa656d6e..a278376f2f7998f9902e65c463f78b427e165fe9 100644
+index 65c2ed9707caad721db3d828e44e93eeaa656d6e..dd22eec737f8f88d5263739bbf1d010fa0ef93bf 100644
 --- a/dist/modules/src/codec.js
 +++ b/dist/modules/src/codec.js
 @@ -56,6 +56,7 @@ export const NON_PCM_AUDIO_CODECS = [
@@ -563,7 +596,7 @@ index 7fcb549cadb05f87a425e4ed5971cf0733b0c7c6..7a0ba98f4f83dedb17b30535f35b41e2
                                      this.currentTrack.info.codec = 'pcm-u8';
                                  }
 diff --git a/dist/modules/src/matroska/matroska-muxer.js b/dist/modules/src/matroska/matroska-muxer.js
-index b4ab966b77ab937f3a92a71edc052b8c78feae52..e62715dee4b5386b43ce786b929323d70ca569ba 100644
+index b4ab966b77ab937f3a92a71edc052b8c78feae52..9d66b8450305801b51ffd3c162ef962d5b4490ff 100644
 --- a/dist/modules/src/matroska/matroska-muxer.js
 +++ b/dist/modules/src/matroska/matroska-muxer.js
 @@ -728,6 +728,25 @@ export class MatroskaMuxer extends Muxer {
@@ -592,6 +625,19 @@ index b4ab966b77ab937f3a92a71edc052b8c78feae52..e62715dee4b5386b43ce786b929323d7
          const newTrackData = {
              track,
              type: 'audio',
+@@ -993,9 +1012,9 @@ export class MatroskaMuxer extends Muxer {
+         // 0x80 to indicate it's the last byte of a multi-byte number
+         view.setUint8(0, 0x80 | trackData.track.id);
+         view.setInt16(1, relativeTimestamp, false);
+-        const msDuration = Math.round(1000 * chunk.duration);
+-        // Subtitle cues need an explicit BlockDuration (a SimpleBlock has none)
+-        const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle';
++        const msDuration = trackData.type === 'video' ? Math.round(1000 * (chunk.timestamp + chunk.duration)) - msTimestamp : Math.round(1000 * chunk.duration);
++        // Preserve video frame intervals for precise paused seeks; SimpleBlock has no BlockDuration.
++        const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle' || (trackData.type === 'video' && msDuration > 0);
+         if (!needsBlockGroup) {
+             // No additions, we can write out a SimpleBlock
+             view.setUint8(3, Number(chunk.type === 'key') << 7); // Flags (keyframe flag only present for SimpleBlock)
 diff --git a/dist/modules/src/output-format.js b/dist/modules/src/output-format.js
 index 92285853eb2c65fda6723008334d4e06f334d57c..56570ba4c64bfe7b3d9ad24f7ad624388a0ee82d 100644
 --- a/dist/modules/src/output-format.js
@@ -642,7 +688,7 @@ index 92285853eb2c65fda6723008334d4e06f334d57c..56570ba4c64bfe7b3d9ad24f7ad62438
      }
      get supportsVideoTransformationMetadata() {
 diff --git a/src/codec.ts b/src/codec.ts
-index ab9d1bfda331b2397a4f8c21561ddae1bedc521d..7673d49b0dda1a6081921d6383c01007135f5ac7 100644
+index ab9d1bfda331b2397a4f8c21561ddae1bedc521d..90841f7f1335247f544c175734a02c265d3fbc22 100644
 --- a/src/codec.ts
 +++ b/src/codec.ts
 @@ -86,6 +86,7 @@ export const NON_PCM_AUDIO_CODECS = [
@@ -731,7 +777,7 @@ index f0524c32fc45447b6ea89d991735dcc7cdc3466f..ff72ec589219af04680d355c70ea9136
  							if (this.currentTrack.info.bitDepth === 8) {
  								this.currentTrack.info.codec = 'pcm-u8';
 diff --git a/src/matroska/matroska-muxer.ts b/src/matroska/matroska-muxer.ts
-index a0f5fcc578d95464e1b25560671d0983ec70c0b3..6833cb4f25be2d44160db30a36d1b102d79bb4c5 100644
+index a0f5fcc578d95464e1b25560671d0983ec70c0b3..40c7679df0935d6315bc9f88e60222a92311c34d 100644
 --- a/src/matroska/matroska-muxer.ts
 +++ b/src/matroska/matroska-muxer.ts
 @@ -924,6 +924,25 @@ export class MatroskaMuxer extends Muxer {
@@ -760,6 +806,20 @@ index a0f5fcc578d95464e1b25560671d0983ec70c0b3..6833cb4f25be2d44160db30a36d1b102
  		const newTrackData: MatroskaAudioTrackData = {
  			track,
  			type: 'audio',
+@@ -1267,10 +1286,10 @@ export class MatroskaMuxer extends Muxer {
+ 		view.setUint8(0, 0x80 | trackData.track.id);
+ 		view.setInt16(1, relativeTimestamp, false);
+ 
+-		const msDuration = Math.round(1000 * chunk.duration);
++		const msDuration = trackData.type === 'video' ? Math.round(1000 * (chunk.timestamp + chunk.duration)) - msTimestamp : Math.round(1000 * chunk.duration);
+ 
+-		// Subtitle cues need an explicit BlockDuration (a SimpleBlock has none)
+-		const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle';
++		// Preserve video frame intervals for precise paused seeks; SimpleBlock has no BlockDuration.
++		const needsBlockGroup = !!chunk.additions || trackData.type === 'subtitle' || (trackData.type === 'video' && msDuration > 0);
+ 
+ 		if (!needsBlockGroup) {
+ 			// No additions, we can write out a SimpleBlock
 diff --git a/src/output-format.ts b/src/output-format.ts
 index 029e79acc77c4054f715bf72178a4c608c80e03d..740c4cafc334a11d20c2c69639ad5135b701d0cc 100644
 --- a/src/output-format.ts
