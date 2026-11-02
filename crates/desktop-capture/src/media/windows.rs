@@ -892,6 +892,7 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
+        let offer_capture_time = !preview && recording.is_none() && current.audio;
         let (options, encoder_id, factory) = if let Some(codecs) = codecs {
             let options = codecs.apply(&current)?;
             let hardware = if options.encoder == "software" {
@@ -1165,10 +1166,8 @@ impl MediaSession {
                 .create_offer(OfferOptions::default())
                 .await
                 .map_err(|e| e.to_string())?;
-            let sdp = offer.to_string();
-            pc.set_local_description(offer)
-                .await
-                .map_err(|e| e.to_string())?;
+            let sdp =
+                super::capture_time_offer::set_local_offer(&pc, offer, offer_capture_time).await?;
             // STUN/TURN can be slow or unreachable. Publish SDP immediately so
             // host candidates can connect while other routes are still gathered.
             if trickle {
