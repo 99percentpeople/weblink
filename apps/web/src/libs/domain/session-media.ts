@@ -1,4 +1,8 @@
 import type {
+  RoomConnection,
+  RoomSender,
+} from "@weblink/platform";
+import type {
   StreamAudioSource,
   StreamVideoSource,
 } from "./protocol/messages";
@@ -33,10 +37,12 @@ export type RemoteMediaTrackBinding = {
 
 export interface PeerSessionMediaOptions {
   /** Dedicated encoded recording only; never toggle on a viewing connection. */
+  readonly nativeRoom?: boolean;
+  roomScreen?(event: RTCTrackEvent): boolean;
   readonly receivePurpose?: MediaReceivePurpose;
   acceptsContent?(): boolean;
   targetClientId(): string;
-  getPeerConnection(): RTCPeerConnection | null;
+  getPeerConnection(): RoomConnection | null;
   getCodecOptions(): SessionMediaCodecOptions;
   getVideoSourceKind?(
     track: MediaStreamTrack,
@@ -102,13 +108,13 @@ export class PeerSessionMediaController {
   >();
   private connectionListeners: AbortController | null =
     null;
-  private senderConnection: RTCPeerConnection | null = null;
+  private senderConnection: RoomConnection | null = null;
   private readonly senders = new Map<
     MediaStreamTrack,
-    RTCRtpSender
+    RoomSender
   >();
   private readonly encodedVideo = new Map<
-    RTCRtpSender,
+    RoomSender,
     RtpEncodedMediaTrack
   >();
   private readonly encodedWorkers =
@@ -228,7 +234,7 @@ export class PeerSessionMediaController {
   }
 
   private applyPreferredCodecPreferences(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
   ): void {
     if (typeof RTCRtpSender === "undefined") return;
     if (!("getCapabilities" in RTCRtpSender)) return;
@@ -384,9 +390,11 @@ export class PeerSessionMediaController {
       return;
     const allowed =
       this.options.acceptsContent?.() !== false;
+    if (this.options.roomScreen?.(event)) return;
     event.track.enabled = allowed;
     const receiver = event.receiver;
     if (
+      !this.options.nativeRoom &&
       this.receivePurpose === "recording" &&
       !this.encodedReceivers.has(receiver)
     ) {
@@ -557,7 +565,7 @@ export class PeerSessionMediaController {
   }
 
   bindConnection(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     signal: AbortSignal,
   ): void {
     if (signal.aborted) return;
@@ -606,11 +614,11 @@ export class PeerSessionMediaController {
     ) {
       this.syncLocalTracks();
       this.notifyLocalStreamState(this.localStream);
-    } else {
-      pc.addTransceiver("video", {
+    } else if (!this.options.nativeRoom) {
+      pc.addTransceiver?.("video", {
         direction: "recvonly",
       });
-      pc.addTransceiver("audio", {
+      pc.addTransceiver?.("audio", {
         direction: "recvonly",
       });
     }
@@ -705,9 +713,12 @@ export class PeerSessionMediaController {
         if (this.senders.has(track)) continue;
         const sender = pc.addTrack(track, stream);
         this.senders.set(track, sender);
-        if (!this.encodedVideo.has(sender)) {
+        if (
+          !this.options.nativeRoom &&
+          !this.encodedVideo.has(sender)
+        ) {
           const encoded = RtpEncodedMediaTrack.install(
-            sender,
+            sender as RTCRtpSender,
             pc,
             this.encodedWorkers,
           );

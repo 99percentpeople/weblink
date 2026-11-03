@@ -20,6 +20,7 @@ mod picture_in_picture;
 mod preview;
 mod receive;
 mod remote_control;
+mod room;
 mod staged_files;
 mod updates;
 
@@ -34,6 +35,7 @@ fn shutdown(app: &tauri::AppHandle) {
     app.state::<keyboard::Shared>().close();
     app.state::<remote_control::Shared>().close();
     app.state::<presentation::Service>().clear(None);
+    app.state::<room::Service>().clear(None);
     app.state::<receive::Shared>().clear(None);
     app.state::<capture::Service>().shutdown();
 }
@@ -81,6 +83,7 @@ pub fn run() {
         .plugin(application::single_instance::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(std::sync::Arc::new(receive::Service::default()))
+        .manage(room::Service::default())
         .manage(presentation::Service::default())
         .manage(file_save::Service::default())
         .manage(filesystem::Service::default())
@@ -121,6 +124,7 @@ pub fn run() {
             presentation::presentation_layout,
             presentation::presentation_stats,
             presentation::presentation_close,
+            room::room_screen, room::room_open, room::room_operation, room::room_write, room::room_audio,
             receive::receive_codecs,
             receive::receive_open,
             receive::receive_answer,
@@ -329,6 +333,7 @@ pub fn run() {
                         webview.state::<filesystem::Service>().clear_page();
                         webview.state::<presentation::Service>().clear(Some(webview.label()));
                         preview::clear(&webview);
+                        webview.state::<room::Service>().clear(Some(webview.label()));
                         webview.state::<receive::Shared>().clear(Some(webview.label()));
                         receive::clear_buffers(&webview);
                         webview.state::<capture::Service>().clear_watches();

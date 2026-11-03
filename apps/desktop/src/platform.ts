@@ -1,3 +1,4 @@
+import { createRoomTransport } from "./room/connection";
 import { nativeAutomation } from "./automation";
 import { subscribeNativeRecording } from "./recording";
 import { nativeNotifications } from "./notifications";
@@ -35,6 +36,7 @@ const nativePresentation =
   createNativePresentation(watchVisibility);
 
 export const platform: PlatformRuntime = {
+  roomTransport: createRoomTransport(nativePresentation),
   mediaReceive: createNativeMediaReceive(
     watchVisibility,
     nativePresentation,

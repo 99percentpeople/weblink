@@ -2,7 +2,7 @@
 const URI: &str = "http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time";
 
 #[cfg(windows)]
-pub(super) async fn set_local_offer(
+pub(crate) async fn set_local_offer(
     pc: &libwebrtc::peer_connection::PeerConnection,
     offer: libwebrtc::session_description::SessionDescription,
     enable: bool,

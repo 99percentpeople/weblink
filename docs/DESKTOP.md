@@ -41,7 +41,7 @@ Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): on
 Windows these include the MSVC 14.44 (Visual Studio 2022 17.14) or newer, Windows SDK 10.0.26100 or newer, Rust and WebView2. Native WebRTC downloads its prebuilt library on the first Cargo build. The root Cargo configuration selects the static MSVC runtime required by that library.
 The repository pins Rust in `rust-toolchain.toml` and Bun in `package.json`.
 Cargo also fetches the patched WebRTC bindings from the
-[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/weblink-native-media),
+[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/5acf8d9fc182c0f7c4ec502062c002f3ab6dbdfa),
 pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
 No vendored source or separate dependency preparation step is needed.
 The fork is private. Local desktop builders need Git credentials with read access;
@@ -576,17 +576,22 @@ Neither rewrites saved user preferences.
 Joining or leaving does not change the formats or restart the streams of existing peers.
 A changed capability report reevaluates only that receiver's choices. Browser senders
 renegotiate on their existing connections; native senders replace only the affected
-receiver's media connection when its resolved format changes, retaining capture and
-raw preview. Each pending offer carries its own selected formats. Input channels bound to replaced
-native media connections also reconnect. Each replacement uses the negotiated format's
-hardware/software backend and a scoped factory; capture pixel conversion is shared.
+receiver's screen publication when its resolved format changes, retaining capture,
+raw preview and the room connection. Each pending publication carries its
+selected formats. Its input channels rebind to the replacement publication.
+The sender selects the corresponding hardware or software encoder and shares
+capture pixel conversion across viewers.
 Settings combines encoder and format into one selector with Auto and detected
 hardware/software format combinations. Stored settings accept fully automatic encoding or a concrete encoder/format pair.
 Other combinations use the automatic default; unavailable saved concrete pairs
 are marked instead of silently replaced. Each remote peer owns its encoded-frame
 source and RTP connection, with independent bitrate and keyframe feedback. Native
 H.264/H.265 hardware workers are pooled within a capture: the backend, codec,
-size/FPS limits, colour settings, preview mode and bandwidth bucket must match.
+size/FPS limits, colour settings, encoder preset, preview mode and bandwidth bucket must match.
+Viewers with different bitrate ceilings can share one worker in the same
+bucket. The driver uses the lowest ceiling of its current consumers. Each RTP
+sender still enforces its viewer's limit. When allocations diverge, only the
+affected viewers move; they can rejoin the group when their buckets match again.
 Consumers in the same group receive copies of one encoded access unit. Allocations
 use geometric 1.5× buckets rounded down, including the configured ceiling.
 A budget change can split or merge only the affected viewer; it retains its RTP
@@ -629,7 +634,11 @@ Media Foundation maps the intents to quality/speed values 33, 67 and 0 while
 retaining low-latency CBR and no B frames. Discovery initializes each preset;
 non-default MF choices also require matching control readback. Native software
 VP8, VP9, H.264 and AV1 expose the same three intents through the SDK's
-factory-local software preset API. Balanced preserves upstream defaults.
+software preset API. Balanced preserves upstream defaults. On a shared room
+connection, each software screen sender owns its preset and live VFR target.
+Changing the FPS of one screen updates its encoder's per-frame bitrate budget
+while other screens and the camera retain their settings. Recreating an encoder
+for that sender reuses its profile.
 Quality selects VP8 complexity max (desktop speed -3), VP9 speed 6, OpenH264
 high complexity, and AV1 speed 8. Latency selects VP8 low complexity (desktop
 speed -6), VP9 speed 9, OpenH264 low complexity, and AV1 speed 11. Explicit
@@ -974,7 +983,7 @@ The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
 encoder bitrate limits, congestion control and retransmission remain active.
 Both options belong to the native screen session's factory, not process-global
 settings. The binding changes and upstream versions are documented in the fork's
-[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/45c90ead0cfb1ffa01ab3ac53689ed0b8f664347/WEBLINK.md).
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/5acf8d9fc182c0f7c4ec502062c002f3ab6dbdfa/WEBLINK.md).
 Update the fork first, then the full Cargo revision and lockfile together; normal
 builds never follow the branch tip. Preserve upstream license notices and verify
 native-to-browser RTP when upgrading the bindings.
@@ -1158,21 +1167,18 @@ loader and relay-only setting; raw local preview does not use ICE or TURN.
 Initial room binding, late join and capture changes all use this same publication
 path; reconnecting must never republish the local preview through a browser encoder.
 
-The ordered `weblink-desktop-media` DataChannel belongs to the authenticated room
-PeerSession and carries a capability handshake, source/session identities, SDP
-and incremental ICE candidates. Peers advertising `trickleIce` exchange SDP
-immediately, allowing reachable routes to connect while slow STUN/TURN requests
-continue. Candidates are scoped to their media connection and queued until its
-remote description is applied. Older native receivers use the complete-SDP
-fallback. Complete-SDP offers await the native ICE gathering callback or explicit
-peer/session cancellation, with a single gathering timeout. Completion received
-before the wait is retained; closing the peer also releases its waiters.
-Old clients keep chat/file/camera functionality but must update to
-receive native screen shares. A screen is identified by its control session and
-single video transceiver, independently of the ordinary connection's MIDs.
-Peers advertising `multiScreen` send all active publications, each with its own
-media connection, ICE queue, bounded retries and statistics. Receivers combine
-the tracks for presentation while retaining each connection's audio/video ownership.
+Windows owns one native room PeerConnection per remote member. The authenticated
+media DataChannel carries screen publication IDs, acknowledgements, quality
+requests and receiver status. Peers advertise `roomTransport/1` before enabling
+native screen sharing. Both directions require this capability when connecting
+to the current Windows app. Older clients can still use chat, files and ordinary
+meeting tracks. They must upgrade to exchange native screen publications.
+
+Each screen's video and optional audio share a WebRTC stream ID derived from
+its publication ID. Input channels carry the same ID in their labels. Adding or
+removing a screen renegotiates transceivers on the room connection. The room
+keeps its ICE transport, data channels and other publications. Each screen keeps
+its own quality settings, bounded retries and statistics.
 Peers without this capability receive the first active publication; stopping it
 promotes the next one without replacing the room connection.
 Closing/replacing that channel releases its native senders and remote receivers.
@@ -2182,14 +2188,14 @@ Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
 MediaStream destination, preserving the existing mute, volume and playback owner.
 Browser autoplay policy still applies; user interaction resumes suspended audio.
 
-### Remote meeting cameras
+### Meeting media
 
-A peer that implements `meetingMedia/1` can send its camera and microphone on
-a dedicated WebRTC connection when Windows advertises native camera codecs.
-SDP and ICE travel over the authenticated media channel. The native receiver owns
-RTP, decoder selection, audio playback and GPU presentation. Closing the camera
-releases this connection. A microphone that stays on returns to the main meeting
-connection. Browser viewers and older peers use ordinary meeting tracks.
+Browser peers send ordinary WebRTC tracks directly to the Windows room peer.
+On Windows, WebView2 captures the local camera and microphone and passes frames
+and PCM to native media sources shared across viewers. Remote tracks use the
+existing hardware and software decoders, GPU renderer and audio playback path.
+Turning off a camera leaves the microphone and other tracks on the connection.
+Revoking receive permission releases the affected remote outputs.
 
 ### Platform boundaries
 
@@ -2321,10 +2327,8 @@ corrupt a frame retained by Chromium. This transport depends on the constructor'
 independent pixel snapshot. GPU presentation avoids both shared-buffer copies;
 it does not change or weaken the shared-buffer ownership contract.
 
-Windows reserves one native screen receive slot per window and admits up to
-eight concurrent GPU-backed camera connections in the same window. Each
-connection owns its decoder and render surface. Screen sessions require trickle
-ICE and negotiate from the native receiver's supported formats.
+Each incoming room video track owns its decoded output and render surface.
+Screen publications negotiate from the native receiver's supported formats.
 A native screen startup, presentation or decode failure excludes that screen
 format for the current application session. Automatic sender selection can
 negotiate another native format.

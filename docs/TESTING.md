@@ -250,9 +250,15 @@ bitrate recovery; publication smoke tests do not measure native encoder performa
 `test:e2e:native-screen` also sends a synthetic camera and microphone alongside
 a shared screen, then stops the camera and checks that voice and chat continue.
 The browser run substitutes a WebRTC receiver for the native adapter. In a
-Windows desktop dev WebView, `/test/e2e/smoke/native-screen.html?camera&codec=h264`
-or `?camera&codec=vp8` runs the same scenario through native decoding and checks
-that the GPU compositor presents frames. Keep the test window unminimized.
+Windows desktop dev WebView, `/test/e2e/smoke/native-screen.html?single-room`
+checks the connection count, two video tracks, microphone playback, native GPU
+presentation and binary SCTP across renegotiation. Add `&mixed` for a browser
+sender, `&web-viewer` for a browser receiver or `&polite` to reverse the
+negotiation initiator. Keep the test window unminimized. The optional
+`&fixture-window` case captures only the window named
+`Weblink Room Transport Test Pattern` and checks concurrent native screen video.
+With `&web-viewer&legacy&fixture-window`, the viewer omits `roomTransport/1`.
+Camera, microphone and data still work, and the host must open zero screen senders.
 
 `test:e2e:playback` uses Node 22+ and Chromium with the actual video component
 and received RTP. It checks deferred source attachment, interrupted playback,

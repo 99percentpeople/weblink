@@ -22,6 +22,8 @@ pub mod media;
 pub mod presentation;
 #[cfg(windows)]
 pub mod receive;
+#[cfg(windows)]
+pub mod room_peer;
 pub mod snapshot;
 #[cfg(windows)]
 pub mod surface;

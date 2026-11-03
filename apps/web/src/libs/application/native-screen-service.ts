@@ -274,6 +274,7 @@ export async function createNativeScreenStream(
         );
       },
       sourceId: createUuid(),
+      captureId: id,
       controlEligible: status.source?.kind === "monitor",
       selectCodecs: codecs.select,
       getSenderStats: (

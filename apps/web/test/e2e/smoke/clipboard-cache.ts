@@ -79,7 +79,7 @@ async function main() {
           protocol: wireProtocol,
           ordered: true,
         }),
-    } as PeerSession;
+    } as unknown as PeerSession;
     const registry = new TransferRegistry({
       createTransfer: ({ cache, mode, info }) => {
         if (mode === TransferMode.Send)

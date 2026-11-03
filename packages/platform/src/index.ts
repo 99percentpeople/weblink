@@ -1,6 +1,7 @@
 export * from "./recording";
 export * from "./presentation-layout";
 export type * from "./media-receive";
+export type * from "./room-peer";
 import type { NativeMediaReceive } from "./media-receive";
 export type * from "./automation";
 export { DEFAULT_MCP_SERVER } from "./automation";
@@ -69,6 +70,7 @@ export type FileConflictResolver = (
 ) => Promise<FileConflictAction | null>;
 
 export interface PlatformRuntime {
+  readonly roomTransport?: import("./room-peer").NativeRoomTransport;
   /** Bind an already decoded native source beneath the existing video controls. */
   readonly videoPresentation?: {
     sample?(track: MediaStreamTrack):

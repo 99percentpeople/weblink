@@ -41,6 +41,16 @@ struct Retired {
     last: bool,
 }
 impl State {
+    fn sync_limit(&self, encoder: &Arc<hardware::Encoder>) {
+        if let Some(strictest) = self
+            .slots
+            .values()
+            .filter(|slot| !slot.warming && Arc::ptr_eq(&slot.encoder, encoder))
+            .min_by_key(|slot| slot.options.max_bitrate)
+        {
+            encoder.set_group_limit(strictest.options.max_bitrate, strictest.key.bitrate);
+        }
+    }
     fn remove(&mut self, token: u64) -> Option<Retired> {
         let slot = self.slots.remove(&token)?;
         let last = !self
@@ -53,6 +63,8 @@ impl State {
                     .upgrade()
                     .is_some_and(|group| !Arc::ptr_eq(&group, &slot.encoder))
             });
+        } else {
+            self.sync_limit(&slot.encoder);
         }
         Some(Retired { token, slot, last })
     }
@@ -148,9 +160,6 @@ impl Pool {
         let encoder = self.get_or_create(&mut state, &key, &backend, &options, wake)?;
         state.next += 1;
         let token = state.next;
-        if let Some(output) = &output {
-            encoder.attach(token, output.clone(), output.replace());
-        }
         state.slots.insert(
             token,
             Slot {
@@ -163,10 +172,14 @@ impl Pool {
                 recording,
                 target,
                 key,
-                encoder,
+                encoder: encoder.clone(),
                 output: output.clone(),
             },
         );
+        state.sync_limit(&encoder);
+        if let Some(output) = &output {
+            encoder.attach(token, output.clone());
+        }
         Ok(Arc::new(Consumer {
             token,
             pool: self.clone(),
@@ -391,14 +404,16 @@ impl Pool {
                 self.get_or_create(&mut state, &key, &backend, &options, wake.clone())?
             };
             let slot = state.slots.get_mut(&token).unwrap();
+            slot.key = key;
             if !Arc::ptr_eq(&encoder, &old) {
                 old.detach(token);
+                retired.push(std::mem::replace(&mut slot.encoder, encoder.clone()));
+                state.sync_limit(&old);
+                state.sync_limit(&encoder);
                 if let Some(output) = output {
-                    encoder.attach(token, output.clone(), output.replace());
+                    encoder.attach(token, output);
                 }
-                retired.push(std::mem::replace(&mut slot.encoder, encoder));
             }
-            slot.key = key;
         }
         retired.retain(|encoder| {
             !state
@@ -419,15 +434,31 @@ impl Pool {
     }
     pub fn update(&self, settings: &VideoSettings) -> Result<()> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        for slot in state.slots.values_mut() {
-            let ceiling = settings.apply(&slot.options)?;
-            slot.options = match &slot.limits {
-                Some(limits) => limits.bounded(&ceiling)?,
-                None => ceiling,
-            };
+        let updates = state
+            .slots
+            .iter()
+            .map(|(&token, slot)| {
+                let ceiling = settings.apply(&slot.options)?;
+                let options = match &slot.limits {
+                    Some(limits) => limits.bounded(&ceiling)?,
+                    None => ceiling,
+                };
+                Ok((token, options))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let mut changed_limits = HashMap::new();
+        for (token, options) in updates {
+            let slot = state.slots.get_mut(&token).unwrap();
+            if options.max_bitrate != slot.options.max_bitrate {
+                changed_limits.insert(slot.encoder.group_id, slot.encoder.clone());
+            }
+            slot.options = options;
             if slot.recording || slot.preview {
                 slot.target = slot.options.max_bitrate;
             }
+        }
+        for encoder in changed_limits.values() {
+            state.sync_limit(encoder);
         }
         drop(state);
         self.reconcile(self.feedback.clone().unwrap_or_else(|| Arc::new(|| {})))
@@ -438,14 +469,36 @@ impl Pool {
         settings: &VideoSettings,
         ceiling: &MediaOptions,
     ) -> Result<()> {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let token = *state
             .slots
             .iter()
             .find(|(_, s)| s.id == id && !s.preview && !s.recording && !s.warming)
             .ok_or("Video encoder no longer active")?
             .0;
-        let slot = &state.slots[&token];
+        drop(state);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while !self.try_update_peer(token, settings, ceiling, deadline)? {
+            if std::time::Instant::now() >= deadline {
+                return Err("Video quality allocation did not settle".into());
+            }
+        }
+        Ok(())
+    }
+    // Membership may change while the encoder warms. Retry against the same
+    // consumer token when its current bandwidth no longer matches the candidate.
+    fn try_update_peer(
+        &self,
+        token: u64,
+        settings: &VideoSettings,
+        ceiling: &MediaOptions,
+        deadline: std::time::Instant,
+    ) -> Result<bool> {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let slot = state
+            .slots
+            .get(&token)
+            .ok_or("Video receiver no longer active")?;
         // Preserve this consumer's negotiated codec and backend.
         let bounds = VideoSettings {
             max_width: ceiling.max_width,
@@ -460,13 +513,14 @@ impl Pool {
             bitrate: bitrate_bucket(slot.target, next.max_bitrate),
         };
         if key == slot.key {
+            let encoder = slot.encoder.clone();
             let slot = state.slots.get_mut(&token).unwrap();
             slot.limits = Some(settings.clone());
             slot.options = next;
-            return Ok(());
+            state.sync_limit(&encoder);
+            return Ok(true);
         }
         let backend = slot.backend.clone();
-        let old = slot.encoder.clone();
         let target = slot.target;
         let encoder = self.get_or_create(
             &mut state,
@@ -482,7 +536,7 @@ impl Pool {
         state.slots.insert(
             warm,
             Slot {
-                id: format!("warming:{id}"),
+                id: format!("warming:{token}"),
                 backend,
                 options: next.clone(),
                 limits: None,
@@ -500,50 +554,59 @@ impl Pool {
             wake();
         }
         encoder.request_recording_keyframe();
-        let started = std::time::Instant::now();
         let result = loop {
             if let Some(error) = encoder.error() {
                 break Err(error);
             }
             if encoder.statistics().frames > 0 {
-                break Ok(());
+                break Ok(true);
             }
-            if started.elapsed() >= std::time::Duration::from_secs(3) {
+            if std::time::Instant::now() >= deadline {
                 break Err("Video quality encoder did not become ready".into());
             }
-            if !self
-                .state
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .slots
-                .contains_key(&token)
             {
-                break Err("Video receiver no longer active".into());
+                let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+                let Some(current) = state.slots.get(&token) else {
+                    break Err("Video receiver no longer active".into());
+                };
+                if bitrate_bucket(current.target, next.max_bitrate) != key.bitrate {
+                    break Ok(false);
+                }
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         };
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
-        state.slots.remove(&warm);
-        let result = result.and_then(|()| {
+        let warmed = state.slots.remove(&warm);
+        let mut previous = None;
+        let result = result.and_then(|ready| {
             let slot = state
                 .slots
                 .get_mut(&token)
                 .ok_or("Video receiver no longer active")?;
-            if !Arc::ptr_eq(&slot.encoder, &old) {
-                return Err("Video encoder changed".into());
+            if !ready
+                || warmed.as_ref().is_none_or(|candidate| candidate.key != key)
+                || bitrate_bucket(slot.target, next.max_bitrate) != key.bitrate
+            {
+                return Ok(false);
             }
+            let old = slot.encoder.clone();
             old.detach(token);
-            if let Some(output) = &slot.output {
-                encoder.attach(token, output.clone(), output.replace());
-            }
+            let output = slot.output.clone();
             slot.encoder = encoder.clone();
             slot.options = next;
             slot.limits = Some(settings.clone());
             slot.key = key;
-            Ok(())
+            state.sync_limit(&old);
+            state.sync_limit(&encoder);
+            if let Some(output) = output {
+                encoder.attach(token, output);
+            }
+            previous = Some(old);
+            Ok(true)
         });
-        let retired: Vec<_> = [old, encoder]
+        let retired: Vec<_> = previous
             .into_iter()
+            .chain(std::iter::once(encoder))
             .filter(|encoder| {
                 !state
                     .slots

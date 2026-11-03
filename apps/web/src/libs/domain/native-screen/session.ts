@@ -27,6 +27,7 @@ import {
 } from "./sender";
 import {
   MAX_NATIVE_SCREENS,
+  ROOM_SCREEN_PREFIX,
   parseScreenSignal,
   type ScreenSignal,
 } from "./signaling";
@@ -121,7 +122,7 @@ export class NativeScreenSession {
   }
   private publications = new Map<
     string,
-    NativeScreenSender
+    NativeScreenSender<NativeScreenPublication>
   >();
   private incoming = new Map<string, Incoming>();
   private views = new Map<string, NativeScreenView>();
@@ -190,7 +191,13 @@ export class NativeScreenSession {
     const sender =
       publication &&
       this.publications.get(publication.sourceId);
-    if (!sender || sender.publication !== publication)
+    if (
+      !sender ||
+      (sender.publication !== publication &&
+        (!publication?.captureId ||
+          publication.captureId !==
+            sender.publication.captureId))
+    )
       return [];
     return sender.getVideoStats();
   }
@@ -611,6 +618,11 @@ export class NativeScreenSession {
         this.stopIncoming(value.id, value.retry === true);
       return;
     }
+    if (
+      value.sdp.startsWith(ROOM_SCREEN_PREFIX) &&
+      value.sdp !== ROOM_SCREEN_PREFIX + value.id
+    )
+      return;
     if (this.incoming.has(value.id)) return;
     if (!this.multiScreen) {
       for (const entry of this.incoming.values()) {

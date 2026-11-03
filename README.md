@@ -65,18 +65,18 @@ See [desktop setup and builds](docs/DESKTOP.md) for prerequisites and source bui
 
 ## Web and desktop capabilities
 
-| Capability                                      | Web                                                      | Desktop (currently Windows)                                            |
-| ----------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Rooms, private chat, file library and transfers | Supported                                                | Supported                                                              |
-| File storage                                    | IndexedDB by default; directory mounting where supported | Local directory by default; IndexedDB also available                   |
-| Camera and microphone                           | Browser device APIs                                      | WebView device APIs                                                    |
-| Screen sharing                                  | Browser capture, where supported                         | Native display/window capture and supported system audio               |
-| Video playback                                  | Browser WebRTC decoder and video element                 | Native connections use hardware or software decoding and GPU rendering |
-| Recording                                       | One local or remote source, with pause and resume        | Same controls, including native shared screens                         |
-| Remote control                                  | Control a compatible desktop host                        | Control another host or allow control of this computer                 |
-| AI automation                                   | WebMCP controller in supporting browsers                 | MCP API, local automation and remote desktop tools                     |
-| Picture-in-picture                              | Available browser PiP APIs                               | Resizable, always-on-top native window                                 |
-| System integration                              | PWA installation and share target where supported        | Tray, launch at login, close behavior and native notifications         |
+| Capability                                      | Web                                                      | Desktop (currently Windows)                                       |
+| ----------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| Rooms, private chat, file library and transfers | Supported                                                | Supported                                                         |
+| File storage                                    | IndexedDB by default; directory mounting where supported | Local directory by default; IndexedDB also available              |
+| Camera and microphone                           | Browser device APIs                                      | WebView device APIs                                               |
+| Screen sharing                                  | Browser capture, where supported                         | Native display/window capture and supported system audio          |
+| Video playback                                  | Browser WebRTC decoder and video element                 | Native hardware decoding with software fallback and GPU rendering |
+| Recording                                       | One local or remote source, with pause and resume        | Same controls, including native shared screens                    |
+| Remote control                                  | Control a compatible desktop host                        | Control another host or allow control of this computer            |
+| AI automation                                   | WebMCP controller in supporting browsers                 | MCP API, local automation and remote desktop tools                |
+| Picture-in-picture                              | Available browser PiP APIs                               | Resizable, always-on-top native window                            |
+| System integration                              | PWA installation and share target where supported        | Tray, launch at login, close behavior and native notifications    |
 
 The supported desktop target is Windows 10 22H2 / Windows 11 on x64 with WebView2
 120 or newer. Native system audio and input features depend on OS capabilities.
@@ -172,10 +172,11 @@ support and permission; reopening the page may require authorization again.
 - Compatible viewers share native encoders, with keyframe delivery for viewers
   joining an active stream. Receiver decode failures can trigger another
   supported codec, and Media Foundation output changes are renegotiated.
-- On Windows, the local screen preview and video received over native connections
-  share a GPU renderer. It displays hardware-decoded frames directly from GPU
-  textures and uploads software-decoded frames. WebView2 plays video received
-  over the standard meeting connection.
+- Windows uses one native WebRTC connection per peer for media, chat, files and
+  remote control. Its GPU renderer displays hardware-decoded textures directly
+  and uploads software-decoded frames. Web viewers use the browser's decoder and
+  video element. Both peers must support the shared connection to use native
+  screen sharing with the current desktop app.
   Hiding the local preview pauses its rendering while remote streaming continues.
 - Inspect stream statistics, ICE routes and connection state, and run peer
   throughput tests from the application.

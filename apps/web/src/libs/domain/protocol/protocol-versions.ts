@@ -17,6 +17,7 @@ export const CURRENT_PROTOCOL_VERSIONS = {
   room: 1,
   screen: 1,
   meetingMedia: 1,
+  roomTransport: 1,
   control: 1,
   clipboard: 1,
   fileDrop: 1,

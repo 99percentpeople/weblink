@@ -146,7 +146,7 @@ async function main() {
     setAppState("options", "locale", "en-us");
     setAppState("session", "sessions", "peer", {
       peerConnection: a,
-    } as PeerSession);
+    } as unknown as PeerSession);
     setAppState("session", "clientViewData", "peer", {
       onlineStatus: "online",
       createdAt: Date.now(),
@@ -273,7 +273,7 @@ async function main() {
         <ModalProvider>
           <div class="bg-background text-foreground min-h-screen p-4">
             <h1 class="mb-4 text-lg font-semibold">
-              Weblink · Task center
+              Weblink 路 Task center
             </h1>
             <TaskCenter placement="right" />
             <Show when={routeVisible()}>

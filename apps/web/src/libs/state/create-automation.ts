@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { appState, setAppState } from "./app-state";
 import {
   readAutomationPolicy,
@@ -196,7 +197,7 @@ export function createAutomation(
     {
       abort: AbortController;
       opening?: object;
-      pc: RTCPeerConnection | null;
+      pc: RoomConnection | null;
       share: boolean;
       generation?: string;
     }

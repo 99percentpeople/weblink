@@ -57,7 +57,9 @@ export interface PeerCapabilities {
     queue?: boolean;
   };
   room?: { chat: boolean; files: boolean };
-  /** A null receiver publishes cameras but receives them on the ordinary meeting connection. */
+  /** Native publications can use the room's existing RTP and SCTP transport. */
+  roomTransport?: { multiplex: true };
+  /** A null receiver gets cameras on the ordinary meeting connection. */
   meetingMedia?: { camera: MediaDecodeCapabilities | null };
   screen?: {
     decode: MediaDecodeCapabilities;
@@ -166,6 +168,7 @@ const validators: Record<
     record(v) &&
     (v.queue === undefined || typeof v.queue === "boolean"),
   room: (v) => flags(v, ["chat", "files"]),
+  roomTransport: (v) => record(v) && v.multiplex === true,
   meetingMedia: (v) =>
     record(v) &&
     (v.camera === null ||

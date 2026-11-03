@@ -32,9 +32,18 @@ impl Drop for Connection {
 }
 impl Channels {
     pub fn connect(pc: &PeerConnection, port: Arc<dyn Port>) -> Result<Connection> {
+        Self::connect_named(pc, port, None)
+    }
+    pub fn connect_named(
+        pc: &PeerConnection,
+        port: Arc<dyn Port>,
+        room_source: Option<&str>,
+    ) -> Result<Connection> {
+        let label =
+            |base: &str| room_source.map_or_else(|| base.to_owned(), |id| format!("{base}/{id}"));
         let reliable = pc
             .create_data_channel(
-                RELIABLE_LABEL,
+                &label(RELIABLE_LABEL),
                 DataChannelInit {
                     protocol: RELIABLE_LABEL.into(),
                     ..Default::default()
@@ -42,7 +51,7 @@ impl Channels {
             )
             .map_err(|e| e.to_string())?;
         let movement = match pc.create_data_channel(
-            MOVEMENT_LABEL,
+            &label(MOVEMENT_LABEL),
             DataChannelInit {
                 protocol: MOVEMENT_LABEL.into(),
                 ordered: false,
@@ -104,7 +113,9 @@ impl Channels {
                 }
             })));
         let connection = Connection(this);
-        Self::observe_connection(pc, Some(&connection), None);
+        if room_source.is_none() {
+            Self::observe_connection(pc, Some(&connection), None);
+        }
         connection.0.ready();
         Ok(connection)
     }

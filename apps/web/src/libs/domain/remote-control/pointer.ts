@@ -423,12 +423,15 @@ export class RemotePointer extends EventTarget {
         : "unavailable";
     return s.type;
   }
-  bind(channel: ControlDataChannel) {
-    const movement = channel.label === POINTER_CHANNEL;
+  bind(channel: ControlDataChannel, roomSource?: string) {
+    const movement = channel.protocol === POINTER_CHANNEL;
     if (
       this.lifetime.signal.aborted ||
-      channel.protocol !== channel.label ||
-      (!movement && channel.label !== CONTROL_CHANNEL) ||
+      channel.label !==
+        (roomSource
+          ? `${channel.protocol}/${roomSource}`
+          : channel.protocol) ||
+      (!movement && channel.protocol !== CONTROL_CHANNEL) ||
       (movement
         ? channel.ordered ||
           channel.maxRetransmits !== 0 ||

@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { catchError } from "@/libs/catch";
 import type {
   ClientSignal,
@@ -24,13 +25,11 @@ type CandidateSignalData = NegotiationSignalData & {
 export type PeerNegotiationOptions = {
   sender: SignalingService;
   polite: boolean;
-  getPeerConnection: () => RTCPeerConnection | null;
+  getPeerConnection: () => RoomConnection | null;
   createGeneration?: () => string;
-  prepareConnection?: (
-    pc: RTCPeerConnection,
-  ) => Promise<void>;
+  prepareConnection?: (pc: RoomConnection) => Promise<void>;
   // Rebuild transport/media resources and call startConnection for the new PC.
-  replacePeerConnection?: () => RTCPeerConnection;
+  replacePeerConnection?: () => RoomConnection;
 };
 
 function createGeneration() {
@@ -46,12 +45,12 @@ function createGeneration() {
 export class PeerNegotiationController {
   private readonly sender: SignalingService;
   private readonly polite: boolean;
-  private readonly getPeerConnection: () => RTCPeerConnection | null;
+  private readonly getPeerConnection: () => RoomConnection | null;
   private readonly createGeneration: () => string;
   private readonly prepareConnection?: (
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
   ) => Promise<void>;
-  private readonly replacePeerConnection?: () => RTCPeerConnection;
+  private readonly replacePeerConnection?: () => RoomConnection;
   private readonly queuedSignals = new Set<{
     signal: ClientSignal;
   }>();
@@ -89,7 +88,7 @@ export class PeerNegotiationController {
     return this.makingOffer;
   }
 
-  startConnection(pc: RTCPeerConnection) {
+  startConnection(pc: RoomConnection) {
     if (pc !== this.getPeerConnection()) {
       throw new Error(
         "[PeerNegotiation] cannot start a non-current peer connection",
@@ -124,7 +123,7 @@ export class PeerNegotiationController {
   // After the initial offer, native negotiationneeded is the only driver of
   // local media/data-channel negotiation. The browser retains changes made
   // while an offer/answer is pending; we do not maintain another dirty queue.
-  handleNegotiationNeeded(pc: RTCPeerConnection): void {
+  handleNegotiationNeeded(pc: RoomConnection): void {
     if (
       pc !== this.getPeerConnection() ||
       !pc.localDescription ||
@@ -143,7 +142,7 @@ export class PeerNegotiationController {
 
   /** Codec preferences do not emit negotiationneeded. Coalesce changes while
    * another offer/answer owns SDP and resume at stable, without restarting ICE. */
-  requestRenegotiation(pc: RTCPeerConnection): void {
+  requestRenegotiation(pc: RoomConnection): void {
     if (pc !== this.getPeerConnection()) return;
     this.renegotiationPending = true;
     if (
@@ -158,12 +157,12 @@ export class PeerNegotiationController {
     );
   }
 
-  resumeRenegotiation(pc: RTCPeerConnection): void {
+  resumeRenegotiation(pc: RoomConnection): void {
     if (this.renegotiationPending)
       this.requestRenegotiation(pc);
   }
 
-  async sendOffer(pc: RTCPeerConnection) {
+  async sendOffer(pc: RoomConnection) {
     const generation = this.connectionGeneration;
     const epoch = this.connectionEpoch;
     if (!generation || pc !== this.getPeerConnection()) {
@@ -247,7 +246,7 @@ export class PeerNegotiationController {
   }
 
   async sendCandidate(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     candidate: RTCIceCandidateInit,
   ) {
     const generation = this.connectionGeneration;
@@ -528,7 +527,7 @@ export class PeerNegotiationController {
   }
 
   private logFailure(
-    pc: RTCPeerConnection | null,
+    pc: RoomConnection | null,
     operation: string,
     error: unknown,
     sending = false,
@@ -644,7 +643,7 @@ export class PeerNegotiationController {
   }
 
   private async flushPendingRemoteCandidates(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     generation: string | null,
   ) {
     if (pc !== this.getPeerConnection()) return;

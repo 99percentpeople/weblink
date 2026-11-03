@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import {
   readNativeReceiveStats,
   type NativeReceivePipelineStats,
@@ -213,7 +214,7 @@ export function videoStatsValue(
 
 /** Select by the actual sender/receiver track, never by the first video report. */
 export async function readBrowserVideoStats(
-  pc: RTCPeerConnection,
+  pc: RoomConnection,
   track: MediaStreamTrack,
   direction: "send" | "receive",
 ): Promise<VideoStatsSample[]> {

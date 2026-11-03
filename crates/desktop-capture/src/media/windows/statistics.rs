@@ -4,13 +4,14 @@ use libwebrtc::stats::RtcStats;
 
 impl MediaSession {
     pub async fn stats(&self, id: &str) -> crate::Result<Vec<VideoStats>> {
-        let pc = self
+        let (pc, shared_video) = self
             .peers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(id)
-            .map(|peer| peer.connection.clone())
+            .map(|peer| (peer.connection.clone(), peer.room_tracks.first().cloned()))
             .ok_or("Media peer is no longer active")?;
+        let mid = shared_video.as_ref().and_then(|track| track.mid());
         let report = pc.get_stats().await.map_err(|e| e.to_string())?;
         let encoder = self.hardware.encoder(id);
         let group_id = encoder.as_ref().map(|encoder| encoder.group_id);
@@ -27,7 +28,9 @@ impl MediaSession {
                 let RtcStats::OutboundRtp(s) = stat else {
                     return None;
                 };
-                if s.stream.kind != "video" {
+                if s.stream.kind != "video"
+                    || (shared_video.is_some() && mid.as_ref() != Some(&s.outbound.mid))
+                {
                     return None;
                 }
                 let codec = report

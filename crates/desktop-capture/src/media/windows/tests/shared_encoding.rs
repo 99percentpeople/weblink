@@ -75,12 +75,22 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
                         max_width: width,
                         max_height: height,
                         frame_rate: fps,
-                        max_bitrate: 300_000,
+                        max_bitrate: 280_000,
                         degradation_preference: "balanced".into(),
                     },
                 )
             })
         };
+        // A lower ceiling in the same allocation bucket keeps both bitstreams on
+        // the same worker. Only a subsequent resolution/fps change needs a split.
+        let (result, _) = tokio::join!(update(640, 360, 30), recording::frames(&media, 35));
+        result.unwrap().unwrap();
+        wait_for_shared(&media, false).await;
+        assert!(Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("first").unwrap()
+        ));
+        assert_eq!(original.group_limit(), Some(280_000));
         let (result, _) = tokio::join!(update(320, 180, 15), recording::frames(&media, 60));
         result.unwrap().unwrap();
         assert!(decoded(&first).await > before + 5);

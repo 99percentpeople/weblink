@@ -81,6 +81,10 @@ pub async fn presentation_open(
     };
     let source = if let Some(media) = &media {
         media.gpu_preview.clone()
+    } else if source_id.contains('/') {
+        webview
+            .state::<crate::room::Service>()
+            .gpu_source(webview.label(), &source_id)?
     } else {
         webview
             .state::<crate::receive::Shared>()

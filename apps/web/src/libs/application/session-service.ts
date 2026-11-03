@@ -1,3 +1,5 @@
+import { ROOM_SCREEN_PREFIX } from "../domain/native-screen/signaling";
+import { ScreenDecodeError } from "../domain/native-screen/errors";
 import { MeetingCameraPeer } from "./meeting-camera-peer";
 import { scopes } from "@weblink/automation";
 import {
@@ -70,7 +72,12 @@ import {
 
 export interface SessionServiceOptions {
   loadIceServers?: () => Promise<RTCIceServer[]>;
-  mediaReceive?: import("@weblink/platform").NativeMediaReceive;
+  mediaReceive?:
+    | import("@weblink/platform").NativeMediaReceive
+    | null;
+  roomTransport?:
+    | import("@weblink/platform").NativeRoomTransport
+    | null;
 }
 
 export interface ReceivedVideoQuality {
@@ -81,6 +88,7 @@ export interface ReceivedVideoQuality {
 
 export class SessionService {
   private readonly mediaReceive: MediaReceiveService;
+  private readonly transport: typeof platform.roomTransport;
   private readonly cameras = new Map<
     PeerSession,
     MeetingCameraPeer
@@ -195,8 +203,8 @@ export class SessionService {
       this.canReceive(session.targetClientId)
     );
   }
-  readonly capabilities = new PeerCapabilitiesService(
-    (session) => ({
+  readonly capabilities: PeerCapabilitiesService =
+    new PeerCapabilitiesService((session) => ({
       identity: {
         receiveContent: this.canReceive(
           session.targetClientId,
@@ -219,6 +227,7 @@ export class SessionService {
         : {},
       files: { content: true, shared: true, queue: true },
       room: { chat: true, files: true },
+      roomTransport: { multiplex: true },
       ...(typeof RTCRtpTransceiver !== "undefined" &&
       typeof RTCRtpTransceiver.prototype
         .setCodecPreferences === "function" &&
@@ -226,16 +235,22 @@ export class SessionService {
         "function"
         ? {
             meetingMedia: {
-              camera:
-                this.mediaReceive.cameraCapabilities(),
+              camera: session.nativeTransport
+                ? null
+                : this.mediaReceive.cameraCapabilities(),
             },
           }
         : {}),
-      screen: {
-        decode: this.mediaReceive.capabilities(),
-        trickleIce: true,
-        multiScreen: true,
-      },
+      ...(!session.nativeTransport ||
+      this.capabilities.get(session)?.roomTransport
+        ? {
+            screen: {
+              decode: this.mediaReceive.capabilities(),
+              trickleIce: true,
+              multiScreen: true,
+            },
+          }
+        : {}),
       ...(this.remoteControl.exposes(session.targetClientId)
         ? {
             control: this.remoteControl.capability(
@@ -245,8 +260,7 @@ export class SessionService {
         : {}),
       clipboard: { inlineText: true },
       speedTest: { busy: this.speedBusy[0]() },
-    }),
-  );
+    }));
   setSpeedTestBusy(busy: boolean): void {
     this.speedBusy[1](busy);
   }
@@ -372,7 +386,18 @@ export class SessionService {
     );
     this.nativeScreens
       .get(session)
-      ?.setPublications(publications);
+      ?.setPublications(
+        session.nativeTransport
+          ? this.capabilities.get(session)?.roomTransport
+            ? publications.map((p) =>
+                session.roomScreens.publication(
+                  p,
+                  () => session.roomScreenTransport,
+                ),
+              )
+            : []
+          : publications,
+      );
   }
   private pendingClients = new Map<
     ClientID,
@@ -392,8 +417,14 @@ export class SessionService {
   >;
 
   constructor(options: SessionServiceOptions = {}) {
+    this.transport =
+      options.roomTransport === undefined
+        ? platform.roomTransport
+        : (options.roomTransport ?? undefined);
     this.mediaReceive = new MediaReceiveService(
-      options.mediaReceive ?? platform.mediaReceive,
+      options.mediaReceive === undefined
+        ? platform.mediaReceive
+        : (options.mediaReceive ?? undefined),
     );
     this.loadIceServers =
       options.loadIceServers ??
@@ -522,8 +553,14 @@ export class SessionService {
 
     this.pendingClients.set(client.clientId, sender);
     let iceServers: RTCIceServer[];
+    let nativeTransport: typeof platform.roomTransport;
     try {
       iceServers = await this.loadIceServers();
+      if (
+        this.transport &&
+        (await platform.getCapabilities()).os === "windows"
+      )
+        nativeTransport = this.transport;
     } catch (error) {
       if (
         this.pendingClients.get(client.clientId) === sender
@@ -551,6 +588,7 @@ export class SessionService {
     }
 
     const session: PeerSession = new PeerSession(sender, {
+      nativeTransport,
       acceptsContent: () =>
         this.canReceive(client.clientId),
       allowsApplication: () =>
@@ -636,6 +674,7 @@ export class SessionService {
       createReceiver:
         this.mediaReceive.createCameraReceiver,
       accepts: () =>
+        !session.nativeTransport &&
         this.canReceive(client.clientId) &&
         !!this.mediaReceive.cameraCapabilities(),
       loadIceServers: this.loadIceServers,
@@ -658,8 +697,21 @@ export class SessionService {
     });
     this.cameras.set(session, camera);
     const native = new NativeScreenSession({
-      createReceiver:
-        this.mediaReceive.createScreenReceiver,
+      createReceiver: (sdp, ...args) => {
+        if (
+          sdp.startsWith(ROOM_SCREEN_PREFIX) &&
+          this.capabilities.get(session)?.roomTransport
+        )
+          return session.roomScreens.receiver(sdp, ...args);
+        if (session.nativeTransport)
+          throw new ScreenDecodeError(
+            "This screen requires a peer with single-connection support",
+          );
+        return this.mediaReceive.createScreenReceiver(
+          sdp,
+          ...args,
+        );
+      },
       clientId: session.clientId,
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),
@@ -773,7 +825,7 @@ export class SessionService {
     if (this.displayFrameRate)
       quality.setRefreshRate(this.displayFrameRate);
     const bindMedia = (channel: RTCDataChannel) => {
-      camera.bind(channel);
+      if (!session.nativeTransport) camera.bind(channel);
       native.bind(channel);
       quality.bind(channel);
     };
@@ -782,7 +834,8 @@ export class SessionService {
       session,
       (services) => {
         camera.setCapabilities(
-          this.canReceive(client.clientId)
+          !session.nativeTransport &&
+            this.canReceive(client.clientId)
             ? services?.meetingMedia
             : undefined,
         );
@@ -822,7 +875,8 @@ export class SessionService {
               trust?.state,
             );
           camera.setCapabilities(
-            this.canReceive(client.clientId)
+            !session.nativeTransport &&
+              this.canReceive(client.clientId)
               ? this.capabilities.get(session)?.meetingMedia
               : undefined,
           );
@@ -933,6 +987,7 @@ export class SessionService {
     session.addEventListener(
       "channel",
       ({ detail }) => {
+        if (session.roomScreens.channel(detail)) return;
         if (
           detail.label === NATIVE_SCREEN_CHANNEL &&
           detail.protocol === NATIVE_SCREEN_CHANNEL

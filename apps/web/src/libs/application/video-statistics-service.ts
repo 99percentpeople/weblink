@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { getNativeScreenPublication } from "./native-screen-service";
 import {
   readBrowserVideoStats,
@@ -6,7 +7,7 @@ import {
 import type { NativeScreenSession } from "../domain/native-screen/session";
 
 export interface VideoStatisticsPeer {
-  pc: RTCPeerConnection | null;
+  pc: RoomConnection | null;
   native?: NativeScreenSession;
   camera?: {
     stats(

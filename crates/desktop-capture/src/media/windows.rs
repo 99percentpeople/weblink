@@ -17,6 +17,7 @@ pub use presentation::PreviewSubscription;
 mod recording;
 use super::webrtc::SenderAudioRecording;
 mod recording_source;
+mod room;
 mod statistics;
 #[cfg(test)]
 mod tests;
@@ -96,7 +97,9 @@ struct MediaPeer {
     encoding: MediaOptions,
     limits: Option<VideoSettings>,
     connection: PeerConnection,
-    gathering: Arc<ice::Gathering>,
+    gathering: Option<Arc<ice::Gathering>>,
+    room_tracks: Vec<libwebrtc::rtp_transceiver::RtpTransceiver>,
+    software_sender: Option<libwebrtc::peer_connection_factory::SoftwareSenderProfile>,
     preview: bool,
     raw_video: bool,
     control: Option<control::Connection>,
@@ -116,10 +119,16 @@ impl MediaPeer {
             recording.stop();
         }
         // Wake pending offers before detaching callbacks or closing native state.
-        self.gathering.close();
         if let Some(control) = &self.control {
             control.close();
         }
+        let Some(gathering) = &self.gathering else {
+            for transceiver in &self.room_tracks {
+                let _ = transceiver.stop();
+            }
+            return;
+        };
+        gathering.close();
         self.connection.on_ice_gathering_state_change(None);
         self.connection.on_ice_candidate(None);
         self.connection.on_connection_state_change(None);
@@ -379,7 +388,7 @@ impl MediaSession {
         self.hardware.update(&settings)?;
         let resize = (current.max_width, current.max_height) != (next.max_width, next.max_height);
         super::webrtc::configure_software_vfr(&self.factory, next.frame_rate)?;
-        for peer in peers.values() {
+        for peer in peers.values().filter(|peer| peer.gathering.is_some()) {
             super::webrtc::configure_software_vfr(&peer._factory, next.frame_rate)?;
         }
         *current = next;
@@ -449,7 +458,15 @@ impl MediaSession {
         options: &MediaOptions,
         capture_size: (u32, u32),
     ) -> Result<()> {
-        for sender in peer.connection.senders() {
+        let senders = if peer.gathering.is_some() {
+            peer.connection.senders()
+        } else {
+            peer.room_tracks
+                .iter()
+                .map(|track| track.sender())
+                .collect()
+        };
+        for sender in senders {
             if !matches!(sender.track(), Some(MediaStreamTrack::Video(_))) {
                 continue;
             }
@@ -474,7 +491,16 @@ impl MediaSession {
                 .set_parameters(parameters)
                 .map_err(|e| e.to_string())?;
         }
-        Self::configure_transport_bitrate(&peer.connection, options)
+        if let Some(profile) = &peer.software_sender {
+            profile
+                .set_frame_rate(options.frame_rate)
+                .map_err(|error| error.to_string())?;
+        }
+        if peer.gathering.is_some() {
+            Self::configure_transport_bitrate(&peer.connection, options)
+        } else {
+            Ok(())
+        }
     }
 
     fn configure_transport_bitrate(
@@ -638,7 +664,7 @@ impl MediaSession {
     }
 
     #[cfg(test)]
-    fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
+    pub(crate) fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
         self.source.capture_frame(frame);
         self.preview_source.capture_frame(frame);
         self.publish_hardware_cpu(frame, Some(Instant::now()), true);
@@ -1074,33 +1100,7 @@ impl MediaSession {
                         recording_audio = SenderAudioRecording::new(audio_transceiver.sender());
                     }
                 }
-                {
-                    let codecs: Vec<_> = factory
-                        .get_rtp_sender_capabilities(MediaType::Video)
-                        .codecs
-                        .into_iter()
-                        .filter(|c| {
-                            (options
-                                .codec
-                                .as_ref()
-                                .is_none_or(|codec| c.mime_type.eq_ignore_ascii_case(codec))
-                                && (options.vp8_color_compatible()
-                                    || !c.mime_type.eq_ignore_ascii_case("video/vp8"))
-                                && (!pre_encoded
-                                    || options.codec.as_deref() != Some("video/h264")
-                                    || c.sdp_fmtp_line
-                                        .as_deref()
-                                        .is_some_and(|line| line.contains("profile-level-id=42"))))
-                                || matches!(
-                                    c.mime_type.to_lowercase().as_str(),
-                                    "video/rtx" | "video/red" | "video/ulpfec"
-                                )
-                        })
-                        .collect();
-                    transceiver
-                        .set_codec_preferences(codecs)
-                        .map_err(|e| e.to_string())?;
-                }
+                Self::configure_screen_codecs(&factory, &transceiver, &options, pre_encoded)?;
                 let sender = transceiver.sender();
                 sender.set_video_encoder_backend(if pre_encoded {
                     VideoEncoderBackend::PreEncoded
@@ -1149,7 +1149,9 @@ impl MediaSession {
                         encoding: options.clone(),
                         limits: None,
                         connection: pc.clone(),
-                        gathering: gathering.clone(),
+                        gathering: Some(gathering.clone()),
+                        room_tracks: Vec::new(),
+                        software_sender: None,
                         preview,
                         raw_video: !pre_encoded,
                         control,

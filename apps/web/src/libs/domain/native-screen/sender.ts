@@ -1,6 +1,7 @@
 import type { MediaPublication } from "../media-publication";
 export { MediaPublicationSender as NativeScreenSender } from "../media-publication";
 export interface NativeScreenPublication extends MediaPublication {
+  readonly captureId?: string;
   getRecordingSources?(): readonly import("../encoded-video").EncodedMediaSource[];
   openRecording?(
     signal: AbortSignal,

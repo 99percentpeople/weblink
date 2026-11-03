@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import type { RemotePointer } from "../remote-control/pointer";
 import {
   ScreenDecodeError,
@@ -14,53 +15,80 @@ export type ScreenReceiverFactory = (
   sdp: string,
   ...args: ConstructorParameters<typeof ScreenReceiver>
 ) => ScreenReceiveConnection;
+export async function recordingAudioSkew(
+  pc: RoomConnection,
+  tracks?: readonly MediaStreamTrack[],
+): Promise<number | undefined> {
+  try {
+    // Both RTCP estimates are taken at the same instant. They describe the
+    // media actually in playout, including the audio jitter buffer.
+    const transceivers = tracks
+      ? pc
+          .getTransceivers()
+          .filter((t) =>
+            tracks.some(
+              (track) => track === t.receiver.track,
+            ),
+          )
+      : undefined;
+    const mids =
+      transceivers &&
+      new Set(
+        transceivers
+          .map((t) => t.mid)
+          .filter((mid) => mid != null),
+      );
+    const reports = await pc.getStats();
+    const inbound = Array.from(reports.values()).filter(
+      (r) =>
+        r.type === "inbound-rtp" &&
+        (!mids || mids.has(r.mid)),
+    );
+    const playout = (kind: string): number | undefined =>
+      inbound.find((r) => r.kind === kind)
+        ?.estimatedPlayoutTimestamp;
+    const audioPlayout = playout("audio"),
+      videoPlayout = playout("video");
+    if (
+      audioPlayout &&
+      videoPlayout &&
+      Number.isFinite(videoPlayout - audioPlayout)
+    )
+      return (videoPlayout - audioPlayout) / 1000;
+
+    // Absolute Capture Time is usable before the first pair of RTCP reports.
+    const receivers =
+      transceivers?.map((t) => t.receiver) ??
+      pc.getReceivers();
+    const delay = (kind: string) => {
+      const source = receivers
+        .find((r) => r.track?.kind === kind)
+        ?.getSynchronizationSources?.()[0] as
+        | (RTCRtpSynchronizationSource & {
+            captureTimestamp?: number;
+          })
+        | undefined;
+      if (source?.captureTimestamp !== undefined)
+        return source.timestamp - source.captureTimestamp;
+    };
+    const audio = delay("audio"),
+      video = delay("video");
+    if (
+      audio !== undefined &&
+      video !== undefined &&
+      Number.isFinite(audio - video)
+    )
+      return (audio - video) / 1000;
+  } catch {
+    // Recording can still copy the browser timestamps if a receiver disappears.
+  }
+}
+
 /** A receive-only native screen connection. Source identity comes from its control
  * channel and paired video/audio transceivers, never the sender's MediaStreamTrack.id. */
 export class ScreenReceiver {
-  async recordingAudioSkew(): Promise<number | undefined> {
-    try {
-      // Both RTCP estimates are taken at the same instant. They describe the
-      // media actually in playout, including the audio jitter buffer.
-      const reports = await this.pc.getStats();
-      const inbound = Array.from(reports.values()).filter(
-        (r) => r.type === "inbound-rtp",
-      );
-      const playout = (kind: string): number | undefined =>
-        inbound.find((r) => r.kind === kind)
-          ?.estimatedPlayoutTimestamp;
-      const audioPlayout = playout("audio"),
-        videoPlayout = playout("video");
-      if (
-        audioPlayout &&
-        videoPlayout &&
-        Number.isFinite(videoPlayout - audioPlayout)
-      )
-        return (videoPlayout - audioPlayout) / 1000;
-
-      // Absolute Capture Time is usable before the first pair of RTCP reports.
-      const receivers = this.pc.getReceivers();
-      const delay = (kind: string) => {
-        const source = receivers
-          .find((r) => r.track.kind === kind)
-          ?.getSynchronizationSources?.()[0] as
-          | (RTCRtpSynchronizationSource & {
-              captureTimestamp?: number;
-            })
-          | undefined;
-        if (source?.captureTimestamp !== undefined)
-          return source.timestamp - source.captureTimestamp;
-      };
-      const audio = delay("audio"),
-        video = delay("video");
-      if (
-        audio !== undefined &&
-        video !== undefined &&
-        Number.isFinite(audio - video)
-      )
-        return (audio - video) / 1000;
-    } catch {
-      // Recording can still copy the browser timestamps if a receiver disappears.
-    }
+  recordingAudioSkew() {
+    return recordingAudioSkew(this.pc);
   }
   getVideoStats(track: MediaStreamTrack) {
     return readBrowserVideoStats(this.pc, track, "receive");

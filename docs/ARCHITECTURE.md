@@ -694,10 +694,13 @@ may select concrete infrastructure implementations.
     platform receiver and owns its capability/failure policy. Windows reception
     lives in `crates/desktop-capture/src/receive.rs`; `apps/desktop/src/receive.ts`
     presents bounded native video/audio through the existing MediaStream UI.
-    `application/meeting-camera-peer.ts` negotiates a camera and its microphone
-    on a send-only connection when the viewer advertises native camera codecs
-    under `meetingMedia/1`. Both sources share SDP/ICE ordering, bounded sender
-    retries and the native receive adapter. Only screen connections bind input channels.
+    Windows uses `crates/desktop-capture/src/room_peer.rs` for each remote
+    member's ICE, DTLS, RTP and SCTP. The adapter in `apps/desktop/src/room`
+    bridges signaling, DataChannels and device capture to the room session.
+    Ordinary meeting tracks use their negotiated MIDs. `domain/room-screen.ts`
+    associates native screen tracks and input channels with their authenticated
+    publication on that connection. `application/meeting-camera-peer.ts` serves
+    browser senders interoperating with older dedicated camera receivers.
     `native-screen/decode-monitor.ts` observes foreground decode progress.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
     presence, routed-peer messages, join acknowledgment, deployed version and

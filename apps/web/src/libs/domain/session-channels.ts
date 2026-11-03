@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { IDENTITY_CHANNEL } from "./device-identity/crypto";
 import { PAIRING_CHANNEL } from "./device-identity/manual-pairing";
 import { catchError, catchErrorSync } from "@/libs/catch";
@@ -15,7 +16,7 @@ export interface PeerSessionChannelOptions {
   polite: boolean;
   acceptsChannel?(label: string, protocol: string): boolean;
   getStatus(): PeerSessionStatus;
-  getPeerConnection(): RTCPeerConnection | null;
+  getPeerConnection(): RoomConnection | null;
   getSessionSignal(): AbortSignal | undefined;
   ordered(): boolean;
   createChannel(

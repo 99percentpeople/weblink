@@ -6,6 +6,8 @@ import {
 import type { ScreenControlSignal } from "./control-request";
 export const NATIVE_SCREEN_CHANNEL =
   "weblink-desktop-media/1";
+/** Screen reference sent in place of a dedicated SDP offer when roomTransport/1 is negotiated. */
+export const ROOM_SCREEN_PREFIX = "weblink-room-track/";
 export const MAX_NATIVE_SCREENS = 16;
 
 export type ScreenSignal =

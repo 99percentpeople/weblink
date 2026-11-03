@@ -83,7 +83,9 @@ type SenderSignal = Extract<
 const MAX_RETRIES = 3;
 
 /** Each viewer has its own negotiated transport and retry budget. The caller owns capture. */
-export class MediaPublicationSender {
+export class MediaPublicationSender<
+  T extends MediaPublication = MediaPublication,
+> {
   qualitySource():
     | import("./video-quality").VideoQualitySource
     | undefined {
@@ -135,7 +137,7 @@ export class MediaPublicationSender {
   private readonly onClosing = () => this.stop();
 
   constructor(
-    readonly publication: MediaPublication,
+    readonly publication: T,
     private readonly port: MediaSenderPort,
   ) {
     publication.closing?.addEventListener(

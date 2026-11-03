@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import {
   createEffect,
   createSignal,
@@ -65,9 +66,7 @@ export function parseSessionDiagnostics(
 
 /** Polling belongs to the visible view; the running speed test does not. */
 export function createSessionDiagnostics(
-  connection: Accessor<
-    RTCPeerConnection | null | undefined
-  >,
+  connection: Accessor<RoomConnection | null | undefined>,
   enabled: Accessor<boolean>,
 ): Accessor<SessionDiagnostics> {
   const visible = createPresentationVisible();

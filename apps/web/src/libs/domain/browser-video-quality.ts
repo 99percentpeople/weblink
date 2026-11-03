@@ -1,3 +1,4 @@
+import type { RoomSender } from "@weblink/platform";
 import {
   resolveVideoQuality,
   type VideoQualityLimits,
@@ -35,7 +36,7 @@ export function browserQualitySource(
 
 /** Never constrain the shared capture track when changing one viewer's encoding. */
 export async function applyBrowserVideoQuality(
-  sender: RTCRtpSender,
+  sender: RoomSender,
   source: VideoQualitySource,
   preference: VideoQualityPreference,
 ): Promise<VideoQualityLimits> {
@@ -47,7 +48,7 @@ export async function applyBrowserVideoQuality(
 }
 
 export async function setBrowserVideoLimits(
-  sender: RTCRtpSender,
+  sender: RoomSender,
   bounds: VideoQualityLimits,
   applied: VideoQualityLimits,
   degradationPreference?: RTCDegradationPreference,

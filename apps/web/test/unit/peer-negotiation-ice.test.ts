@@ -33,7 +33,7 @@ function peer() {
 }
 function setup(
   prepareConnection: (
-    pc: RTCPeerConnection,
+    pc: import("@weblink/platform").RoomConnection,
   ) => Promise<void>,
 ) {
   let current = peer();
@@ -137,12 +137,18 @@ describe("ICE preparation within negotiation", () => {
         }
       },
     );
-    const prepare = vi.fn(async (pc: RTCPeerConnection) => {
-      expect(
-        pc.setRemoteDescription,
-      ).not.toHaveBeenCalled();
-      expect(pc.setLocalDescription).not.toHaveBeenCalled();
-    });
+    const prepare = vi.fn(
+      async (
+        pc: import("@weblink/platform").RoomConnection,
+      ) => {
+        expect(
+          pc.setRemoteDescription,
+        ).not.toHaveBeenCalled();
+        expect(
+          pc.setLocalDescription,
+        ).not.toHaveBeenCalled();
+      },
+    );
     const { current, negotiation, sender } = setup(prepare);
     const old = current();
     Object.defineProperty(old, "currentRemoteDescription", {

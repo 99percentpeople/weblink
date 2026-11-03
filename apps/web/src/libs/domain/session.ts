@@ -1,3 +1,9 @@
+import type { RoomConnection } from "@weblink/platform";
+import { RoomScreens } from "./room-screen";
+import type {
+  NativeRoomTransport,
+  RoomScreenTransport,
+} from "@weblink/platform";
 import {
   applicationChannel,
   bootstrapMessage,
@@ -52,6 +58,7 @@ const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
   };
 
 export interface PeerSessionOptions {
+  nativeTransport?: NativeRoomTransport;
   acceptsContent?: () => boolean;
   allowsApplication?: () => boolean;
   /** Silently discard incoming messages before handlers or protocol errors can respond. */
@@ -82,13 +89,22 @@ export type PeerSessionEventMap = {
   remotevideotrackschange: readonly RemoteMediaTrackBinding[];
   remoteaudiotrackschange: readonly RemoteMediaTrackBinding[];
   statuschange: Exclude<PeerSessionStatus, "init">;
-  peerconnectioninit: RTCPeerConnection;
+  peerconnectioninit: RoomConnection;
 };
 
 export class PeerSession {
+  readonly roomScreens: RoomScreens;
+  readonly nativeTransport?: NativeRoomTransport;
+  get roomScreenTransport(): RoomScreenTransport | null {
+    return this.nativeTransport
+      ? (this.peerConnection as
+          | (RoomConnection & RoomScreenTransport)
+          | null)
+      : null;
+  }
   private eventEmitter: MultiEventEmitter<PeerSessionEventMap> =
     new MultiEventEmitter();
-  peerConnection: RTCPeerConnection | null = null;
+  peerConnection: RoomConnection | null = null;
   private negotiation: PeerNegotiationController;
   private readonly lifecycle: PeerSessionLifecycleController;
   private readonly media: PeerSessionMediaController;
@@ -112,6 +128,7 @@ export class PeerSession {
   constructor(
     sender: SignalingService,
     {
+      nativeTransport,
       polite = true,
       iceServers,
       loadIceServers,
@@ -126,6 +143,13 @@ export class PeerSession {
       allowsApplication = () => true,
     }: PeerSessionOptions = {},
   ) {
+    this.nativeTransport = nativeTransport;
+    this.roomScreens = new RoomScreens(
+      () => this.peerConnection,
+      () =>
+        this.allowsApplication() && this.acceptsContent(),
+      !!nativeTransport,
+    );
     this.sender = sender;
     this.authorizeMessage = authorizeMessage;
     this.acceptMessage = acceptMessage;
@@ -185,6 +209,8 @@ export class PeerSession {
         this.dispatchEvent("messagechannelchange", state),
     });
     this.media = new PeerSessionMediaController({
+      nativeRoom: !!nativeTransport,
+      roomScreen: (event) => this.roomScreens.track(event),
       targetClientId: () => this.targetClientId,
       acceptsContent: () => this.acceptsContent(),
       getPeerConnection: () => this.peerConnection,
@@ -320,7 +346,7 @@ export class PeerSession {
   // belong to the session; SDP, remote tracks and channels belong to this PC.
   private replaceConnection(
     reason: "initial" | "local-recovery" | "remote-restart",
-  ): RTCPeerConnection {
+  ): RoomConnection {
     if (this.status === "closed") {
       throw new Error(
         `[PeerSession] can not replace connection, session ${this.clientId} is closed`,
@@ -341,11 +367,34 @@ export class PeerSession {
 
     const controller = new AbortController();
     this.controller = controller;
-    const pc = new RTCPeerConnection({
+    const configuration: RTCConfiguration = {
       iceServers: this.iceServers,
       iceTransportPolicy: this.relayOnly ? "relay" : "all",
-    });
+    };
+    const pc = this.nativeTransport
+      ? this.nativeTransport.create(
+          configuration,
+          this.targetClientId,
+        )
+      : new RTCPeerConnection(configuration);
     this.peerConnection = pc;
+    if (this.nativeTransport)
+      pc.addEventListener(
+        "error",
+        (event) => {
+          const cause = (event as ErrorEvent).error;
+          this.dispatchEvent(
+            "error",
+            cause instanceof Error
+              ? cause
+              : new Error(String(cause)),
+          );
+        },
+        { signal: controller.signal },
+      );
+    this.roomScreenTransport?.receiveContent(
+      this.allowsApplication() && this.acceptsContent(),
+    );
     this.negotiation.startConnection(pc);
 
     pc.addEventListener(
@@ -427,7 +476,7 @@ export class PeerSession {
   }
 
   private async waitForPeerConnectionConnected(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     timeoutMs: number,
     attemptSignal: AbortSignal,
   ): Promise<void> {
@@ -751,9 +800,11 @@ export class PeerSession {
     this.media.refreshAccess();
     const allowed =
       this.allowsApplication() && this.acceptsContent();
+    this.roomScreenTransport?.receiveContent(allowed);
     if (allowed === this.accessAllowed) return;
     this.accessAllowed = allowed;
     if (!allowed) {
+      this.roomScreens.reset();
       this.accessLifetime.abort(
         new Error("DEVICE_PERMISSION_REVOKED"),
       );
@@ -794,7 +845,7 @@ export class PeerSession {
   }
 
   private async establishConnection(
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     initiate: boolean,
   ): Promise<void> {
     if (pc !== this.peerConnection)
@@ -860,6 +911,7 @@ export class PeerSession {
       this.controller = null;
     }
     this.dataChannels.reset();
+    this.roomScreens.reset();
     this.media.resetConnection();
     if (this.peerConnection) {
       this.peerConnection.close();

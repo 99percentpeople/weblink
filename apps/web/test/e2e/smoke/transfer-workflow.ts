@@ -539,7 +539,7 @@ async function connect(a: Node, b: Node) {
         );
         return channel;
       },
-    } as PeerSession;
+    } as unknown as PeerSession;
     pc.addEventListener("connectionstatechange", () => {
       if (pc.connectionState === "closed")
         events.dispatchEvent("statuschange", "closed");

@@ -135,6 +135,8 @@ struct Pending {
     frame: Option<Arc<Frame>>,
     damage: Damage,
     options: Option<MediaOptions>,
+    // Driver/HRD ceiling for a pooled worker, independent of its BWE target.
+    group_limit: Option<u64>,
     stopped: bool,
     wake: bool,
     keyframe: bool,
@@ -272,7 +274,13 @@ impl Encoder {
         input_wake: crate::surface::gpu::Wake,
         bitrate: Option<u32>,
     ) -> Result<Self> {
-        let pending = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+        let pending = Arc::new((
+            Mutex::new(Pending {
+                group_limit: bitrate.map(|_| options.max_bitrate),
+                ..Default::default()
+            }),
+            Condvar::new(),
+        ));
         let error = Arc::new(Mutex::new(None));
         let work = pending.clone();
         let failure = error.clone();
@@ -321,7 +329,8 @@ impl Encoder {
             input_wake,
         })
     }
-    pub fn attach(&self, id: u64, output: Arc<super::encoding_output::Output>, generation: u64) {
+    pub fn attach(&self, id: u64, output: Arc<super::encoding_output::Output>) {
+        let generation = output.replace();
         self.outputs
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -397,6 +406,19 @@ impl Encoder {
             pending.options = Some(options);
             self.pending.1.notify_one();
         }
+    }
+    pub(super) fn set_group_limit(&self, limit: u64, target: u32) {
+        let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !pending.stopped && pending.group_limit != Some(limit) {
+            pending.group_limit = Some(limit);
+            pending.bitrate = Some(target);
+            pending.wake = true;
+            self.pending.1.notify_one();
+        }
+    }
+    #[cfg(test)]
+    pub(super) fn group_limit(&self) -> Option<u64> {
+        self.pending.0.lock().unwrap().group_limit
     }
     pub fn close(&self) {
         self.recording.end();
@@ -477,12 +499,18 @@ fn run(
             }
             keyframe |= std::mem::take(&mut pending.keyframe);
             let (frame, damage) = pending.take_input();
-            (
-                pending.options.take(),
-                frame,
-                damage,
-                pending.bitrate.take(),
-            )
+            let mut next_options = pending.options.take();
+            if let Some(limit) = pending.group_limit {
+                if let Some(next) = next_options.as_mut() {
+                    next.max_bitrate = limit;
+                } else if options.max_bitrate != limit {
+                    next_options = Some(MediaOptions {
+                        max_bitrate: limit,
+                        ..options.clone()
+                    });
+                }
+            }
+            (next_options, frame, damage, pending.bitrate.take())
         };
         // Shutdown may wait for an MFT callback, which also signals this work
         // mutex. Never drop a transform while holding the producer lock.
@@ -1138,7 +1166,9 @@ mod tests {
                     _factory: media.factory.clone(),
                     encoding: MediaOptions::default(),
                     connection: connection.clone(),
-                    gathering,
+                    gathering: Some(gathering),
+                    room_tracks: Vec::new(),
+                    software_sender: None,
                     preview: false,
                     raw_video: false,
                     control: None,

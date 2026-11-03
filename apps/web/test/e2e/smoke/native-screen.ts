@@ -1,12 +1,16 @@
 import { platform } from "@/libs/platform/runtime";
 import { cameraReceiverFixture } from "./camera-receiver-fixture";
+import { validCapabilityUpdate } from "@/libs/domain/protocol/capabilities";
 import { remoteScreenRequestCheck } from "./remote-screen-request";
 import { createRoot } from "solid-js";
 import { liveVideoSettingsCheck } from "./live-video-settings";
 import { streamStatisticsCheck } from "./stream-statistics";
 import { readBrowserVideoStats } from "@/libs/domain/video-stats";
 import { SessionService } from "@/libs/application/session-service";
-import { createNativeScreenStream } from "@/libs/application/native-screen-service";
+import {
+  createNativeScreenStream,
+  getNativeScreenPublication,
+} from "@/libs/application/native-screen-service";
 import {
   appState,
   setAppState,
@@ -282,17 +286,23 @@ async function assertAudioPlaying(
 function pair(
   polite: boolean,
   mediaReceive?: import("@weblink/platform").NativeMediaReceive,
+  endpoints?: readonly [
+    import("@/libs/application/session-service").SessionServiceOptions,
+    import("@/libs/application/session-service").SessionServiceOptions,
+  ],
 ) {
-  // Both service instances use the shared test store with distinct peer IDs.
-  // Each stream is scoped explicitly to its own managed session.
   const loadIceServers = async () => [
     { urls: "stun:127.0.0.1:9" },
   ];
-  const a = new SessionService({ loadIceServers }),
-    b = new SessionService({
-      loadIceServers,
-      mediaReceive,
-    });
+  const a = new SessionService({
+    loadIceServers,
+    ...endpoints?.[0],
+  });
+  const b = new SessionService({
+    loadIceServers,
+    mediaReceive,
+    ...endpoints?.[1],
+  });
   const sa = new Sender("native", "web"),
     sb = new Sender("web", "native");
   sa.remote = sb;
@@ -905,6 +915,365 @@ async function meetingCamera() {
     video.remove();
   }
 }
+async function singleRoom(params: URLSearchParams) {
+  async function timely<T>(
+    result: Promise<T>,
+    operation: string,
+  ) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        result,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(new Error(operation + " timed out")),
+            15000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  const browserSender = params.has("mixed");
+  const browserReceiver = params.has("web-viewer");
+  const legacy = params.has("legacy");
+  const mixed = browserSender || browserReceiver;
+  const transport = platform.roomTransport;
+  if (!transport)
+    throw new Error("Windows room transport required");
+  let nativeConnections = 0,
+    browserConnections = 0;
+  const original = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = new Proxy(original, {
+    construct(target, args, newTarget) {
+      browserConnections++;
+      return Reflect.construct(target, args, newTarget);
+    },
+  });
+  const counted: typeof transport = {
+    create(config, id) {
+      nativeConnections++;
+      return transport.create(config, id);
+    },
+  };
+  const unexpected = async () => {
+    throw new Error(
+      "Dedicated receiver opened for a room track",
+    );
+  };
+  const mediaReceive = {
+    codecs: async () => ["video/vp8", "audio/opus"],
+    open: unexpected,
+  };
+  const { a, b, time } = pair(true, undefined, [
+    {
+      roomTransport: browserSender ? null : counted,
+      mediaReceive: browserSender ? null : mediaReceive,
+    },
+    {
+      roomTransport: browserReceiver ? null : counted,
+      mediaReceive: browserReceiver ? null : mediaReceive,
+    },
+  ]);
+  const cam = source(),
+    second = source();
+  const video = document.createElement("video");
+  video.muted = true;
+  video.autoplay = true;
+  document.body.append(video);
+  let unbind: (() => void) | undefined;
+  let screen: MediaStream | undefined;
+  try {
+    const first = await a.addClient({
+      clientId: "web",
+      createdAt: 2,
+      name: "Viewer",
+      avatar: null,
+    });
+    const viewer = await b.addClient({
+      clientId: "native",
+      createdAt: time,
+      name: "Camera",
+      avatar: null,
+    });
+    if (legacy) {
+      const send = viewer.sendMessage.bind(viewer);
+      viewer.sendMessage = (message, options) => {
+        if (
+          message.type === "peer-capabilities" &&
+          validCapabilityUpdate(message.update) &&
+          message.update.kind !== "request-snapshot"
+        ) {
+          const services = { ...message.update.services };
+          delete services["roomTransport/1"];
+          message = {
+            ...message,
+            update: { ...message.update, services },
+          };
+        }
+        return send(message, options);
+      };
+    }
+    await Promise.all([first.listen(), viewer.listen()]);
+    await (params.has("polite") ? first : viewer).connect();
+    await until(
+      () =>
+        !!b.capabilities.get(viewer)?.identity
+          ?.receiveContent &&
+        !!a.capabilities.get(first)?.identity
+          ?.receiveContent,
+      "Peer trust and capability exchange on the main data channel",
+    );
+    const room = viewer.peerConnection;
+    await timely(
+      cam.resumeAudio(),
+      "Start microphone fixture",
+    );
+    a.setSessionStream(first, cam.stream);
+    const remote = () => b.clientViewData.native?.stream;
+    await until(
+      () =>
+        !!remote()?.getVideoTracks().length &&
+        !!remote()?.getAudioTracks().length,
+      "Main connection did not publish camera and microphone",
+    );
+    const track = remote()!.getVideoTracks()[0];
+    // The meeting video element and audio mixer have separate playback owners.
+    video.srcObject = new MediaStream([track]);
+    unbind = platform.videoPresentation?.bind(
+      track,
+      video,
+      true,
+    );
+    const audio = document.createElement("audio");
+    audio.muted = true;
+    audio.srcObject = new MediaStream(
+      remote()!.getAudioTracks(),
+    );
+    try {
+      await Promise.all([
+        timely(video.play(), "Play room video"),
+        timely(audio.play(), "Play room audio"),
+      ]);
+      await assertAudioPlaying(remote()!.getAudioTracks());
+    } catch (error) {
+      for (const [label, pc] of [
+        ["sender", first.peerConnection],
+        ["viewer", room],
+      ] as const) {
+        const report = await pc!.getStats();
+        const rtp = Array.from(report.values())
+          .filter(
+            (s) =>
+              s.type === "outbound-rtp" ||
+              s.type === "inbound-rtp",
+          )
+          .map((s) => ({
+            type: s.type,
+            mid: s.mid,
+            codec: report.get(s.codecId)?.mimeType,
+            fmtp: report.get(s.codecId)?.sdpFmtpLine,
+            framesEncoded: s.framesEncoded,
+            framesDecoded: s.framesDecoded,
+            bytes: s.bytesReceived ?? s.bytesSent,
+            decoder: s.decoderImplementation,
+            energy: s.totalAudioEnergy,
+            samples: s.totalSamplesReceived,
+          }));
+        console.error(label, JSON.stringify(rtp));
+      }
+      throw error;
+    } finally {
+      audio.pause();
+      audio.srcObject = null;
+    }
+    if (browserReceiver)
+      await until(
+        () =>
+          video.getVideoPlaybackQuality().totalVideoFrames >
+          2,
+        "Browser viewer did not decode native camera",
+      );
+    else
+      await until(
+        async () =>
+          (await b.getVideoStats(track))
+            .flatMap((b) => b.samples)
+            .some(
+              (s) =>
+                (s.nativeReceive?.renderer
+                  ?.presentedFrames ?? 0) > 0,
+            ),
+        "Main camera did not present native GPU frames",
+      );
+    const received = new Promise<RTCDataChannel>(
+      (resolve) =>
+        viewer.addEventListener("channel", ({ detail }) => {
+          if (detail.label === "single-room-test")
+            resolve(detail);
+        }),
+    );
+    const sending = await first.createChannel(
+      "single-room-test",
+      "single-room-test",
+    );
+    const receiving = await timely(
+      received,
+      "Open remote room channel",
+    );
+    receiving.binaryType = "arraybuffer";
+    const packet = new Promise<ArrayBuffer>((resolve) =>
+      receiving.addEventListener(
+        "message",
+        (e) => resolve(e.data),
+        { once: true },
+      ),
+    );
+    sending.send(new Uint8Array([1, 128, 255]));
+    assert(
+      new Uint8Array(
+        await timely(packet, "Receive room packet"),
+      ).join() === "1,128,255",
+      "Binary SCTP transfer failed",
+    );
+    a.setSessionStream(
+      first,
+      new MediaStream([
+        ...cam.stream.getTracks(),
+        second.stream.getVideoTracks()[0],
+      ]),
+    );
+    await until(
+      () => remote()?.getVideoTracks().length === 2,
+      "Second RTP video track failed",
+    );
+    a.setSessionStream(first, cam.stream);
+    await until(
+      () =>
+        remote()?.getVideoTracks().length === 1 &&
+        remote()!.getVideoTracks()[0] === track,
+      "Removing one RTP track affected the other",
+    );
+    if (params.has("fixture-window")) {
+      const capture = platform.capture!,
+        share = platform.screenShare!;
+      const fixture = (await capture.sources()).find(
+        (s) =>
+          s.kind === "window" &&
+          s.name === "Weblink Room Transport Test Pattern",
+      );
+      assert(
+        fixture,
+        "Named synthetic capture window is required",
+      );
+      screen = await createNativeScreenStream(
+        capture,
+        share,
+        fixture.id,
+        undefined,
+        {
+          audio: false,
+          maxWidth: 640,
+          maxHeight: 360,
+          frameRate: 15,
+          maxBitrate: 1500000,
+          codec: null,
+          degradationPreference: "balanced",
+        },
+      );
+      a.setSessionStream(
+        first,
+        new MediaStream([
+          ...cam.stream.getTracks(),
+          ...screen.getTracks(),
+        ]),
+      );
+      const screenTrack = () =>
+        b.clientViewData.native?.nativeScreenStream?.getVideoTracks()[0];
+      if (legacy) {
+        const captureId = getNativeScreenPublication(
+          screen.getVideoTracks()[0],
+        )?.captureId;
+        assert(
+          captureId &&
+            (await share.pipelineStats!(captureId))
+              .peers === 0,
+          "Legacy peer opened a native screen sender",
+        );
+        assert(
+          !a.capabilities.get(first)?.roomTransport &&
+            !b.capabilities.get(viewer)?.screen,
+          "Legacy peer unexpectedly negotiated room screen sharing",
+        );
+        assert(
+          !screenTrack(),
+          "Native screen leaked onto an incompatible connection",
+        );
+      } else {
+        await until(
+          () => !!screenTrack(),
+          "Multiplexed native screen was not published",
+        );
+        await until(
+          async () =>
+            (await b.getVideoStats(screenTrack()!))
+              .flatMap((batch) => batch.samples)
+              .some((s) => (s.frames ?? 0) > 1),
+          "Multiplexed screen failed to decode",
+        );
+        assert(
+          remote()?.getVideoTracks()[0] === track,
+          "Screen displaced camera",
+        );
+      }
+      a.setSessionStream(first, cam.stream);
+      screen.getTracks().forEach((t) => t.stop());
+      await until(
+        () => !screenTrack(),
+        "Screen stayed active after stop",
+      );
+    }
+    assert(
+      room === viewer.peerConnection &&
+        viewer.isMessageChannelReady &&
+        receiving.readyState === "open",
+      "Renegotiation reset room data",
+    );
+    assert(
+      nativeConnections === (mixed ? 1 : 2) &&
+        browserConnections === (mixed ? 1 : 0),
+      "Unexpected WebRTC connection count: " +
+        JSON.stringify({
+          nativeConnections,
+          browserConnections,
+        }),
+    );
+    return {
+      mixed,
+      nativeConnections,
+      browserConnections,
+      binary: true,
+      concurrentVideo: true,
+      nativeGPU: !browserReceiver,
+      screen: !!screen && !legacy,
+      legacy,
+      politeInitiator: params.has("polite"),
+    };
+  } finally {
+    globalThis.RTCPeerConnection = original;
+    unbind?.();
+    a.destoryAllSession();
+    b.destoryAllSession();
+    screen?.getTracks().forEach((t) => t.stop());
+    cam.close();
+    second.close();
+    video.srcObject = null;
+    video.remove();
+  }
+}
+
 async function main() {
   const params = new URLSearchParams(location.search);
   const previousCodec =
@@ -918,6 +1287,11 @@ async function main() {
         "preferredVideoCodec",
         "video/" + codec,
       );
+    if (
+      params.has("single-room") ||
+      (params.has("camera") && platform.roomTransport)
+    )
+      return { ok: true, room: await singleRoom(params) };
     camera = await meetingCamera();
   } finally {
     if (codec)

@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { PEER_SESSION_DISCONNECTED_GRACE_MS } from "@/constants";
 import type { SignalingService } from "./signaling";
 
@@ -15,7 +16,7 @@ export interface PeerSessionLifecycleOptions {
   polite: boolean;
   getStatus(): PeerSessionStatus;
   setStatus(status: PeerSessionStatus): void;
-  getPeerConnection(): RTCPeerConnection | null;
+  getPeerConnection(): RoomConnection | null;
   disconnect(): void;
   close(): void;
   reconnect(options: { initiate?: boolean }): Promise<void>;
@@ -177,7 +178,7 @@ export class PeerSessionLifecycleController {
     );
   }
 
-  handleConnectionStateChange(pc: RTCPeerConnection): void {
+  handleConnectionStateChange(pc: RoomConnection): void {
     if (pc !== this.options.getPeerConnection()) return;
     switch (pc.connectionState) {
       case "connecting":

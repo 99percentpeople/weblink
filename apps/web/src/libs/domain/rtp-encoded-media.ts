@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import type {
   EncodedVideoPacket,
   EncodedAudioPacket,
@@ -75,7 +76,7 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
 
   static install(
     sender: RTCRtpSender | RTCRtpReceiver,
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     workers = new RtpEncodedMediaWorkers(),
     direction: "send" | "receive" = "send",
   ): RtpEncodedMediaTrack | undefined {
@@ -109,7 +110,7 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
 
   private constructor(
     private readonly sender: RTCRtpSender | RTCRtpReceiver,
-    private readonly pc: RTCPeerConnection,
+    private readonly pc: RoomConnection,
     private readonly lease: ReturnType<
       RtpEncodedMediaWorkers["acquire"]
     >,

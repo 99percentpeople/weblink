@@ -1,4 +1,127 @@
 use super::*;
+
+#[test]
+fn changed_feedback_retries_warmup_without_reconfiguring_a_replacement_viewer() {
+    let pool = Arc::new(Pool::default());
+    let first = acquire(&pool, "viewer", false);
+    let other = acquire(&pool, "other", false);
+    let update_pool = pool.clone();
+    let updating = std::thread::spawn(move || {
+        update_pool.update_peer(
+            "viewer",
+            &VideoSettings {
+                max_width: 320,
+                max_height: 180,
+                frame_rate: 15,
+                max_bitrate: 300_000,
+                degradation_preference: "balanced".into(),
+            },
+            &options(),
+        )
+    });
+    // With no capture frames, warmup stays pending until its allocation changes
+    // or its consumer retires. This exercises the race without a hardware driver.
+    let wait_for_budget = |target| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !pool
+            .state
+            .lock()
+            .unwrap()
+            .slots
+            .values()
+            .any(|s| s.warming && s.key.bitrate == bitrate_bucket(target, 300_000))
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "missing warmup for {target}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+    };
+    wait_for_budget(300_000);
+    pool.state
+        .lock()
+        .unwrap()
+        .slots
+        .get_mut(&first.token)
+        .unwrap()
+        .target = 160_000;
+    pool.reconcile(Arc::new(|| {})).unwrap();
+    wait_for_budget(160_000);
+    first.close();
+    let replacement = acquire(&pool, "viewer", false);
+    assert!(updating.join().unwrap().is_err());
+    assert!(Arc::ptr_eq(
+        &replacement.encoder().unwrap(),
+        &other.encoder().unwrap()
+    ));
+    let state = pool.state.lock().unwrap();
+    assert!(state.slots[&replacement.token].limits.is_none());
+    assert_eq!(state.slots.len(), 2);
+    assert_eq!(state.groups.len(), 1);
+}
+#[test]
+fn different_viewer_ceilings_share_only_while_their_bitrate_buckets_match() {
+    let pool = Arc::new(Pool::default());
+    let viewer = |id: &str, limit| {
+        pool.acquire(
+            id.into(),
+            "test".into(),
+            MediaOptions {
+                max_bitrate: limit,
+                ..options()
+            },
+            false,
+            false,
+            Arc::new(|| {}),
+        )
+        .unwrap()
+    };
+    let high = viewer("high", 4_000_000);
+    let low = viewer("low", 1_000_000);
+    let encoder = high.encoder().unwrap();
+    let low_output = low.output.as_ref().unwrap().clone();
+    assert!(Arc::ptr_eq(&encoder, &low.encoder().unwrap()));
+    assert_eq!(encoder.group_limit(), Some(1_000_000));
+    let change = |target| {
+        pool.state
+            .lock()
+            .unwrap()
+            .slots
+            .get_mut(&high.token)
+            .unwrap()
+            .target = target;
+        pool.reconcile(Arc::new(|| {})).unwrap();
+    };
+    change(3_000_000);
+    assert_eq!(pool.active().len(), 2);
+    assert_eq!(low.encoder().unwrap().group_limit(), Some(1_000_000));
+    assert_eq!(high.encoder().unwrap().group_limit(), Some(4_000_000));
+    change(300_000);
+    assert_eq!(pool.active().len(), 1);
+    assert!(Arc::ptr_eq(&low_output, low.output.as_ref().unwrap()));
+    pool.update_peer(
+        "low",
+        &VideoSettings {
+            max_width: options().max_width,
+            max_height: options().max_height,
+            frame_rate: options().frame_rate,
+            max_bitrate: 600_000,
+            degradation_preference: "balanced".into(),
+        },
+        &MediaOptions {
+            max_bitrate: 4_000_000,
+            ..options()
+        },
+    )
+    .unwrap();
+    assert!(Arc::ptr_eq(&encoder, &high.encoder().unwrap()));
+    assert_eq!(encoder.group_limit(), Some(600_000));
+    low.close();
+    assert_eq!(encoder.group_limit(), Some(4_000_000));
+    high.close();
+    assert!(pool.active().is_empty());
+}
 #[test]
 fn failed_viewer_profile_keeps_the_original_encoder_and_other_consumers() {
     let pool = Arc::new(Pool::default());

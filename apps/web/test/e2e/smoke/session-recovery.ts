@@ -433,10 +433,10 @@ async function main() {
     // offer must not retire that generation and discard the subsequent answer.
     sa.holdOffers = sb.holdOffers = true;
     // Actual local changes drive native negotiationneeded on both peers.
-    a.peerConnection!.addTransceiver("video", {
+    a.peerConnection!.addTransceiver!("video", {
       direction: "recvonly",
     });
-    b.peerConnection!.addTransceiver("video", {
+    b.peerConnection!.addTransceiver!("video", {
       direction: "recvonly",
     });
     await until(
@@ -714,8 +714,10 @@ async function main() {
     // A fresh offer is a new PC session, not a renegotiation of the remote's
     // old SDP layout. Exercise both initiator roles and then change media.
     for (const initiator of [b, a]) {
-      const oldA: RTCPeerConnection = a.peerConnection!,
-        oldB: RTCPeerConnection = b.peerConnection!;
+      const oldA: import("@weblink/platform").RoomConnection =
+          a.peerConnection!,
+        oldB: import("@weblink/platform").RoomConnection =
+          b.peerConnection!;
       await initiator.reconnect({ initiate: true });
       await until(
         () => mediaReady(),

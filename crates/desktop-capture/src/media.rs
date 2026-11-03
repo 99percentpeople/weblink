@@ -1,7 +1,7 @@
 //! Independent send-only WebRTC connections for one explicitly selected source.
 use serde::{Deserialize, Serialize};
 #[cfg(any(windows, test))]
-mod capture_time_offer;
+pub(crate) mod capture_time_offer;
 pub mod color;
 pub mod control;
 #[cfg(any(windows, test))]

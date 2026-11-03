@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import {
   createSpeedTestChannel,
   runSpeedTest,
@@ -38,7 +39,7 @@ export interface SpeedTestState {
 interface SpeedTestServiceOptions {
   getConnection: (
     peerId: ClientID,
-  ) => RTCPeerConnection | null | undefined;
+  ) => RoomConnection | null | undefined;
   isBusy: () => boolean;
   approve: (
     peerId: ClientID,
@@ -72,7 +73,7 @@ export class SpeedTestService {
 
   handleChannel(
     peerId: ClientID,
-    pc: RTCPeerConnection | null,
+    pc: RoomConnection | null,
     channel: RTCDataChannel,
   ): void {
     if (channel.protocol !== SPEED_TEST_PROTOCOL) return;
@@ -119,7 +120,7 @@ export class SpeedTestService {
 
   private async execute(
     peerId: ClientID,
-    pc: RTCPeerConnection,
+    pc: RoomConnection,
     channel: RTCDataChannel,
     incoming: boolean,
   ): Promise<void> {

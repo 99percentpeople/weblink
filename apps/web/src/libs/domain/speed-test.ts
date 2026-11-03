@@ -1,3 +1,4 @@
+import type { RoomConnection } from "@weblink/platform";
 import { createUuid } from "./ids";
 import {
   SPEED_TEST_PROTOCOL,
@@ -39,7 +40,7 @@ export interface SpeedTestOptions {
 }
 
 export function createSpeedTestChannel(
-  pc: RTCPeerConnection,
+  pc: RoomConnection,
 ): RTCDataChannel {
   if (pc.connectionState !== "connected")
     throw new SpeedTestError("offline");
