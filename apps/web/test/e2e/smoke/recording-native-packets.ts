@@ -197,40 +197,42 @@ export async function checkNativeRecordingPackets(
         await service.start({
           id: codec,
           name: codec,
-          local: true,
           video,
           audio: [],
           available: () => true,
-          encodedVideoSources: () =>
-            audioMode === "fallback"
-              ? [
-                  {
-                    encodedAudio: true,
-                    subscribe(consumer) {
-                      return {
-                        encodedAudio: true,
-                        resume() {
-                          consumer.ended(
-                            new Error(
-                              "Sender audio capture clock unavailable",
-                            ),
-                          );
-                        },
-                        pause() {},
-                        async stop() {
-                          fallbackStops++;
-                        },
-                      };
+          input: {
+            kind: "native",
+            packets: () =>
+              audioMode === "fallback"
+                ? [
+                    {
+                      encodedAudio: true,
+                      subscribe(consumer) {
+                        return {
+                          encodedAudio: true,
+                          resume() {
+                            consumer.ended(
+                              new Error(
+                                "Sender audio capture clock unavailable",
+                              ),
+                            );
+                          },
+                          pause() {},
+                          async stop() {
+                            fallbackStops++;
+                          },
+                        };
+                      },
                     },
-                  },
-                  source,
-                ]
-              : [source],
-          async open() {
-            openedFallback++;
-            throw new Error(
-              "Native packets must not open a receiver",
-            );
+                    source,
+                  ]
+                : [source],
+            async open() {
+              openedFallback++;
+              throw new Error(
+                "Native packets must not open a receiver",
+              );
+            },
           },
         });
         await queue;

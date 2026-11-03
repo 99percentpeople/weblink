@@ -281,14 +281,21 @@ export async function checkRtpRecordingAudio(
             await service.start({
               id: "audio",
               name: format.codec,
-              local: direction === "send",
               video,
               audio: [audio],
               available: () =>
                 video.readyState === "live" &&
                 audio.readyState === "live",
-              encodedVideoSources: () =>
-                recordingMediaSources(picture, [observed]),
+              input: {
+                kind:
+                  direction === "send"
+                    ? "local-tracks"
+                    : "remote-tracks",
+                packets: () =>
+                  recordingMediaSources(picture, [
+                    observed,
+                  ]),
+              },
             });
             if (failure) throw failure;
             await sleep(1000);

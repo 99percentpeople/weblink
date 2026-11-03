@@ -7,7 +7,7 @@ import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import { createUuid } from "@/libs/domain/ids";
 import { browserDecodeCapabilities } from "@/libs/domain/media-codecs";
 import { createNativeCodecSelection } from "./native-codec-selection";
-import type { RecordingInput } from "./recording-service";
+import type { RecordingStream } from "./recording-service";
 
 /** A dedicated local receiver consumes real native audio and is independent of UI preview visibility. */
 export async function openNativeRecordingStream(
@@ -16,7 +16,7 @@ export async function openNativeRecordingStream(
   options: NativeScreenOptions | undefined,
   signal: AbortSignal,
   ended: (error?: Error) => void,
-): Promise<RecordingInput> {
+): Promise<RecordingStream> {
   if (share.offerRecording) {
     try {
       return await openConnection(
@@ -50,7 +50,7 @@ async function openConnection(
   signal: AbortSignal,
   ended: (error?: Error) => void,
   reuse: boolean,
-): Promise<RecordingInput> {
+): Promise<RecordingStream> {
   signal.throwIfAborted();
   const id = createUuid();
   let closed = false;

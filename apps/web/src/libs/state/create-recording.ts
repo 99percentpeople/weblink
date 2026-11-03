@@ -8,6 +8,7 @@ import { toast } from "solid-sonner";
 import { t } from "@/i18n";
 import {
   RecordingService,
+  type RecordingInput,
   type RecordingState,
 } from "@/libs/application/recording-service";
 import { getNativeScreenPublication } from "@/libs/application/native-screen-service";
@@ -31,6 +32,68 @@ export type RecordingStatus = RecordingState &
 export interface SavedRecording {
   id: string;
   fileName: string;
+}
+
+function selectRecordingInput(
+  video: MediaStreamTrack,
+  audio: readonly MediaStreamTrack[],
+  local: boolean,
+  remoteScreen?: MediaStream | null,
+): RecordingInput {
+  const publication = local
+    ? getNativeScreenPublication(video)
+    : undefined;
+  const packets =
+    publication?.getRecordingSources?.bind(publication);
+  if (publication?.openRecording)
+    return {
+      kind: "native",
+      packets,
+      open: publication.openRecording.bind(publication),
+    };
+
+  const presentation =
+    platform.videoPresentation?.recording?.(video);
+  if (presentation)
+    return {
+      kind: "native",
+      packets,
+      async open(signal, ended) {
+        const input = await presentation(signal, ended);
+        return {
+          start: input.start,
+          close: input.close,
+          stream: new MediaStream([
+            ...input.stream.getVideoTracks(),
+            ...audio,
+          ]),
+        };
+      },
+    };
+
+  if (
+    remoteScreen
+      ?.getVideoTracks()
+      .some((track) => track === video)
+  )
+    return {
+      kind: "received-screen",
+      audioSkew:
+        audio.length === 1
+          ? sessionService?.getScreenRecordingAudioClock(
+              video,
+              audio[0],
+            )
+          : undefined,
+    };
+  return {
+    kind: local ? "local-tracks" : "remote-tracks",
+    packets: () =>
+      sessionService?.getRecordingVideoSources(
+        video,
+        audio,
+      ) ?? [],
+  };
 }
 
 export function createRecording(app: AppStateContextProps) {
@@ -128,9 +191,11 @@ export function createRecording(app: AppStateContextProps) {
         sourceLabel: options.sourceLabel,
       };
       const remote = () =>
-        appState.session.clientViewData[
-          options.participantId ?? ""
-        ];
+        options.local
+          ? undefined
+          : appState.session.clientViewData[
+              options.participantId ?? ""
+            ];
       const streams = () =>
         options.local
           ? [app.localStream()]
@@ -157,75 +222,23 @@ export function createRecording(app: AppStateContextProps) {
                     )),
             )
           : [...options.audio];
-      const publication = options.local
-        ? getNativeScreenPublication(options.video)
-        : undefined;
-      const nativeInput =
-        platform.videoPresentation?.recording?.(
-          options.video,
-        );
-      const open =
-        publication?.openRecording?.bind(publication) ??
-        (nativeInput
-          ? async (
-              signal: AbortSignal,
-              ended: (error?: Error) => void,
-            ) => {
-              const input = await nativeInput(
-                signal,
-                ended,
-              );
-              return {
-                stream: new MediaStream([
-                  ...input.stream.getVideoTracks(),
-                  ...audio,
-                ]),
-                start: input.start,
-                close: input.close,
-              };
-            }
-          : undefined);
-      const receivedNativeScreen =
-        !options.local &&
-        remote()
-          ?.nativeScreenStream?.getVideoTracks()
-          .some((track) => track === options.video);
       void service
         .start({
           id: options.id,
           name: options.name,
-          local: options.local,
-          receivedNativeScreen,
-          recordingAudioSkew:
-            receivedNativeScreen &&
-            !open &&
-            audio.length === 1
-              ? sessionService?.getScreenRecordingAudioClock(
-                  options.video,
-                  audio[0],
-                )
-              : undefined,
+          input: selectRecordingInput(
+            options.video,
+            audio,
+            options.local,
+            remote()?.nativeScreenStream,
+          ),
           video: options.video,
           audio,
-          encodedVideoSources: () => {
-            if (open) {
-              return (
-                publication?.getRecordingSources?.() ?? []
-              );
-            }
-            return (
-              sessionService?.getRecordingVideoSources(
-                options.video,
-                audio,
-              ) ?? []
-            );
-          },
           available: () =>
             options.video.readyState === "live" &&
             [options.video, ...audio].every((track) =>
               allTracks().includes(track),
             ),
-          open,
         })
         .catch(() => {}); // The service owns failure notices and cleanup.
     },

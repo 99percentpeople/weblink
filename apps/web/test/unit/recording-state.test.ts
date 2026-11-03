@@ -27,6 +27,8 @@ const f = vi.hoisted(() => ({
   resume: vi.fn(),
   sources: vi.fn(() => []),
   audioSkew: vi.fn(async () => 0.02),
+  publication: vi.fn(),
+  presentation: vi.fn(),
 }));
 vi.mock("@/libs/state/app-state", () => ({
   appState: { session: { clientViewData: f.clients } },
@@ -45,7 +47,12 @@ vi.mock("@/libs/application/session-service", () => ({
   },
 }));
 vi.mock("@/libs/application/native-screen-service", () => ({
-  getNativeScreenPublication: () => undefined,
+  getNativeScreenPublication: f.publication,
+}));
+vi.mock("@/libs/platform/runtime", () => ({
+  platform: {
+    videoPresentation: { recording: f.presentation },
+  },
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/libs/application/recording-service", () => ({
@@ -152,21 +159,24 @@ it.each(["camera", "screen"])(
       video: kind === "camera" ? camera : display,
       audio: kind === "camera" ? [] : [screenAudio],
     });
-    expect(f.source?.receivedNativeScreen).toBe(
-      kind === "screen",
-    );
-    expect(f.source?.recordingAudioSkew).toBe(
-      kind === "screen" ? f.audioSkew : undefined,
-    );
+    const input = f.source?.input;
+    if (kind === "screen") {
+      expect(input).toEqual({
+        kind: "received-screen",
+        audioSkew: f.audioSkew,
+      });
+      expect(f.sources).not.toHaveBeenCalled();
+    } else {
+      expect(input?.kind).toBe("remote-tracks");
+      if (input?.kind === "remote-tracks")
+        input.packets?.();
+      expect(f.sources).toHaveBeenCalledWith(camera, [
+        microphone,
+      ]);
+    }
     expect(f.source?.audio).toEqual([
       kind === "camera" ? microphone : screenAudio,
     ]);
-    expect(f.source?.local).toBe(false);
-    f.source?.encodedVideoSources?.();
-    expect(f.sources).toHaveBeenCalledWith(
-      kind === "camera" ? camera : display,
-      [kind === "camera" ? microphone : screenAudio],
-    );
     expect(f.source?.available()).toBe(true);
     expect(recording.state()).toMatchObject({
       participantName: "Alice",
@@ -233,10 +243,64 @@ it("identifies direct local camera capture for recorder codec selection", () => 
     video: camera,
     audio: [],
   });
-  expect(f.source?.local).toBe(true);
+  expect(f.source?.input.kind).toBe("local-tracks");
   expect(f.source?.video).toBe(camera);
   expect(f.source?.available()).toBe(true);
 });
+
+it.each(["publisher", "presentation"] as const)(
+  "selects the native %s before borrowing preview tracks",
+  (mode) => {
+    const video = track("native", "video");
+    const selected = stream(video);
+    const local = mode === "publisher";
+    const open = vi.fn(async () => ({
+      stream: selected,
+      close: vi.fn(),
+    }));
+    const packets = vi.fn(() => []);
+    if (local)
+      f.publication.mockReturnValueOnce({
+        openRecording: open,
+        getRecordingSources: packets,
+      });
+    else {
+      f.clients.peer = { nativeScreenStream: selected };
+      f.presentation.mockReturnValueOnce(open);
+    }
+    const recording = createRoot((release) => {
+      dispose = release;
+      return createRecording({
+        localStream: () => (local ? selected : null),
+        screenSharing: { retain: vi.fn() },
+        activeRoomConversationId: () => "room",
+      } as unknown as AppStateContextProps);
+    });
+    recording.start({
+      id: "screen",
+      name: "Screen",
+      kind: "screen",
+      participantId: "peer",
+      local,
+      video,
+      audio: [],
+    });
+    const input = f.source?.input;
+    expect(input?.kind).toBe("native");
+    expect(open).not.toHaveBeenCalled();
+    if (input?.kind !== "native")
+      throw new Error("Expected native input");
+    if (local) {
+      input.packets?.();
+      expect(packets).toHaveBeenCalledOnce();
+      expect(f.presentation).not.toHaveBeenCalled();
+    } else {
+      expect(input.packets).toBeUndefined();
+      expect(f.presentation).toHaveBeenCalledWith(video);
+    }
+    expect(f.sources).not.toHaveBeenCalled();
+  },
+);
 
 function savedRecording() {
   const recording = createRoot((release) => {

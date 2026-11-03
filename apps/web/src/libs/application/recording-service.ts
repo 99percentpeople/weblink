@@ -16,27 +16,38 @@ import {
   type RecordingContainer,
 } from "./recording-options";
 
-export interface RecordingInput {
+export interface RecordingStream {
   stream: MediaStream;
   /** Called after the recorder attaches, to seed static native pixel sources. */
   start?(): Promise<void>;
   close(): void;
 }
+type PacketSources = () => readonly EncodedVideoSource[];
+export type RecordingInput =
+  | {
+      kind: "local-tracks" | "remote-tracks";
+      packets?: PacketSources;
+    }
+  | {
+      kind: "native";
+      packets?: PacketSources;
+      open(
+        signal: AbortSignal,
+        ended: (error?: Error) => void,
+      ): Promise<RecordingStream>;
+    }
+  | {
+      kind: "received-screen";
+      audioSkew?(): Promise<number | undefined>;
+    };
+
 export interface RecordingSource {
   id: string;
   name: string;
-  local?: boolean;
-  /** A native screen received by this participant on its viewing connection. */
-  receivedNativeScreen?: boolean;
-  recordingAudioSkew?(): Promise<number | undefined>;
+  input: RecordingInput;
   video: MediaStreamTrack;
   audio: readonly MediaStreamTrack[];
   available(): boolean;
-  encodedVideoSources?(): readonly EncodedVideoSource[];
-  open?(
-    signal: AbortSignal,
-    ended: (error?: Error) => void,
-  ): Promise<RecordingInput>;
 }
 export interface RecordingState {
   sourceId: string;
@@ -51,7 +62,7 @@ interface Session {
   controller: AbortController;
   listeners: AbortController;
   writer?: WritableStoredFile;
-  input?: RecordingInput;
+  opened?: RecordingStream;
   audio?: ReturnType<typeof createRecordingAudio>;
   recorder?: RecordingEngine;
   webm?: WebmRecordingMetadata;
@@ -169,17 +180,21 @@ export class RecordingService {
     };
     try {
       const { signal } = session.controller;
-      // Looking up sources is synchronous. Subscriptions open only after storage consent.
-      const receivedScreen =
-        !!source.receivedNativeScreen && !source.open;
-      const directTracks =
-        receivedScreen && source.audio.length <= 1;
-      const sources =
-        !receivedScreen && (!source.open || source.local)
-          ? (source.encodedVideoSources?.() ?? [])
-          : [];
+      const { input } = source;
+      const screen =
+        input.kind === "received-screen" &&
+        source.audio.length <= 1
+          ? {
+              hasAudio: source.audio.length === 1,
+              audioSkew: input.audioSkew,
+            }
+          : undefined;
+      const packets =
+        input.kind === "received-screen"
+          ? undefined
+          : input.packets?.();
       if (
-        !directTracks &&
+        !screen &&
         source.audio.length &&
         typeof AudioContext !== "undefined"
       )
@@ -194,16 +209,18 @@ export class RecordingService {
         );
 
       const openStream = () =>
-        directTracks
+        screen
           ? new MediaStream([source.video, ...source.audio])
           : this.openStream(session, (error) => {
               if (error) fail(error);
               else void this.stop();
             });
-      let stream: MediaStream | undefined;
-      if (sources.length) {
-        // Local native packet capture already supplies its own audio.
-        if (!source.open) stream = await openStream();
+      // Native packets carry their own audio. Open the fallback stream only if needed.
+      let stream =
+        input.kind === "native"
+          ? undefined
+          : await openStream();
+      if (packets?.length) {
         try {
           const create =
             this.port.encodedRecorder ??
@@ -211,7 +228,7 @@ export class RecordingService {
               .createEncodedRecording;
           signal.throwIfAborted();
           session.recorder = await create(
-            sources,
+            packets,
             stream ?? new MediaStream(),
             signal,
             container,
@@ -227,7 +244,7 @@ export class RecordingService {
         session.recorder = createBrowserRecorder(
           this.port.recorder ?? MediaRecorder,
           stream,
-          !!source.local && !source.open,
+          input.kind === "local-tracks",
         );
       }
       if (!session.recorder.getPatches) {
@@ -239,12 +256,7 @@ export class RecordingService {
         session.recorder = remux(
           session.recorder,
           container,
-          directTracks
-            ? {
-                hasAudio: source.audio.length === 1,
-                audioSkew: source.recordingAudioSkew,
-              }
-            : undefined,
+          screen,
         );
       }
       const recorder = session.recorder;
@@ -350,7 +362,7 @@ export class RecordingService {
       for (const track of new Set([
         source.video,
         ...source.audio,
-        ...(session.input?.stream.getTracks() ?? []),
+        ...(session.opened?.stream.getTracks() ?? []),
       ]))
         track.addEventListener(
           "ended",
@@ -372,7 +384,7 @@ export class RecordingService {
         500,
       );
       this.update(session);
-      await session.input?.start?.();
+      await session.opened?.start?.();
     } catch (error) {
       if (!session.stopping || session.error)
         session.error ??= error;
@@ -388,15 +400,18 @@ export class RecordingService {
       source,
       controller: { signal },
     } = session;
-    if (source.open)
-      session.input = await source.open(signal, ended);
+    if (source.input.kind === "native")
+      session.opened = await source.input.open(
+        signal,
+        ended,
+      );
     signal.throwIfAborted();
     if (!source.available())
       throw new Error(
         "The selected video source has ended",
       );
     const stream =
-      session.input?.stream ??
+      session.opened?.stream ??
       new MediaStream([source.video, ...source.audio]);
     if (!stream.getAudioTracks().length) return stream;
     if (typeof AudioContext === "undefined") return stream;
@@ -511,7 +526,7 @@ export class RecordingService {
       }
       for (const resource of [
         session.audio,
-        session.input,
+        session.opened,
       ]) {
         try {
           resource?.close();

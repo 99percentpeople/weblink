@@ -12,6 +12,7 @@ import {
   type RecordingState,
 } from "@/libs/application/recording-service";
 import { WebmRecordingMetadata } from "@/libs/application/recording-webm";
+import * as recordingAudio from "@/libs/application/recording-audio";
 class Track extends EventTarget {
   kind = "video";
   readyState = "live";
@@ -151,6 +152,7 @@ function fixture() {
   });
   const source: RecordingSource = {
     id: "source",
+    input: { kind: "remote-tracks" },
     name: "Screen",
     video: video as unknown as MediaStreamTrack,
     audio: [audio as unknown as MediaStreamTrack],
@@ -169,9 +171,11 @@ function fixture() {
 }
 it("prefers the existing local sender encoding and keeps pause/resume in the same VFS file", async () => {
   const f = fixture();
-  f.source.local = true;
   const source = { subscribe: vi.fn() };
-  f.source.encodedVideoSources = () => [source];
+  f.source.input = {
+    kind: "local-tracks",
+    packets: () => [source],
+  };
   const encoded = new Recorder(new Stream([]), {
     mimeType: "video/webm",
   });
@@ -216,9 +220,11 @@ it("prefers the existing local sender encoding and keeps pause/resume in the sam
 
 it("fixes the chosen container before asynchronous preparation and keeps it through pause/resume", async () => {
   const f = fixture();
-  f.source.local = true;
   const sender = { subscribe: vi.fn() };
-  f.source.encodedVideoSources = () => [sender];
+  f.source.input = {
+    kind: "local-tracks",
+    packets: () => [sender],
+  };
   f.port.container.mockReturnValue("mkv");
   let authorize!: () => void;
   f.port.storage.authorizeDefault.mockImplementation(
@@ -293,15 +299,11 @@ it.each(["auto", "mkv", "mp4"] as const)(
 
 it("records a received silent screen without looking up or opening a host subscription", async () => {
   const f = fixture();
-  f.source.receivedNativeScreen = true;
+  f.source.input = { kind: "received-screen" };
   f.source.audio = [];
-  f.source.encodedVideoSources = vi.fn(() => {
-    throw new Error("Unexpected host recording lookup");
-  });
+  f.port.encodedRecorder = vi.fn();
   await f.service.start(f.source);
-  expect(
-    f.source.encodedVideoSources,
-  ).not.toHaveBeenCalled();
+  expect(f.port.encodedRecorder).not.toHaveBeenCalled();
   expect(f.recorder().stream.getTracks()).toEqual([
     f.video,
   ]);
@@ -318,11 +320,8 @@ it("records a received silent screen without looking up or opening a host subscr
 
 it("records the received screen and its original audio without a host or audio mixer", async () => {
   const f = fixture();
-  f.source.receivedNativeScreen = true;
-  f.source.encodedVideoSources = vi.fn(() => {
-    throw new Error("Unexpected host recording lookup");
-  });
-  f.source.recordingAudioSkew = vi.fn(async () => 0.02);
+  const audioSkew = vi.fn(async () => 0.02);
+  f.source.input = { kind: "received-screen", audioSkew };
   vi.stubGlobal(
     "AudioContext",
     class {
@@ -332,9 +331,6 @@ it("records the received screen and its original audio without a host or audio m
     },
   );
   await f.service.start(f.source);
-  expect(
-    f.source.encodedVideoSources,
-  ).not.toHaveBeenCalled();
   expect(f.recorder().stream.getTracks()).toEqual([
     f.video,
     f.audio,
@@ -344,7 +340,7 @@ it("records the received screen and its original audio without a host or audio m
     "auto",
     {
       hasAudio: true,
-      audioSkew: f.source.recordingAudioSkew,
+      audioSkew,
     },
   );
   await f.service.stop();
@@ -353,14 +349,51 @@ it("records the received screen and its original audio without a host or audio m
   expect(f.video.stop).not.toHaveBeenCalled();
 });
 
+it("mixes multiple received screen audio tracks and skips single-track clock alignment", async () => {
+  const f = fixture();
+  const extra = Object.assign(new Track(), {
+    kind: "audio",
+  });
+  const mixed = new MediaStream([
+    f.source.video,
+    f.source.audio[0],
+  ]);
+  f.source.audio = [
+    ...f.source.audio,
+    extra as unknown as MediaStreamTrack,
+  ];
+  f.source.input = { kind: "received-screen" };
+  const mix = vi.fn(async (_stream: MediaStream) => mixed);
+  vi.stubGlobal("AudioContext", class {});
+  vi.spyOn(
+    recordingAudio,
+    "createRecordingAudio",
+  ).mockReturnValue({
+    ready: Promise.resolve(),
+    stream: mix,
+    close: vi.fn(),
+  });
+  await f.service.start(f.source);
+  expect(mix.mock.calls[0][0].getAudioTracks()).toEqual([
+    f.audio,
+    extra,
+  ]);
+  expect(f.recorder().stream).toBe(mixed);
+  expect(f.port.remuxRecorder).toHaveBeenCalledWith(
+    f.recorder(),
+    "auto",
+    undefined,
+  );
+});
+
 it.each(["unavailable", "rejected"])(
   "falls back before creating output when encoded recording is %s",
   async (reason) => {
     const f = fixture();
-    f.source.local = true;
-    f.source.encodedVideoSources = () => [
-      { subscribe: vi.fn() },
-    ];
+    f.source.input = {
+      kind: "local-tracks",
+      packets: () => [{ subscribe: vi.fn() }],
+    };
     f.port.encodedRecorder = vi.fn(async () => {
       if (reason === "rejected")
         throw new Error("Unsupported encoded source");
@@ -383,18 +416,20 @@ it.each([false, true])(
   "tries native or received encoded media before falling back (native=%s)",
   async (native) => {
     const f = fixture();
-    f.source.local = native;
-    if (native)
-      f.source.open = async () => ({
-        stream: new Stream([
-          f.video,
-          f.audio,
-        ]) as unknown as MediaStream,
-        close() {},
-      });
-    f.source.encodedVideoSources = () => [
-      { subscribe: vi.fn() },
-    ];
+    const packets = () => [{ subscribe: vi.fn() }];
+    f.source.input = native
+      ? {
+          kind: "native",
+          packets,
+          open: async () => ({
+            stream: new Stream([
+              f.video,
+              f.audio,
+            ]) as unknown as MediaStream,
+            close() {},
+          }),
+        }
+      : { kind: "remote-tracks", packets };
     f.port.encodedRecorder = vi.fn();
     await f.service.start(f.source);
     expect(f.port.encodedRecorder).toHaveBeenCalledTimes(1);
@@ -433,7 +468,7 @@ it("leaves the format unset so received video can bypass re-encoding", async () 
 
 it("lets local capture select accelerated codecs without changing its tracks", async () => {
   const f = fixture();
-  f.source.local = true;
+  f.source.input = { kind: "local-tracks" };
   await f.service.start(f.source);
   expect(f.recorder().options).toEqual({
     mimeType: "video/x-matroska",
@@ -463,7 +498,7 @@ it.each(["unsupported", "constructor failure"])(
   "falls back to automatic local recording after %s",
   async (failure) => {
     const f = fixture();
-    f.source.local = true;
+    f.source.input = { kind: "local-tracks" };
     let checks = 0;
     Recorder.isTypeSupported.mockImplementation(
       (type) =>
@@ -483,15 +518,17 @@ it.each(["unsupported", "constructor failure"])(
 
 it("keeps pass-through for a local native screen opened over WebRTC", async () => {
   const f = fixture();
-  f.source.local = true;
   const close = vi.fn();
-  f.source.open = vi.fn(async () => ({
-    stream: new Stream([
-      f.video,
-      f.audio,
-    ]) as unknown as MediaStream,
-    close,
-  }));
+  f.source.input = {
+    kind: "native",
+    open: vi.fn(async () => ({
+      stream: new Stream([
+        f.video,
+        f.audio,
+      ]) as unknown as MediaStream,
+      close,
+    })),
+  };
   await f.service.start(f.source);
   expect(f.recorder().options).not.toHaveProperty(
     "mimeType",
@@ -570,10 +607,15 @@ it("sizes recording quality from the opened video stream, not a native preview p
       frameRate: 15,
     }),
   });
-  f.source.open = async () => ({
-    stream: new Stream([actual]) as unknown as MediaStream,
-    close() {},
-  });
+  f.source.input = {
+    kind: "native",
+    open: async () => ({
+      stream: new Stream([
+        actual,
+      ]) as unknown as MediaStream,
+      close() {},
+    }),
+  };
   await f.service.start(f.source);
   expect(f.recorder().options.videoBitsPerSecond).toBe(
     40_000_000,
@@ -780,11 +822,14 @@ it("uses a dedicated native input and releases it without stopping the capture",
     expect(f.recorder().state).toBe("recording");
     expect(f.writer.finish).not.toHaveBeenCalled();
   });
-  f.source.open = vi.fn(async () => ({
-    stream: new Stream([track]) as unknown as MediaStream,
-    start,
-    close,
-  }));
+  f.source.input = {
+    kind: "native",
+    open: vi.fn(async () => ({
+      stream: new Stream([track]) as unknown as MediaStream,
+      start,
+      close,
+    })),
+  };
   await f.service.start(f.source);
   expect(start).toHaveBeenCalledOnce();
   expect(f.recorder().stream.getVideoTracks()).toEqual([
@@ -800,12 +845,17 @@ it("saves a paused native reuse recording on sender end after draining slow writ
   let release!: () => void;
   const close = vi.fn();
   const track = new Track();
-  f.source.open = async (_, onEnded) => {
-    ended = onEnded;
-    return {
-      stream: new Stream([track]) as unknown as MediaStream,
-      close,
-    };
+  f.source.input = {
+    kind: "native",
+    open: async (_, onEnded) => {
+      ended = onEnded;
+      return {
+        stream: new Stream([
+          track,
+        ]) as unknown as MediaStream,
+        close,
+      };
+    },
   };
   f.writer.write.mockImplementationOnce(async (bytes) => {
     await new Promise<void>((resolve) => {
@@ -860,14 +910,17 @@ it("cancels preparation and closes a late native input without starting the reco
     stream: MediaStream;
     close(): void;
   }) => void;
-  f.source.open = vi.fn(
-    () =>
-      new Promise<{ stream: MediaStream; close(): void }>(
-        (done) => {
-          resolve = done;
-        },
-      ),
-  );
+  f.source.input = {
+    kind: "native",
+    open: vi.fn(
+      () =>
+        new Promise<{ stream: MediaStream; close(): void }>(
+          (done) => {
+            resolve = done;
+          },
+        ),
+    ),
+  };
   const start = f.service.start(f.source);
   await vi.waitFor(() =>
     expect(resolve).toBeTypeOf("function"),
@@ -920,12 +973,17 @@ it("keeps the output extension with a long source label", async () => {
 it("settles stop and reports cleanup failures without stopping borrowed tracks", async () => {
   const f = fixture();
   const error = new Error("native cleanup failed");
-  f.source.open = async () => ({
-    stream: new Stream([f.video]) as unknown as MediaStream,
-    close() {
-      throw error;
-    },
-  });
+  f.source.input = {
+    kind: "native",
+    open: async () => ({
+      stream: new Stream([
+        f.video,
+      ]) as unknown as MediaStream,
+      close() {
+        throw error;
+      },
+    }),
+  };
   await f.service.start(f.source);
   await f.service.stop();
   expect(f.port.failed).toHaveBeenCalledWith(error);
@@ -972,11 +1030,12 @@ it("cancels audio preparation even if browser autoplay leaves resume pending", a
 
 it("records native packets without opening a local receiver and publishes the same VFS writer", async () => {
   const f = fixture();
-  f.source.local = true;
-  f.source.open = vi.fn();
-  f.source.encodedVideoSources = () => [
-    { subscribe: vi.fn() },
-  ];
+  const open = vi.fn();
+  f.source.input = {
+    kind: "native",
+    open,
+    packets: () => [{ subscribe: vi.fn() }],
+  };
   const encoded = new Recorder(new Stream(), {
     mimeType: "video/mp4",
   });
@@ -989,7 +1048,7 @@ it("records native packets without opening a local receiver and publishes the sa
   );
   Recorder.instances = [];
   await f.service.start(f.source);
-  expect(f.source.open).not.toHaveBeenCalled();
+  expect(open).not.toHaveBeenCalled();
   expect(Recorder.instances).toHaveLength(0);
   f.service.pause();
   f.service.resume();

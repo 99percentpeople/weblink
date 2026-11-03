@@ -9,6 +9,7 @@ import { checkRtpRecordingAudio } from "./recording-rtp-audio";
 import { checkRecordingAudioSync } from "./recording-audio-sync";
 import {
   RecordingService,
+  type RecordingSource,
   type RecordingState,
 } from "@/libs/application/recording-service";
 import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
@@ -517,63 +518,71 @@ async function run() {
           const preparing = performance.now();
           const firstFrames: unknown[] = [];
           const firstAudio: unknown[] = [];
-          const selected = {
+          const selected: RecordingSource = {
             id: "source",
             name: `${kind}-${remote ? "remote" : camera ? "camera" : "local"}`,
-            local: !remote,
             video: stream.getVideoTracks()[0],
             audio: stream.getAudioTracks(),
             available: () => true,
-            encodedVideoSources:
-              reuse || (remote && encodedReceive)
-                ? () =>
-                    recordingMediaSources(
-                      {
-                        subscribe(consumer, signal) {
-                          return taps
-                            .get(
-                              stream.getVideoTracks()[0],
-                            )!
-                            .subscribe({
-                              ...consumer,
-                              frame(packet) {
-                                if (firstFrames.length < 8)
-                                  firstFrames.push({
-                                    ...packet,
-                                    data: packet.data
-                                      .byteLength,
-                                  });
-                                return consumer.frame(
-                                  packet,
-                                );
-                              },
-                            });
-                        },
-                      },
-                      stream
-                        .getAudioTracks()
-                        .map((track) => ({
-                          subscribe(consumer) {
+            input: {
+              kind: remote
+                ? "remote-tracks"
+                : "local-tracks",
+              packets:
+                reuse || (remote && encodedReceive)
+                  ? () =>
+                      recordingMediaSources(
+                        {
+                          subscribe(consumer, signal) {
                             return taps
-                              .get(track)!
+                              .get(
+                                stream.getVideoTracks()[0],
+                              )!
                               .subscribe({
                                 ...consumer,
-                                encodedAudio(packet) {
-                                  if (firstAudio.length < 3)
-                                    firstAudio.push({
+                                frame(packet) {
+                                  if (
+                                    firstFrames.length < 8
+                                  )
+                                    firstFrames.push({
                                       ...packet,
                                       data: packet.data
                                         .byteLength,
                                     });
-                                  return consumer.encodedAudio?.(
+                                  return consumer.frame(
                                     packet,
                                   );
                                 },
                               });
                           },
-                        })),
-                    )
-                : undefined,
+                        },
+                        stream
+                          .getAudioTracks()
+                          .map((track) => ({
+                            subscribe(consumer) {
+                              return taps
+                                .get(track)!
+                                .subscribe({
+                                  ...consumer,
+                                  encodedAudio(packet) {
+                                    if (
+                                      firstAudio.length < 3
+                                    )
+                                      firstAudio.push({
+                                        ...packet,
+                                        data: packet.data
+                                          .byteLength,
+                                      });
+                                    return consumer.encodedAudio?.(
+                                      packet,
+                                    );
+                                  },
+                                });
+                            },
+                          })),
+                      )
+                  : undefined,
+            },
           };
           await service.start(selected);
           assert(
