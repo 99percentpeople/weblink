@@ -1,7 +1,11 @@
 import { browserNotifications } from "./browser-notifications";
-import type { PlatformRuntime } from "@weblink/platform";
+import {
+  browserRoomTransport,
+  type PlatformRuntime,
+} from "@weblink/platform";
 
 export const platform: PlatformRuntime = {
+  getRoomTransport: () => browserRoomTransport,
   notifications: browserNotifications,
   kind: "browser",
   supportsServiceWorker: true,

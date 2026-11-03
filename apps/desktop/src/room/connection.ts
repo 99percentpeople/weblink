@@ -2,7 +2,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   NativeControlContext,
   NativeSendCodecs,
-  NativeRoomTransport,
+  RoomTransport,
+  RoomConfiguration,
+  RoomConnection,
+  RoomDescription,
+  RoomChannelOptions,
+  RoomScreenTransport,
+  RoomTrackEvent,
+  RoomTransceiver,
+  RoomSender,
 } from "@weblink/platform";
 import type { NativePresentation } from "../presentation";
 import { RoomCaptures } from "./capture";
@@ -43,21 +51,11 @@ type NativeEvent =
       event: { type: string; error?: string };
     }
   | { type: "untrack"; key: number };
-type NativeTransceiver = {
+interface NativeTransceiver extends RoomTransceiver {
   mid: string | null;
-  sender: {
-    track: MediaStreamTrack | null;
-    getStats(): Promise<RTCStatsReport>;
-    getParameters(): RTCRtpSendParameters;
-    setParameters(p: RTCRtpSendParameters): Promise<void>;
-  };
-  receiver: {
-    track: MediaStreamTrack | null;
-    getStats(): Promise<RTCStatsReport>;
-  };
-  setCodecPreferences(codecs: RTCRtpCodec[]): void;
-};
-function configuration(config: RTCConfiguration) {
+  sender: RoomSender & { track: MediaStreamTrack | null };
+}
+function configuration(config: RoomConfiguration) {
   return {
     servers: (config.iceServers ?? []).map((s) => ({
       ...s,
@@ -72,7 +70,18 @@ const optional = (n: number) => (n < 0 ? undefined : n);
 type Operation = { type: string; [key: string]: unknown };
 
 /** Signaling, SCTP and media negotiate on the same native handle for the peer's lifetime. */
-class NativeConnection extends EventTarget {
+class NativeConnection
+  extends EventTarget
+  implements RoomConnection, RoomScreenTransport
+{
+  // EventTarget delivers the translated room events and the adapter's private "retired" event.
+  declare addEventListener: RoomConnection["addEventListener"] &
+    EventTarget["addEventListener"];
+  declare removeEventListener: RoomConnection["removeEventListener"] &
+    EventTarget["removeEventListener"];
+  get screenTransport(): RoomScreenTransport {
+    return this;
+  }
   readonly id = crypto.randomUUID();
   connectionState: RTCPeerConnectionState = "new";
   iceConnectionState: RTCIceConnectionState = "new";
@@ -113,7 +122,7 @@ class NativeConnection extends EventTarget {
   private ack = 0;
   private ackTimer?: ReturnType<typeof setTimeout>;
   constructor(
-    private config: RTCConfiguration,
+    private config: RoomConfiguration,
     private readonly captures: RoomCaptures,
     private readonly presentation: NativePresentation,
     remoteId: string,
@@ -287,7 +296,7 @@ class NativeConnection extends EventTarget {
   }
   createDataChannel(
     label: string,
-    options: RTCDataChannelInit = {},
+    options: RoomChannelOptions = {},
   ) {
     const key = this.nextChannel++,
       channel = this.channel(key, label, options);
@@ -327,15 +336,17 @@ class NativeConnection extends EventTarget {
       )
         return;
       entry.published = true;
-      this.dispatchEvent(
-        Object.assign(new Event("track"), {
+      const received: RoomTrackEvent = Object.assign(
+        new Event("track"),
+        {
           track: entry.output.track,
           streams: [entry.output.stream],
           roomStreamIds: event.streams,
           transceiver: entry.t,
           receiver: entry.t.receiver,
-        }),
+        },
       );
+      this.dispatchEvent(received);
     };
     const output = roomOutput(
       this.id,
@@ -418,7 +429,10 @@ class NativeConnection extends EventTarget {
     };
     return t;
   }
-  addTrack(track: MediaStreamTrack) {
+  addTrack(
+    track: MediaStreamTrack,
+    ...streams: MediaStream[]
+  ) {
     if (this.outgoing.has(track))
       throw new Error("Duplicate room track");
     const entry = {
@@ -446,6 +460,9 @@ class NativeConnection extends EventTarget {
           type: "add",
           track: track.id,
           source: entry.lease.id,
+          streams: [
+            ...new Set(streams.map((stream) => stream.id)),
+          ],
         });
     }).catch(failed);
     return entry.t.sender;
@@ -483,7 +500,7 @@ class NativeConnection extends EventTarget {
   getConfiguration() {
     return this.config;
   }
-  setConfiguration(config: RTCConfiguration) {
+  setConfiguration(config: RoomConfiguration) {
     this.config = config;
     this.change({
       type: "configure",
@@ -513,9 +530,7 @@ class NativeConnection extends EventTarget {
       this.dispatchEvent(new Event("signalingstatechange"));
     });
   }
-  async setRemoteDescription(
-    description: RTCSessionDescriptionInit,
-  ) {
+  async setRemoteDescription(description: RoomDescription) {
     await this.ordered(async () => {
       const mids = await this.call<Record<string, string>>({
         type: "remote",
@@ -645,10 +660,11 @@ class NativeConnection extends EventTarget {
 
 export function createRoomTransport(
   presentation: NativePresentation,
-): NativeRoomTransport {
+): RoomTransport {
   const captures = new RoomCaptures();
   const rooms = new Map<string, NativeConnection>();
   return {
+    kind: "native",
     create: (config, remoteId) => {
       const previous =
         rooms.get(remoteId)?.close() ?? Promise.resolve();

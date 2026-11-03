@@ -194,6 +194,7 @@ pub enum Operation {
     Add {
         track: String,
         source: String,
+        streams: Option<Vec<String>>,
     },
     Remove {
         track: String,
@@ -276,8 +277,14 @@ pub async fn room_operation(
             };
             sources.insert(key, Arc::new(capture));
         }
-        Operation::Add { track, source } => {
-            peer.add_capture(&track, state.source(owner, &source)?.as_ref())?
+        Operation::Add {
+            track,
+            source,
+            streams,
+        } => {
+            // Older adapters sent only a track ID and used it as the stream ID.
+            let streams = streams.unwrap_or_else(|| vec![track.clone()]);
+            peer.add_capture(&track, state.source(owner, &source)?.as_ref(), streams)?
         }
         Operation::Remove { track } => peer.remove_capture(&track)?,
         Operation::Close | Operation::CloseSource { .. } => unreachable!(),

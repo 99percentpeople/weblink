@@ -940,8 +940,8 @@ async function singleRoom(params: URLSearchParams) {
   const browserReceiver = params.has("web-viewer");
   const legacy = params.has("legacy");
   const mixed = browserSender || browserReceiver;
-  const transport = platform.roomTransport;
-  if (!transport)
+  const transport = await platform.getRoomTransport?.();
+  if (transport?.kind !== "native")
     throw new Error("Windows room transport required");
   let nativeConnections = 0,
     browserConnections = 0;
@@ -953,6 +953,7 @@ async function singleRoom(params: URLSearchParams) {
     },
   });
   const counted: typeof transport = {
+    kind: transport.kind,
     create(config, id) {
       nativeConnections++;
       return transport.create(config, id);
@@ -1289,7 +1290,9 @@ async function main() {
       );
     if (
       params.has("single-room") ||
-      (params.has("camera") && platform.roomTransport)
+      (params.has("camera") &&
+        (await platform.getRoomTransport?.())?.kind ===
+          "native")
     )
       return { ok: true, room: await singleRoom(params) };
     camera = await meetingCamera();

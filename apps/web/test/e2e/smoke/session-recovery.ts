@@ -193,13 +193,13 @@ async function main() {
         (event) => {
           const pc = event.detail;
           const observe =
-            <T>(
+            <Args extends unknown[]>(
               method: string,
-              apply: (description: T) => Promise<void>,
+              apply: (...args: Args) => Promise<void>,
             ) =>
-            async (description: T) => {
+            async (...args: Args) => {
               try {
-                await apply(description);
+                await apply(...args);
               } catch (error) {
                 const failure = `${session.clientId} ${method}: ${String(error)}`;
                 sdpFailures.push(failure);

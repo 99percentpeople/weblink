@@ -19,6 +19,40 @@ export interface RoomTransceiver {
   setCodecPreferences(codecs: RTCRtpCodec[]): void;
 }
 
+export interface RoomTrackEvent extends Event {
+  readonly track: MediaStreamTrack;
+  readonly streams: readonly MediaStream[];
+  readonly receiver: RoomReceiver;
+  readonly transceiver: RoomTransceiver;
+  /** Original MSIDs when the displayed tracks are backed by a native surface. */
+  readonly roomStreamIds?: readonly string[];
+}
+type RoomEvents = Pick<
+  RTCPeerConnectionEventMap,
+  | "icecandidate"
+  | "datachannel"
+  | "connectionstatechange"
+  | "iceconnectionstatechange"
+  | "signalingstatechange"
+  | "negotiationneeded"
+> & { track: RoomTrackEvent; error: Event };
+
+export type RoomConfiguration = Pick<
+  RTCConfiguration,
+  "iceServers" | "iceTransportPolicy"
+>;
+export type RoomDescription = {
+  type: "offer" | "answer";
+  sdp: string;
+};
+export type RoomChannelOptions = Pick<
+  RTCDataChannelInit,
+  | "ordered"
+  | "protocol"
+  | "maxRetransmits"
+  | "maxPacketLifeTime"
+> & { negotiated?: false; id?: never };
+
 /** The WebRTC surface used by a room session on either platform. */
 export interface RoomConnection extends Pick<
   RTCPeerConnection,
@@ -28,18 +62,35 @@ export interface RoomConnection extends Pick<
   | "localDescription"
   | "remoteDescription"
   | "currentRemoteDescription"
-  | "getConfiguration"
-  | "setConfiguration"
-  | "setLocalDescription"
-  | "setRemoteDescription"
-  | "addIceCandidate"
-  | "getStats"
-  | "addEventListener"
-  | "removeEventListener"
   | "dispatchEvent"
-  | "createDataChannel"
   | "close"
 > {
+  addEventListener<K extends keyof RoomEvents>(
+    type: K,
+    listener: (event: RoomEvents[K]) => void,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
+  removeEventListener<K extends keyof RoomEvents>(
+    type: K,
+    listener: (event: RoomEvents[K]) => void,
+    options?: boolean | EventListenerOptions,
+  ): void;
+  readonly screenTransport?: RoomScreenTransport;
+  getConfiguration(): RoomConfiguration;
+  setConfiguration(config: RoomConfiguration): void;
+  /** Generate and apply the offer or answer for the current signaling state. */
+  setLocalDescription(): Promise<void>;
+  setRemoteDescription(
+    description: RoomDescription,
+  ): Promise<void>;
+  addIceCandidate(
+    candidate: RTCIceCandidateInit,
+  ): Promise<void>;
+  getStats(): Promise<RTCStatsReport>;
+  createDataChannel(
+    label: string,
+    options?: RoomChannelOptions,
+  ): RTCDataChannel;
   readonly sctp: Pick<
     RTCSctpTransport,
     "maxMessageSize"
@@ -68,9 +119,25 @@ export interface RoomScreenTransport {
   detachScreen(transport: string): Promise<void>;
   screenReady(transport: string): Promise<void>;
 }
-export interface NativeRoomTransport {
-  create(
-    config: RTCConfiguration,
-    remoteId: string,
-  ): RoomConnection & RoomScreenTransport;
-}
+type CreateRoomConnection<T extends RoomConnection> = (
+  config: RoomConfiguration,
+  remoteId: string,
+) => T;
+export type RoomTransport =
+  | {
+      readonly kind: "browser";
+      create: CreateRoomConnection<RoomConnection>;
+    }
+  | {
+      readonly kind: "native";
+      create: CreateRoomConnection<
+        RoomConnection & {
+          readonly screenTransport: RoomScreenTransport;
+        }
+      >;
+    };
+
+export const browserRoomTransport: RoomTransport = {
+  kind: "browser",
+  create: (config) => new RTCPeerConnection(config),
+};

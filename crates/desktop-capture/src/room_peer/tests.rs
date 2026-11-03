@@ -92,8 +92,16 @@ fn one_connection_carries_multiple_video_tracks_and_binary_data_across_renegotia
         let b = Endpoint::new();
         let camera = CaptureSource::video();
         let screen = CaptureSource::video();
-        a.peer.add_capture("camera", &camera).unwrap();
-        a.peer.add_capture("display", &screen).unwrap();
+        a.peer
+            .add_capture("camera", &camera, vec!["meeting".into()])
+            .unwrap();
+        a.peer
+            .add_capture(
+                "display",
+                &screen,
+                vec!["meeting".into(), "display-group".into()],
+            )
+            .unwrap();
         a.peer
             .create_channel(
                 1,
@@ -120,6 +128,25 @@ fn one_connection_carries_multiple_video_tracks_and_binary_data_across_renegotia
         let camera_key = b.received_key(&mids["camera"]);
         let screen_key = b.received_key(&mids["display"]);
         assert_ne!(camera_key, screen_key);
+        {
+            let events = b.events.lock().unwrap();
+            let streams = |key: u32| {
+                events
+                    .iter()
+                    .find(|e| e["type"] == "track" && e["key"] == key)
+                    .unwrap()["streams"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|id| id.as_str().unwrap())
+                    .collect::<HashSet<_>>()
+            };
+            assert_eq!(streams(camera_key), HashSet::from(["meeting"]));
+            assert_eq!(
+                streams(screen_key),
+                HashSet::from(["meeting", "display-group"])
+            );
+        }
         let frame = vec![128; 160 * 96 * 3 / 2];
         tokio::time::timeout(Duration::from_secs(15), async {
             while [camera_key, screen_key]
@@ -174,7 +201,9 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
         let a = Endpoint::new();
         let b = Endpoint::new();
         let camera = CaptureSource::video();
-        a.peer.add_capture("camera", &camera).unwrap();
+        a.peer
+            .add_capture("camera", &camera, vec!["meeting".into()])
+            .unwrap();
         a.peer.set_codecs("camera", &["video/vp8".into()]).unwrap();
         let screens = [
             ("text", EncodingPreset::Quality, 30, "[quality]"),
@@ -340,7 +369,9 @@ fn check_screen_and_camera(codec: &str) {
         let a = Endpoint::new();
         let b = Endpoint::new();
         let camera = CaptureSource::video();
-        a.peer.add_capture("camera", &camera).unwrap();
+        a.peer
+            .add_capture("camera", &camera, vec!["meeting".into()])
+            .unwrap();
         a.peer
             .create_channel(
                 1,

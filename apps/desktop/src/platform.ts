@@ -22,6 +22,7 @@ import { watchStatus } from "./status-watch";
 import { createVisibilityWatcher } from "./visibility";
 import {
   isExternalLink,
+  browserRoomTransport,
   type PlatformRuntime,
   type RuntimeCapabilities,
   type CaptureSource,
@@ -34,9 +35,15 @@ import {
 const watchVisibility = createVisibilityWatcher();
 const nativePresentation =
   createNativePresentation(watchVisibility);
+const nativeRoomTransport = createRoomTransport(
+  nativePresentation,
+);
 
 export const platform: PlatformRuntime = {
-  roomTransport: createRoomTransport(nativePresentation),
+  getRoomTransport: async () =>
+    (await platform.getCapabilities()).os === "windows"
+      ? nativeRoomTransport
+      : browserRoomTransport,
   mediaReceive: createNativeMediaReceive(
     watchVisibility,
     nativePresentation,

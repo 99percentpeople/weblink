@@ -694,7 +694,10 @@ may select concrete infrastructure implementations.
     platform receiver and owns its capability/failure policy. Windows reception
     lives in `crates/desktop-capture/src/receive.rs`; `apps/desktop/src/receive.ts`
     presents bounded native video/audio through the existing MediaStream UI.
-    Windows uses `crates/desktop-capture/src/room_peer.rs` for each remote
+    Each platform supplies a `RoomTransport` factory. Room setup and reconnects
+    use its `RoomConnection` interface for negotiation, tracks and DataChannels.
+    The browser returns its own RTCPeerConnection. Windows uses
+    `crates/desktop-capture/src/room_peer.rs` for each remote
     member's ICE, DTLS, RTP and SCTP. The adapter in `apps/desktop/src/room`
     bridges signaling, DataChannels and device capture to the room session.
     Ordinary meeting tracks use their negotiated MIDs. `domain/room-screen.ts`

@@ -382,12 +382,10 @@ export class PeerNegotiationController {
       }
       // Apply the accepted offer and implicit polite rollback as one operation.
       [err] = await catchError(
-        pc.setRemoteDescription(
-          new RTCSessionDescription({
-            type: "offer",
-            sdp: data.sdp,
-          }),
-        ),
+        pc.setRemoteDescription({
+          type: "offer",
+          sdp: data.sdp,
+        }),
       );
       if (err) {
         this.logFailure(pc, "apply remote offer", err);
@@ -465,12 +463,10 @@ export class PeerNegotiationController {
       }
 
       [err] = await catchError(
-        pc.setRemoteDescription(
-          new RTCSessionDescription({
-            type: "answer",
-            sdp: data.sdp,
-          }),
-        ),
+        pc.setRemoteDescription({
+          type: "answer",
+          sdp: data.sdp,
+        }),
       );
       if (err) {
         this.logFailure(pc, "apply remote answer", err);

@@ -1,6 +1,7 @@
 import type {
   RoomConnection,
   RoomScreenTransport,
+  RoomTrackEvent,
 } from "@weblink/platform";
 import { ROOM_SCREEN_PREFIX } from "./native-screen/signaling";
 import type { NativeScreenPublication } from "./native-screen/sender";
@@ -64,13 +65,9 @@ export class RoomScreens {
     }
     return source;
   }
-  track(event: RTCTrackEvent): boolean {
+  track(event: RoomTrackEvent): boolean {
     const names =
-      (
-        event as RTCTrackEvent & {
-          roomStreamIds?: string[];
-        }
-      ).roomStreamIds ?? event.streams.map((s) => s.id);
+      event.roomStreamIds ?? event.streams.map((s) => s.id);
     const name = names.find((s) =>
       s?.startsWith(STREAM_PREFIX),
     );

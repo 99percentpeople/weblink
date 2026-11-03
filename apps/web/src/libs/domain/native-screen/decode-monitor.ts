@@ -1,3 +1,5 @@
+import type { RoomConnection } from "@weblink/platform";
+
 interface DecodeSample {
   frames: number;
   bytes: number;
@@ -15,7 +17,7 @@ interface DecodeMonitorOptions {
 /** Only consecutive, foreground observations can establish a video failure. */
 export function monitorScreenDecode(
   pc: Pick<
-    RTCPeerConnection,
+    RoomConnection,
     | "getStats"
     | "connectionState"
     | "addEventListener"

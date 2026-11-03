@@ -253,8 +253,20 @@ impl RoomPeer {
             .find(|(id, _)| *id == key)
             .map(|(_, o)| o.clone())
     }
-    pub fn add_capture(&self, id: &str, capture: &CaptureSource) -> Result<()> {
+    pub fn add_capture(
+        &self,
+        id: &str,
+        capture: &CaptureSource,
+        streams: Vec<String>,
+    ) -> Result<()> {
         use libwebrtc::rtp_transceiver::RtpTransceiverInit;
+        if streams.len() > 32
+            || streams
+                .iter()
+                .any(|s| s.is_empty() || s.len() > 128 || s.bytes().any(|c| !c.is_ascii_graphic()))
+        {
+            return Err("Invalid room stream IDs".into());
+        }
         let mut outgoing = self.outgoing.lock().unwrap();
         if self.closed.load(Ordering::Acquire)
             || id.is_empty()
@@ -270,7 +282,7 @@ impl RoomPeer {
                 capture.track(&self.factory, id),
                 RtpTransceiverInit {
                     direction: RtpTransceiverDirection::SendOnly,
-                    stream_ids: vec![id.to_owned()],
+                    stream_ids: streams,
                     send_encodings: vec![Default::default()],
                 },
             )

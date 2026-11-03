@@ -8,7 +8,11 @@ import {
 } from "../domain/video-quality";
 import { observeDisplayFrameRate } from "../domain/display-frame-rate";
 import { nativeScreenOptions } from "./meeting-video-settings";
-import type { NativeAutomationPeer } from "@weblink/platform";
+import {
+  browserRoomTransport,
+  type RoomTransport,
+  type NativeAutomationPeer,
+} from "@weblink/platform";
 import { PeerTrustService } from "./peer-trust";
 import { bootstrapMessage } from "../domain/device-identity/access";
 import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
@@ -75,9 +79,7 @@ export interface SessionServiceOptions {
   mediaReceive?:
     | import("@weblink/platform").NativeMediaReceive
     | null;
-  roomTransport?:
-    | import("@weblink/platform").NativeRoomTransport
-    | null;
+  roomTransport?: RoomTransport | null;
 }
 
 export interface ReceivedVideoQuality {
@@ -88,7 +90,7 @@ export interface ReceivedVideoQuality {
 
 export class SessionService {
   private readonly mediaReceive: MediaReceiveService;
-  private readonly transport: typeof platform.roomTransport;
+  private readonly transportOverride?: RoomTransport;
   private readonly cameras = new Map<
     PeerSession,
     MeetingCameraPeer
@@ -235,13 +237,13 @@ export class SessionService {
         "function"
         ? {
             meetingMedia: {
-              camera: session.nativeTransport
+              camera: session.usesNativeRoom
                 ? null
                 : this.mediaReceive.cameraCapabilities(),
             },
           }
         : {}),
-      ...(!session.nativeTransport ||
+      ...(!session.usesNativeRoom ||
       this.capabilities.get(session)?.roomTransport
         ? {
             screen: {
@@ -387,7 +389,7 @@ export class SessionService {
     this.nativeScreens
       .get(session)
       ?.setPublications(
-        session.nativeTransport
+        session.usesNativeRoom
           ? this.capabilities.get(session)?.roomTransport
             ? publications.map((p) =>
                 session.roomScreens.publication(
@@ -417,10 +419,10 @@ export class SessionService {
   >;
 
   constructor(options: SessionServiceOptions = {}) {
-    this.transport =
-      options.roomTransport === undefined
-        ? platform.roomTransport
-        : (options.roomTransport ?? undefined);
+    this.transportOverride =
+      options.roomTransport === null
+        ? browserRoomTransport
+        : options.roomTransport;
     this.mediaReceive = new MediaReceiveService(
       options.mediaReceive === undefined
         ? platform.mediaReceive
@@ -553,14 +555,13 @@ export class SessionService {
 
     this.pendingClients.set(client.clientId, sender);
     let iceServers: RTCIceServer[];
-    let nativeTransport: typeof platform.roomTransport;
+    let roomTransport: RoomTransport;
     try {
       iceServers = await this.loadIceServers();
-      if (
-        this.transport &&
-        (await platform.getCapabilities()).os === "windows"
-      )
-        nativeTransport = this.transport;
+      roomTransport =
+        this.transportOverride ??
+        (await platform.getRoomTransport?.()) ??
+        browserRoomTransport;
     } catch (error) {
       if (
         this.pendingClients.get(client.clientId) === sender
@@ -588,7 +589,7 @@ export class SessionService {
     }
 
     const session: PeerSession = new PeerSession(sender, {
-      nativeTransport,
+      roomTransport,
       acceptsContent: () =>
         this.canReceive(client.clientId),
       allowsApplication: () =>
@@ -674,7 +675,7 @@ export class SessionService {
       createReceiver:
         this.mediaReceive.createCameraReceiver,
       accepts: () =>
-        !session.nativeTransport &&
+        !session.usesNativeRoom &&
         this.canReceive(client.clientId) &&
         !!this.mediaReceive.cameraCapabilities(),
       loadIceServers: this.loadIceServers,
@@ -703,7 +704,7 @@ export class SessionService {
           this.capabilities.get(session)?.roomTransport
         )
           return session.roomScreens.receiver(sdp, ...args);
-        if (session.nativeTransport)
+        if (session.usesNativeRoom)
           throw new ScreenDecodeError(
             "This screen requires a peer with single-connection support",
           );
@@ -825,7 +826,7 @@ export class SessionService {
     if (this.displayFrameRate)
       quality.setRefreshRate(this.displayFrameRate);
     const bindMedia = (channel: RTCDataChannel) => {
-      if (!session.nativeTransport) camera.bind(channel);
+      if (!session.usesNativeRoom) camera.bind(channel);
       native.bind(channel);
       quality.bind(channel);
     };
@@ -834,7 +835,7 @@ export class SessionService {
       session,
       (services) => {
         camera.setCapabilities(
-          !session.nativeTransport &&
+          !session.usesNativeRoom &&
             this.canReceive(client.clientId)
             ? services?.meetingMedia
             : undefined,
@@ -875,7 +876,7 @@ export class SessionService {
               trust?.state,
             );
           camera.setCapabilities(
-            !session.nativeTransport &&
+            !session.usesNativeRoom &&
               this.canReceive(client.clientId)
               ? this.capabilities.get(session)?.meetingMedia
               : undefined,

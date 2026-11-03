@@ -1,8 +1,9 @@
-import type { RoomConnection } from "@weblink/platform";
 import { RoomScreens } from "./room-screen";
-import type {
-  NativeRoomTransport,
-  RoomScreenTransport,
+import {
+  browserRoomTransport,
+  type RoomConnection,
+  type RoomTransport,
+  type RoomScreenTransport,
 } from "@weblink/platform";
 import {
   applicationChannel,
@@ -58,7 +59,7 @@ const DEFAULT_PEER_SESSION_RUNTIME_OPTIONS: PeerSessionRuntimeOptions =
   };
 
 export interface PeerSessionOptions {
-  nativeTransport?: NativeRoomTransport;
+  roomTransport?: RoomTransport;
   acceptsContent?: () => boolean;
   allowsApplication?: () => boolean;
   /** Silently discard incoming messages before handlers or protocol errors can respond. */
@@ -94,13 +95,12 @@ export type PeerSessionEventMap = {
 
 export class PeerSession {
   readonly roomScreens: RoomScreens;
-  readonly nativeTransport?: NativeRoomTransport;
+  private readonly transport: RoomTransport;
+  get usesNativeRoom(): boolean {
+    return this.transport.kind === "native";
+  }
   get roomScreenTransport(): RoomScreenTransport | null {
-    return this.nativeTransport
-      ? (this.peerConnection as
-          | (RoomConnection & RoomScreenTransport)
-          | null)
-      : null;
+    return this.peerConnection?.screenTransport ?? null;
   }
   private eventEmitter: MultiEventEmitter<PeerSessionEventMap> =
     new MultiEventEmitter();
@@ -128,7 +128,7 @@ export class PeerSession {
   constructor(
     sender: SignalingService,
     {
-      nativeTransport,
+      roomTransport = browserRoomTransport,
       polite = true,
       iceServers,
       loadIceServers,
@@ -143,12 +143,12 @@ export class PeerSession {
       allowsApplication = () => true,
     }: PeerSessionOptions = {},
   ) {
-    this.nativeTransport = nativeTransport;
+    this.transport = roomTransport;
     this.roomScreens = new RoomScreens(
       () => this.peerConnection,
       () =>
         this.allowsApplication() && this.acceptsContent(),
-      !!nativeTransport,
+      this.usesNativeRoom,
     );
     this.sender = sender;
     this.authorizeMessage = authorizeMessage;
@@ -209,7 +209,7 @@ export class PeerSession {
         this.dispatchEvent("messagechannelchange", state),
     });
     this.media = new PeerSessionMediaController({
-      nativeRoom: !!nativeTransport,
+      nativeRoom: this.usesNativeRoom,
       roomScreen: (event) => this.roomScreens.track(event),
       targetClientId: () => this.targetClientId,
       acceptsContent: () => this.acceptsContent(),
@@ -367,18 +367,17 @@ export class PeerSession {
 
     const controller = new AbortController();
     this.controller = controller;
-    const configuration: RTCConfiguration = {
-      iceServers: this.iceServers,
-      iceTransportPolicy: this.relayOnly ? "relay" : "all",
-    };
-    const pc = this.nativeTransport
-      ? this.nativeTransport.create(
-          configuration,
-          this.targetClientId,
-        )
-      : new RTCPeerConnection(configuration);
+    const pc = this.transport.create(
+      {
+        iceServers: this.iceServers,
+        iceTransportPolicy: this.relayOnly
+          ? "relay"
+          : "all",
+      },
+      this.targetClientId,
+    );
     this.peerConnection = pc;
-    if (this.nativeTransport)
+    if (this.usesNativeRoom)
       pc.addEventListener(
         "error",
         (event) => {

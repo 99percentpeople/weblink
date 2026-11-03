@@ -1,5 +1,8 @@
 import type {
   RoomConnection,
+  RoomReceiver,
+  RoomTrackEvent,
+  RoomTransceiver,
   RoomSender,
 } from "@weblink/platform";
 import type {
@@ -38,7 +41,7 @@ export type RemoteMediaTrackBinding = {
 export interface PeerSessionMediaOptions {
   /** Dedicated encoded recording only; never toggle on a viewing connection. */
   readonly nativeRoom?: boolean;
-  roomScreen?(event: RTCTrackEvent): boolean;
+  roomScreen?(event: RoomTrackEvent): boolean;
   readonly receivePurpose?: MediaReceivePurpose;
   acceptsContent?(): boolean;
   targetClientId(): string;
@@ -120,7 +123,7 @@ export class PeerSessionMediaController {
   private readonly encodedWorkers =
     new RtpEncodedMediaWorkers();
   private readonly encodedReceivers = new Map<
-    RTCRtpReceiver,
+    RoomReceiver,
     RtpEncodedMediaTrack
   >();
 
@@ -150,7 +153,7 @@ export class PeerSessionMediaController {
     {
       controller: AbortController;
       streams: Set<MediaStream>;
-      transceiver: RTCRtpTransceiver;
+      transceiver: RoomTransceiver;
     }
   >();
   private readonly remoteStreams = new Map<
@@ -380,7 +383,7 @@ export class PeerSessionMediaController {
   }
 
   private handleRemoteTrack(
-    event: RTCTrackEvent,
+    event: RoomTrackEvent,
     signal: AbortSignal,
   ): void {
     if (
@@ -399,7 +402,7 @@ export class PeerSessionMediaController {
       !this.encodedReceivers.has(receiver)
     ) {
       const tap = RtpEncodedMediaTrack.install(
-        receiver,
+        receiver as RTCRtpReceiver,
         this.options.getPeerConnection()!,
         this.encodedWorkers,
         "receive",
@@ -614,7 +617,7 @@ export class PeerSessionMediaController {
     ) {
       this.syncLocalTracks();
       this.notifyLocalStreamState(this.localStream);
-    } else if (!this.options.nativeRoom) {
+    } else {
       pc.addTransceiver?.("video", {
         direction: "recvonly",
       });
