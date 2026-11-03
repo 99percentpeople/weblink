@@ -36,6 +36,7 @@ import { initializeApplication } from "./initialize-application";
 import { provideContext } from "./provide-context";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { getRoomNamespace } from "@/libs/application/room-identity";
+import { getSignalingWebSocketUrl } from "./app-state";
 import {
   defaultViewScopes,
   ViewScopesContext,
@@ -104,7 +105,10 @@ export function createApplicationRoot(
                       state,
                       dialog: createRoomDialog(),
                       history: messageStores,
-                      namespace: getRoomNamespace(),
+                      namespace: () =>
+                        getRoomNamespace(
+                          getSignalingWebSocketUrl(),
+                        ),
                     });
                     return provideContext(
                       RoomActionsContext,

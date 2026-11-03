@@ -72,7 +72,9 @@ Available WebSocket backends:
 - [weblink-ws-server](https://github.com/99percentpeople/weblink-ws-server) —
   Bun server for self-hosting and LAN deployments.
 
-The WebSocket URL is a deployment setting, not an end-user setting.
+Users can override the deployment default in **Settings → Connection → WebSocket signaling server**.
+All room members should select the same endpoint. Changes take effect on the next room join.
+The field initially shows the deployment URL and saves valid edits automatically. Use Reset below the field to restore that URL.
 
 The frontend normally reads `VITE_WEBSOCKET_URL` at build time. The included
 Docker image also supports replacing that value at container startup through
@@ -136,7 +138,7 @@ methods return 405, missing backend configuration returns 503, upstream errors
 return 502, and upstream timeout returns 504. Provider error bodies and long-term
 API keys are never returned.
 
-The frontend derives the URL from `VITE_WEBSOCKET_URL`: `wss://host/ws` becomes
+The frontend derives the URL from the signaling endpoint used for the room. For example, `wss://host/ws` becomes
 `https://host/turn-credentials` (`ws` becomes `http`). It clears the signaling
 query, fragment, and URL user information. Reverse proxies must forward this
 root HTTP path as well as WebSocket upgrades; no extra `VITE_*` / `WEBLINK_*` URL is needed.
@@ -511,5 +513,5 @@ Before switching users to a new deployment:
 8. Keep the previous signaling endpoint available until the new endpoint has
    been validated on the intended networks.
 
-Changing signaling provider requires a frontend deployment/configuration change,
-but does not require migrating user file caches or message history.
+Update the deployment configuration to change the default signaling provider for all clients.
+An individual client can switch providers in Settings → Connection.

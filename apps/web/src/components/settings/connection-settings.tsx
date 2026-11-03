@@ -1,4 +1,5 @@
 import { SettingSection } from "./setting-layout";
+import { SignalingServerSetting } from "./signaling-server-setting";
 import { SettingTagList } from "./setting-tag-list";
 import { SettingSwitch } from "./setting-controls";
 import { userErrorMessage } from "@/libs/user-error";
@@ -108,6 +109,7 @@ export function ConnectionSettings(
       id="connection"
       title={t("setting.connection.title")}
     >
+      <SignalingServerSetting />
       <SettingTagList
         label={t("setting.connection.stun_servers.title")}
         description={t(

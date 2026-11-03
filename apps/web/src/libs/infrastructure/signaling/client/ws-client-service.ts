@@ -82,7 +82,7 @@ export class WebSocketClientService implements ClientService {
   private roomId: string;
   private password: string | null;
   private client: TransferClient;
-  private websocketUrl: string;
+  readonly websocketUrl: string;
 
   private socket: WebSocket | null = null;
   private activeSocket: WebSocket | null = null;

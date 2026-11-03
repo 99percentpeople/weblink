@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.6] - 2026-11-03
+## [1.4.0] - 2026-11-03
 
-Weblink 1.3.6 reduces web streaming latency, improves audio sync and seeking in screen recordings, tightens room admission on both signaling servers, and updates desktop security dependencies.
+Weblink 1.4.0 brings media and data onto one native connection per peer on Windows, adds a custom signaling server setting, reduces web playback latency, and improves screen recordings and room admission.
 
 ### Meeting playback and screen recording
 
@@ -17,6 +17,7 @@ Weblink 1.3.6 reduces web streaming latency, improves audio sync and seeking in 
 
 ### Signaling and room cleanup
 
+- **Choose a signaling server.** Settings → Connection shows the deployment's WebSocket URL. Edits save automatically and apply the next time you join a room. Use Reset below the field to restore the default. Each server has its own room history and supplies its own managed TURN credentials.
 - **Limit incomplete joins.** The Bun server and Cloudflare Worker rate-limit WebSocket upgrades per IP, close connections that miss the join deadline (15 seconds by default), and create room state only after a valid join. Both cap room membership at 128 by default.
 - **Expire empty rooms.** A pending handshake can no longer keep an empty room or its password verifier alive after the reconnect window expires. If the verifier changes during a handshake, the client must reconnect to get the current one. The Bun server also releases expired local sessions when a Redis lease check fails and omits plaintext room IDs from application logs.
 

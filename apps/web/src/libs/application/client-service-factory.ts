@@ -11,7 +11,8 @@ export async function createClientService(
     await import("@/libs/infrastructure/signaling/client/ws-client-service");
   return new WebSocketClientService({
     ...options,
-    websocketUrl: signalingWebSocketUrl,
+    websocketUrl:
+      options.websocketUrl ?? signalingWebSocketUrl,
   });
 }
 
@@ -19,6 +20,7 @@ export async function waitForRoomAvailability(
   roomId: string,
   clientId: string,
   signal: AbortSignal,
+  websocketUrl = signalingWebSocketUrl,
 ): Promise<boolean> {
   const {
     roomConnectionLockName,
@@ -26,11 +28,7 @@ export async function waitForRoomAvailability(
   } =
     await import("@/libs/infrastructure/signaling/client/room-connection-lock");
   return waitForRoomConnectionAvailability(
-    roomConnectionLockName(
-      signalingWebSocketUrl,
-      roomId,
-      clientId,
-    ),
+    roomConnectionLockName(websocketUrl, roomId, clientId),
     signal,
   );
 }

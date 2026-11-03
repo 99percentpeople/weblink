@@ -7,35 +7,41 @@ import {
   TurnCredentialsClient,
 } from "@/libs/infrastructure/ice/turn-credentials-client";
 import { signalingWebSocketUrl } from "@/libs/state/app-options";
+export { getTurnCredentialsUrl as serverTurnCredentialsUrl } from "@/libs/infrastructure/ice/turn-credentials-client";
 
-export const serverTurnCredentialsUrl =
-  getTurnCredentialsUrl(signalingWebSocketUrl);
-const credentialsClient = serverTurnCredentialsUrl
-  ? new TurnCredentialsClient(serverTurnCredentialsUrl)
-  : undefined;
+let cached:
+  | { endpoint: string; client: TurnCredentialsClient }
+  | undefined;
 
-export function getServerIceServers(): Promise<
-  RTCIceServer[]
-> {
-  return (
-    credentialsClient?.getIceServers() ??
-    Promise.resolve([])
-  );
+export function getServerIceServers(
+  websocketUrl = signalingWebSocketUrl,
+): Promise<RTCIceServer[]> {
+  const endpoint = getTurnCredentialsUrl(websocketUrl);
+  if (!endpoint) return Promise.resolve([]);
+  if (cached?.endpoint !== endpoint)
+    cached = {
+      endpoint,
+      client: new TurnCredentialsClient(endpoint),
+    };
+  return cached.client.getIceServers();
 }
 
 /** Compose user ICE endpoints with the signaling backend's temporary TURN credentials. */
 export async function loadSessionIceServers(
   options: IceServerOptions,
+  websocketUrl = signalingWebSocketUrl,
 ): Promise<RTCIceServer[]> {
   const [custom, managed] = await Promise.all([
     getIceServers(options),
-    getServerIceServers().catch((error: unknown) => {
-      console.warn(
-        "[IceServers] server TURN unavailable; using configured ICE servers",
-        error,
-      );
-      return [] as RTCIceServer[];
-    }),
+    getServerIceServers(websocketUrl).catch(
+      (error: unknown) => {
+        console.warn(
+          "[IceServers] server TURN unavailable; using configured ICE servers",
+          error,
+        );
+        return [] as RTCIceServer[];
+      },
+    ),
   ]);
   return [...custom, ...managed];
 }

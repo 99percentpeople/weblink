@@ -14,7 +14,7 @@ export function RoomActionsProvider(props: ParentProps) {
       initialize: async () => {},
       conversations: appState.message.conversations,
     },
-    namespace: getRoomNamespace(),
+    namespace: () => getRoomNamespace(),
   });
   return (
     <InjectActions value={value}>

@@ -254,6 +254,7 @@ async function main() {
       pauseFile: unexpected,
       roomStatus: {
         roomId: null,
+        password: null,
         profile: null,
         joinedAt: null,
       },

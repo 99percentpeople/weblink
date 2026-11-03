@@ -89,7 +89,7 @@ vi.mock("@/options", async () => {
   };
 });
 vi.mock("@/libs/application/ice-server-service", () => ({
-  serverTurnCredentialsUrl: null,
+  serverTurnCredentialsUrl: () => undefined,
 }));
 beforeEach(() => {
   setReceivedSources([]);

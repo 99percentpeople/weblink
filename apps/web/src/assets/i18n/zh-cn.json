@@ -173,6 +173,11 @@
         "title": "自动加入",
         "description": "应用程序启动时自动加入房间"
       },
+      "signaling": {
+        "title": "WebSocket 信令服务器",
+        "description": "更改在下次连接时生效。同一房间的成员需使用同一台服务器。",
+        "invalid": "请输入完整的 ws:// 或 wss:// 地址，不含登录凭据、片段或 room、pwd 参数。HTTPS 页面连接远程服务器须使用 wss://。"
+      },
       "stun_servers": {
         "title": "STUN 服务器",
         "description": "更改应用程序的 STUN 服务器，用于建立点对点连接"

@@ -90,6 +90,30 @@ afterEach(() => {
 });
 
 describe("room sharing URL", () => {
+  it("keeps sharing the active room after the next connection's settings change", () => {
+    setAppState("roomStatus", {
+      roomId: "connected-room",
+      password: "connected-password",
+    });
+    try {
+      setAppState("profile", {
+        roomId: "another-room",
+        password: null,
+      });
+      const url = new URL(joinUrl());
+      expect(url.searchParams.get("id")).toBe(
+        "connected-room",
+      );
+      expect(url.searchParams.get("pwd")).toBe(
+        "connected-password",
+      );
+    } finally {
+      setAppState("roomStatus", {
+        roomId: null,
+        password: null,
+      });
+    }
+  });
   it.each([
     "https://dev.webl.ink",
     "https://webl.ink",
@@ -152,7 +176,7 @@ function setup(options?: {
           state: { joinRoom: options.join },
           dialog,
           history: historyStore,
-          namespace: "test-server",
+          namespace: () => "test-server",
         })
       : undefined;
     return (

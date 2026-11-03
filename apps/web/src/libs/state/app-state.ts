@@ -30,7 +30,10 @@ import type {
 } from "@/libs/domain/protocol/messages";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { AppOption } from "@/libs/state/app-options";
-import { getDefaultAppOptions } from "@/libs/state/app-options";
+import {
+  getDefaultAppOptions,
+  signalingWebSocketUrl,
+} from "@/libs/state/app-options";
 import { isMobileInputDevice } from "@/libs/domain/remote-control/local-input";
 
 export type ClientServiceStatus =
@@ -39,11 +42,20 @@ export type ClientServiceStatus =
   | "disconnected";
 
 export type RoomStatus = {
+  websocketUrl?: string;
+  password: string | null;
   roomId: RoomID | null;
   profile: TransferClient | null;
   /** Start of this local room session, independent of mounted views. */
   joinedAt: number | null;
 };
+
+export function getSignalingWebSocketUrl(): string {
+  return (
+    appState.options.customSignalingUrl ||
+    signalingWebSocketUrl
+  );
+}
 
 export interface ClientInfo extends TransferClient {
   trust?:
@@ -318,6 +330,7 @@ export const createInitialAppState = (): AppState => ({
   },
   roomStatus: {
     roomId: null,
+    password: null,
     profile: null,
     joinedAt: null,
   },

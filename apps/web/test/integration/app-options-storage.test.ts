@@ -43,6 +43,34 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("persists the selected signaling server and clears the room draft password when changing or resetting it", async () => {
+  store({ customSignalingUrl: "wss://first.example/ws" });
+  const {
+    appState,
+    getSignalingWebSocketUrl,
+    setAppState,
+  } = await boot();
+  const { getDefaultAppOptions, setAppOptions } =
+    await import("@/options");
+  const { reconcile } = await import("solid-js/store");
+  expect(getSignalingWebSocketUrl()).toBe(
+    "wss://first.example/ws",
+  );
+  setAppState("profile", "password", "first-password");
+  setAppOptions(
+    "customSignalingUrl",
+    "wss://second.example/ws",
+  );
+  expect(saved().customSignalingUrl).toBe(
+    "wss://second.example/ws",
+  );
+  expect(appState.profile.password).toBeNull();
+  setAppState("profile", "password", "second-password");
+  setAppOptions(reconcile(getDefaultAppOptions()));
+  expect(saved().customSignalingUrl).toBe("");
+  expect(appState.profile.password).toBeNull();
+});
+
 it("restores a paged background image and releases its URL when cleared", async () => {
   vi.stubGlobal(
     "URL",

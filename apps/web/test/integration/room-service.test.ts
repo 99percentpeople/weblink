@@ -127,6 +127,7 @@ function createHarness(
 }
 
 beforeEach(() => {
+  setAppState("options", "customSignalingUrl", "");
   setAppState("profile", {
     roomId: "room-a",
     password: null,
@@ -144,6 +145,40 @@ beforeEach(() => {
 });
 
 describe("RoomService", () => {
+  it("pins the endpoint during a join and uses the new server for the next join to the same room", async () => {
+    const first = "wss://one.example/ws",
+      second = "wss://two.example/ws";
+    const pending = deferred<ClientService>();
+    const oldService = createClientService(),
+      newService = createClientService();
+    const create = vi
+      .fn<
+        (
+          profile: ClientServiceInitOptions,
+        ) => Promise<ClientService>
+      >()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(newService);
+    const { room, onJoined } = createHarness(create);
+    setAppState("options", "customSignalingUrl", first);
+    const joining = room.join();
+    setAppState("options", "customSignalingUrl", second);
+    pending.resolve(oldService);
+    await joining;
+    expect(appState.roomStatus.websocketUrl).toBe(first);
+    expect(onJoined).toHaveBeenLastCalledWith(
+      expect.objectContaining({ websocketUrl: first }),
+    );
+    expect(oldService.close).not.toHaveBeenCalled();
+    await room.join();
+    expect(oldService.close).toHaveBeenCalledOnce();
+    expect(
+      create.mock.calls.map(
+        ([profile]) => profile.websocketUrl,
+      ),
+    ).toEqual([first, second]);
+    expect(appState.roomStatus.websocketUrl).toBe(second);
+  });
   it("reuses the last known profile while an anonymous peer profile is pending", async () => {
     const service = createClientService();
     const h = createHarness(async () => service);

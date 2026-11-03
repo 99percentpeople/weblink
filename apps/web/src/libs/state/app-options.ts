@@ -145,6 +145,7 @@ export type AppOption = {
 
   // Connection
   servers: ConnectionOptions;
+  customSignalingUrl: string;
   shareServersWithOthers: boolean;
   relayOnly: boolean;
 
@@ -242,8 +243,9 @@ export function stringifyTurnServers(
 export const signalingWebSocketUrl =
   import.meta.env.VITE_WEBSOCKET_URL ??
   (typeof window !== "undefined"
-    ? (window as any).env?.VITE_WEBSOCKET_URL
-    : undefined);
+    ? window.env?.VITE_WEBSOCKET_URL
+    : undefined) ??
+  "";
 
 /** Include unset optional fields: these keys also define the persisted settings shape. */
 export const getDefaultAppOptions = (): AppOption => {
@@ -264,6 +266,7 @@ export const getDefaultAppOptions = (): AppOption => {
     bufferedAmountHighWaterMark: 256 * 1024,
     maxMomeryCacheSlices: 12,
     videoMaxBitrate: 25 * 1024 * 1024,
+    customSignalingUrl: "",
     servers: {
       stuns:
         import.meta.env.WEBLINK_STUN_SERVERS?.split(",") ??

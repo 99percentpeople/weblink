@@ -173,6 +173,11 @@
         "title": "Auto join",
         "description": "Auto join a room when the app is launched"
       },
+      "signaling": {
+        "title": "WebSocket signaling server",
+        "description": "Changes apply on the next connection. Everyone in a room should use the same server.",
+        "invalid": "Enter a full ws:// or wss:// URL without credentials, a fragment, or room and pwd parameters. HTTPS pages require wss:// for remote servers."
+      },
       "stun_servers": {
         "title": "STUN Servers",
         "description": "Change the STUN servers of the app, used to establish peer-to-peer connections"

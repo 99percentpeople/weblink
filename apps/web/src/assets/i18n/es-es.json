@@ -149,6 +149,11 @@
         "title": "Unirse automáticamente",
         "description": "Únete automáticamente a una sala al iniciar la aplicación"
       },
+      "signaling": {
+        "title": "Servidor de señalización WebSocket",
+        "description": "Los cambios se aplican en la próxima conexión. Todos los miembros de la sala deben usar el mismo servidor.",
+        "invalid": "Introduce una URL completa con ws:// o wss://, sin credenciales, fragmentos ni parámetros room o pwd. Las páginas HTTPS requieren wss:// para servidores remotos."
+      },
       "stun_servers": {
         "title": "Servidores STUN",
         "description": "Cambia los servidores STUN usados para establecer conexiones entre pares"

@@ -23,7 +23,7 @@ export function createRoomActions({
     MessageStores,
     "initialize" | "conversations"
   >;
-  namespace: string;
+  namespace(): string;
 }) {
   const [busy, setBusy] = createSignal(false);
   const available = () =>
@@ -75,7 +75,7 @@ export function createRoomActions({
       if (mode === "recent") {
         const room = getRoomJoinHistory(
           history.conversations,
-          namespace,
+          namespace(),
         )[0];
         if (room) {
           // Legacy entries can only reuse credentials for the same room.
@@ -118,7 +118,7 @@ export function createRoomActions({
           mode === "edit" &&
           !getRoomJoinHistory(
             history.conversations,
-            namespace,
+            namespace(),
           ).some(
             (room) =>
               room.roomId ===

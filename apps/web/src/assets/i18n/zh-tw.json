@@ -144,6 +144,11 @@
         "title": "自動加入",
         "description": "應用程式啟動時自動加入房間"
       },
+      "signaling": {
+        "title": "WebSocket 訊號伺服器",
+        "description": "變更會在下次連線時生效。同一房間的成員需使用同一台伺服器。",
+        "invalid": "請輸入完整的 ws:// 或 wss:// 位址，不含登入憑證、片段或 room、pwd 參數。HTTPS 頁面連線至遠端伺服器時須使用 wss://。"
+      },
       "stun_servers": {
         "title": "STUN 伺服器",
         "description": "更改應用程式的 STUN 伺服器，用于建立點對點連接"

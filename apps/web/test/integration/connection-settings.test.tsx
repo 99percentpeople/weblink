@@ -31,6 +31,12 @@ import type {
 } from "@/libs/application/ice-server-diagnostics";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
+vi.mock("@/libs/state/app-options", async (original) => ({
+  ...(await original<
+    typeof import("@/libs/state/app-options")
+  >()),
+  signalingWebSocketUrl: "wss://default.test/ws",
+}));
 vi.mock("solid-sonner", () => ({
   toast: { info: vi.fn(), error: vi.fn() },
 }));
@@ -62,10 +68,12 @@ const diagnostics = {
 };
 
 function fields() {
-  const [stun, turn] = screen.getAllByRole("textbox") as (
-    | HTMLInputElement
-    | HTMLTextAreaElement
-  )[];
+  const stun = screen.getByRole("textbox", {
+    name: "setting.connection.stun_servers.title",
+  }) as HTMLInputElement;
+  const turn = screen.getByRole("textbox", {
+    name: "setting.connection.turn_servers.title",
+  }) as HTMLInputElement;
   return { stun, turn };
 }
 
@@ -82,6 +90,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("WEBLINK_STUN_SERVERS", "");
   vi.stubEnv("VITE_TURN_SERVERS", "");
+  setAppState("options", "customSignalingUrl", "");
   setAppState(
     "options",
     "servers",
@@ -102,6 +111,39 @@ afterEach(() => {
 });
 
 describe("connection settings", () => {
+  it("saves a custom signaling server, keeps it on invalid input and restores the deployment default", () => {
+    render(() => (
+      <ConnectionSettings diagnostics={diagnostics} />
+    ));
+    const input = screen.getByRole("textbox", {
+      name: "setting.connection.signaling.title",
+    }) as HTMLInputElement;
+    const group = within(input.closest('[role="group"]')!);
+    const edit = (value: string) =>
+      fireEvent.input(input, { target: { value } });
+    expect(input.value).toBe("wss://default.test/ws");
+    expect(group.queryByRole("button")).toBeNull();
+    edit("wss://Example.test/ws?tenant=a");
+    expect(input.value).toBe(
+      "wss://Example.test/ws?tenant=a",
+    );
+    expect(appState.options.customSignalingUrl).toBe(
+      "wss://example.test/ws?tenant=a",
+    );
+    edit("https://example.test/ws");
+    expect(group.getByRole("alert")).toBeInTheDocument();
+    expect(appState.options.customSignalingUrl).toBe(
+      "wss://example.test/ws?tenant=a",
+    );
+    fireEvent.click(
+      group.getByRole("button", {
+        name: "common.action.reset",
+      }),
+    );
+    expect(input.value).toBe("wss://default.test/ws");
+    expect(appState.options.customSignalingUrl).toBe("");
+    expect(group.queryByRole("alert")).toBeNull();
+  });
   it("shows tags and inline inputs, and saves additions, edits and removals", () => {
     render(() => (
       <ConnectionSettings diagnostics={diagnostics} />

@@ -3,6 +3,7 @@ import {
   revokeFileUrl,
 } from "@/libs/utils/stored-file";
 import { resolveStoredAppOptions } from "@/libs/state/stored-app-options";
+import { getRoomNamespace } from "@/libs/application/room-identity";
 export {
   getClientConfig,
   setClientConfig,
@@ -15,6 +16,7 @@ export {
 import { makePersisted } from "@solid-primitives/storage";
 import {
   createEffect,
+  on,
   createSignal,
   onCleanup,
 } from "solid-js";
@@ -22,6 +24,7 @@ import { reconcile } from "solid-js/store";
 import type { SetStoreFunction } from "solid-js/store";
 import {
   appState,
+  getSignalingWebSocketUrl,
   setAppState,
 } from "@/libs/state/app-state";
 import { STORAGE_KEYS } from "@/constants";
@@ -97,6 +100,18 @@ export function initializeAppOptions() {
   };
 
   setAppState("options", reconcile(loadFromLocalStorage()));
+
+  // Keep the draft password on hydration, but never carry it to another server.
+  createEffect(
+    on(
+      () => getRoomNamespace(getSignalingWebSocketUrl()),
+      (namespace, previous) => {
+        if (namespace !== previous)
+          setAppState("profile", "password", null);
+      },
+      { defer: true },
+    ),
+  );
 
   createEffect(() => {
     if (typeof localStorage === "undefined") return;

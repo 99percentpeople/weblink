@@ -26,7 +26,7 @@ vi.mock("solid-sonner", () => ({
 }));
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 let dispose: () => void;
-const setup = () =>
+const setup = (namespace = () => "server") =>
   createRoot((cleanup) => {
     dispose = cleanup;
     return createRoomActions({
@@ -36,7 +36,7 @@ const setup = () =>
         initialize: fixture.initialize,
         conversations: appState.message.conversations,
       },
-      namespace: "server",
+      namespace,
     });
   });
 
@@ -83,6 +83,27 @@ afterEach(() => {
 });
 
 describe("shared room actions", () => {
+  it("restores the selected server's password for rooms with the same name after switching", async () => {
+    let selected = "server";
+    const actions = setup(() => selected);
+    setRooms([
+      savedRoom("room", 20, "first-password"),
+      {
+        ...savedRoom("room", 10, "second-password"),
+        id: "other:room",
+        namespace: "other",
+      },
+    ]);
+    await actions.join();
+    expect(appState.profile.password).toBe(
+      "first-password",
+    );
+    selected = "other";
+    await actions.join();
+    expect(appState.profile.password).toBe(
+      "second-password",
+    );
+  });
   it("only takes over on the explicit switch action and does not reopen room settings", async () => {
     const actions = setup();
     fixture.join.mockRejectedValueOnce(

@@ -12,7 +12,10 @@ import { formatBtyeSize } from "@/libs/utils/format-filesize";
 import { t } from "@/i18n";
 import { setAppOptions } from "@/options";
 
-import { appState } from "@/libs/state/app-state";
+import {
+  appState,
+  getSignalingWebSocketUrl,
+} from "@/libs/state/app-state";
 import NativeCaptureSettings from "./native-capture-settings";
 
 export default function AdvancedSettings() {
@@ -26,8 +29,9 @@ export default function AdvancedSettings() {
       <SettingSwitch
         checked={appState.options.relayOnly}
         disabled={
-          !serverTurnCredentialsUrl &&
-          appState.options.servers.turns.length === 0
+          !serverTurnCredentialsUrl(
+            getSignalingWebSocketUrl(),
+          ) && appState.options.servers.turns.length === 0
         }
         onChange={(isChecked) =>
           setAppOptions("relayOnly", isChecked)

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { getServerIceServers } from "@/libs/application/ice-server-service";
 import {
   getTurnCredentialsUrl,
   TurnCredentialsClient,
@@ -34,6 +35,53 @@ function setup() {
 }
 
 describe("TURN credentials client", () => {
+  it("keeps credentials scoped to the selected server while a request to the old server is pending", async () => {
+    let resolveFirst!: (response: Response) => void;
+    const response = (username: string) =>
+      Response.json({
+        iceServers: [
+          {
+            urls: ["turn:relay.example"],
+            username,
+            credential: "temporary",
+          },
+        ],
+        expiresAt: Date.now() + 3_600_000,
+      });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(response("second"));
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const first = getServerIceServers(
+        "wss://first.example/ws?tenant=a",
+      );
+      const second = await getServerIceServers(
+        "ws://127.0.0.1:9012/ws",
+      );
+      expect(second[0]?.username).toBe("second");
+      resolveFirst(response("first"));
+      expect((await first)[0]?.username).toBe("first");
+      expect(
+        await getServerIceServers(
+          "ws://127.0.0.1:9012/another-path",
+        ),
+      ).toEqual(second);
+      expect(
+        fetcher.mock.calls.map(([url]) => url),
+      ).toEqual([
+        "https://first.example/turn-credentials",
+        "http://127.0.0.1:9012/turn-credentials",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("derives the backend root HTTP endpoint without forwarding query credentials", () => {
     expect(
       getTurnCredentialsUrl(

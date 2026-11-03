@@ -149,6 +149,11 @@
         "title": "Rejoindre automatiquement",
         "description": "Rejoindre automatiquement une salle au lancement de l'application"
       },
+      "signaling": {
+        "title": "Serveur de signalisation WebSocket",
+        "description": "Les changements s’appliquent à la prochaine connexion. Tous les membres du salon doivent utiliser le même serveur.",
+        "invalid": "Saisissez une URL complète en ws:// ou wss://, sans identifiants, fragment ni paramètres room ou pwd. Les pages HTTPS exigent wss:// pour les serveurs distants."
+      },
       "stun_servers": {
         "title": "Serveurs STUN",
         "description": "Changer les serveurs STUN de l'application, utilisés pour établir des connexions peer-to-peer"

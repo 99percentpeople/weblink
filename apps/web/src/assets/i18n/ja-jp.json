@@ -149,6 +149,11 @@
         "title": "自動参加",
         "description": "アプリ起動時にルームへ自動参加します"
       },
+      "signaling": {
+        "title": "WebSocket シグナリングサーバー",
+        "description": "変更は次回の接続時に反映されます。ルームの参加者は全員同じサーバーを使用してください。",
+        "invalid": "認証情報、フラグメント、room・pwd パラメーターを含まない完全な ws:// または wss:// URL を入力してください。HTTPS ページからリモートサーバーに接続するには wss:// が必要です。"
+      },
       "stun_servers": {
         "title": "STUNサーバー",
         "description": "ピアツーピア接続の確立に使用するSTUNサーバーを変更します"

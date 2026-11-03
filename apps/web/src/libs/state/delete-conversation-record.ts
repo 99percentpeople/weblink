@@ -1,7 +1,11 @@
 import { batch } from "solid-js";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { getRoomNamespace } from "@/libs/application/room-identity";
-import { appState, setAppState } from "./app-state";
+import {
+  appState,
+  getSignalingWebSocketUrl,
+  setAppState,
+} from "./app-state";
 import { forgetRoomConfig } from "./permission-options";
 import { roomConversationId } from "@/libs/domain/conversation";
 
@@ -22,7 +26,7 @@ export function deleteRoomRecord(id: string): void {
     forgetRoomConfig(id, undefined);
     if (
       roomConversationId(
-        getRoomNamespace(),
+        getRoomNamespace(getSignalingWebSocketUrl()),
         appState.profile.roomId.trim(),
       ) === id
     ) {

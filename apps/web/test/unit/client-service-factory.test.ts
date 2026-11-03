@@ -49,7 +49,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("WebSocket client composition", () => {
-  it("creates the client using the deployment URL without a backend selector", async () => {
+  it("uses the deployment default unless a room join selects a custom endpoint", async () => {
     const options = {
       roomId: "room-a",
       password: null,
@@ -59,7 +59,6 @@ describe("WebSocket client composition", () => {
         avatar: null,
       },
       onNotice: vi.fn(),
-      websocketUrl: "wss://not-the-deployment.test",
     };
     expect(await createClientService(options)).toBe(
       mocks.service,
@@ -68,6 +67,23 @@ describe("WebSocket client composition", () => {
       ...options,
       websocketUrl: "wss://signaling.test/room",
     });
+    const custom = {
+      ...options,
+      websocketUrl: "wss://custom.test/ws?tenant=a",
+    };
+    await createClientService(custom);
+    expect(mocks.create).toHaveBeenLastCalledWith(custom);
+    await waitForRoomAvailability(
+      "room-a",
+      "local",
+      new AbortController().signal,
+      custom.websocketUrl,
+    );
+    expect(mocks.lockName).toHaveBeenLastCalledWith(
+      custom.websocketUrl,
+      "room-a",
+      "local",
+    );
   });
 
   it.each([true, false])(

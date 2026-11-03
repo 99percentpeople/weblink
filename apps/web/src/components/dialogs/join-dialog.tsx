@@ -42,7 +42,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { appState } from "@/libs/state/app-state";
+import {
+  appState,
+  getSignalingWebSocketUrl,
+} from "@/libs/state/app-state";
 import { getRoomJoinHistory } from "@/libs/application/messaging/room-join-history";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { getRoomNamespace } from "@/libs/application/room-identity";
@@ -50,11 +53,10 @@ import { RoomJoinHistoryList } from "./room-join-history-list";
 import { ArrowLeft } from "lucide-solid";
 
 export const createRoomDialog = () => {
-  const namespace = getRoomNamespace();
   const rooms = createMemo(() =>
     getRoomJoinHistory(
       appState.message.conversations,
-      namespace,
+      getRoomNamespace(getSignalingWebSocketUrl()),
     ),
   );
   const [step, setStep] = createSignal<"profile" | "room">(
@@ -668,12 +670,15 @@ export const joinUrl = createMemo(() => {
   const url = new URL(
     import.meta.env.VITE_SHARE_URL || location.origin,
   );
-  url.searchParams.append("id", appState.profile.roomId);
-  if (appState.profile.password)
-    url.searchParams.append(
-      "pwd",
-      appState.profile.password,
-    );
+  const roomId = appState.roomStatus.roomId;
+  const password = roomId
+    ? appState.roomStatus.password
+    : appState.profile.password;
+  url.searchParams.append(
+    "id",
+    roomId ?? appState.profile.roomId,
+  );
+  if (password) url.searchParams.append("pwd", password);
 
   if (appState.options.shareServersWithOthers) {
     // compare if user's appOptions is different from defaultAppOptions

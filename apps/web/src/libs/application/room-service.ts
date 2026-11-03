@@ -9,6 +9,7 @@ import type { PeerSession } from "@/libs/domain/session";
 import { catchError } from "@/libs/catch";
 import {
   appState,
+  getSignalingWebSocketUrl,
   setAppState,
 } from "@/libs/state/app-state";
 import type { PeerProfileService } from "./peer-profile-service";
@@ -223,7 +224,10 @@ export class RoomService {
     }
   }
 
-  join(options: ClientJoinOptions = {}): Promise<void> {
+  join(
+    options: ClientJoinOptions = {},
+    websocketUrl = getSignalingWebSocketUrl(),
+  ): Promise<void> {
     if (this.disposed) {
       return Promise.reject(
         abortError("Room service is disposed"),
@@ -231,6 +235,7 @@ export class RoomService {
     }
 
     const profile = {
+      websocketUrl,
       roomId: appState.profile.roomId,
       password: appState.profile.password,
       client: {
@@ -243,7 +248,8 @@ export class RoomService {
     const active = this.activeProfile;
     if (
       active &&
-      (active.roomId !== profile.roomId ||
+      (active.websocketUrl !== profile.websocketUrl ||
+        active.roomId !== profile.roomId ||
         active.password !== profile.password ||
         active.client.clientId !== profile.client.clientId)
     ) {
@@ -298,6 +304,8 @@ export class RoomService {
       }
 
       setAppState("roomStatus", {
+        websocketUrl: profile.websocketUrl,
+        password: profile.password,
         profile: service.info,
         roomId: profile.roomId,
         joinedAt:
@@ -333,6 +341,8 @@ export class RoomService {
     this.options.rtc.unbindAllSessions();
     this.options.sessions.destoryAllSession();
     setAppState("roomStatus", {
+      websocketUrl: undefined,
+      password: null,
       roomId: null,
       profile: null,
       joinedAt: null,

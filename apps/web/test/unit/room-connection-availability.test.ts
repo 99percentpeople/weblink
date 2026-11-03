@@ -51,6 +51,16 @@ function wait() {
   };
 }
 describe("local room lock availability", () => {
+  it("separates routing queries and ignores room credentials in the endpoint", () => {
+    const lock = (query: string) =>
+      roomConnectionLockName(
+        "wss://example.test/socket" + query,
+        "room",
+        "me",
+      );
+    expect(lock("?tenant=a")).not.toBe(lock("?tenant=b"));
+    expect(lock("?room=old&pwd=legacy")).toBe(name);
+  });
   it("waits through held and pending locks without queuing or taking ownership", async () => {
     const f = wait();
     const done = vi.fn();

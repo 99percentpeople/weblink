@@ -93,10 +93,12 @@ export function roomConnectionLockName(
   clientId: string,
 ): string {
   const url = new URL(websocketUrl);
+  url.searchParams.delete("room");
+  url.searchParams.delete("pwd");
   return JSON.stringify([
     "weblink:signaling",
     url.origin,
-    url.pathname,
+    url.pathname + url.search,
     roomId.trim(),
     clientId,
   ]);

@@ -13,6 +13,7 @@ import { resolveRemoteKeyboardOptions } from "../domain/remote-control/keyboard-
 import { resolveRemotePointerOptions } from "../domain/remote-control/pointer-options";
 import { resolveRemoteTouchOptions } from "../domain/remote-control/touch-options";
 import { normalizeLocalePreference } from "../i18n/locale";
+import { parseSignalingOverride } from "../domain/signaling-endpoint";
 import {
   getDefaultAppOptions,
   type AppOption,
@@ -70,6 +71,9 @@ export function resolveStoredAppOptions(
   if (!Object.hasOwn(saved, "mcpEnabled"))
     options.mcpEnabled = options.automationEnabled;
 
+  options.customSignalingUrl =
+    parseSignalingOverride(options.customSignalingUrl) ??
+    "";
   options.locale = normalizeLocalePreference(
     options.locale,
   );

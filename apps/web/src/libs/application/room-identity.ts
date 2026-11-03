@@ -1,9 +1,11 @@
 import { signalingWebSocketUrl } from "@/libs/state/app-options";
 
 /** Stable deployment identity; room history must not cross signaling backends. */
-export function getRoomNamespace(): string {
+export function getRoomNamespace(
+  websocketUrl = signalingWebSocketUrl,
+): string {
   const endpoint = new URL(
-    signalingWebSocketUrl || "/",
+    websocketUrl || "/",
     window.location.href,
   );
   endpoint.hash = "";

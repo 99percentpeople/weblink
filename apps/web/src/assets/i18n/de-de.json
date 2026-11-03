@@ -149,6 +149,11 @@
         "title": "Automatisch beitreten",
         "description": "Treten Sie einem Raum automatisch bei, wenn die App gestartet wird"
       },
+      "signaling": {
+        "title": "WebSocket-Signalisierungsserver",
+        "description": "Änderungen gelten bei der nächsten Verbindung. Alle Raummitglieder sollten denselben Server verwenden.",
+        "invalid": "Eine vollständige ws://- oder wss://-Adresse ohne Zugangsdaten, Fragment oder die Parameter room und pwd eingeben. HTTPS-Seiten benötigen für entfernte Server wss://."
+      },
       "stun_servers": {
         "title": "STUN-Server",
         "description": "Ändern Sie die STUN-Server der App, die zum Herstellen von Peer-to-Peer-Verbindungen verwendet werden"

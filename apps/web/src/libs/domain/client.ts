@@ -54,6 +54,7 @@ export interface ClientJoinOptions {
 }
 
 export interface ClientService {
+  readonly websocketUrl?: string;
   get info(): TransferClient;
 
   addEventListener<K extends keyof ClientServiceEventMap>(

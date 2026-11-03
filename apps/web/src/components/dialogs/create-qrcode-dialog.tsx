@@ -27,7 +27,9 @@ import { getInitials } from "@/libs/utils/name";
 export const createQRCodeDialog = () => {
   const [copying, setCopying] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
-  const available = () => !!appState.profile.roomId.trim();
+  const roomId = () =>
+    appState.roomStatus.roomId ?? appState.profile.roomId;
+  const available = () => !!roomId().trim();
   const copyLink = async () => {
     if (copying() || !available()) return;
     setCopying(true);
@@ -70,8 +72,8 @@ export const createQRCodeDialog = () => {
             <p class="text-muted-foreground text-xs">
               {t("common.join_form.room_id.title")}
             </p>
-            <p class="text-lg font-semibold [overflow-wrap:anywhere] select-text">
-              {appState.profile.roomId || "—"}
+            <p class="select-text text-lg font-semibold [overflow-wrap:anywhere]">
+              {roomId() || "—"}
             </p>
           </div>
           <div
@@ -142,8 +144,8 @@ export const createQRCodeDialog = () => {
           </span>
           <div class="relative min-w-0">
             <Link
-              class="text-muted-foreground pointer-events-none absolute top-1/2
-                left-3 size-4 -translate-y-1/2"
+              class="text-muted-foreground pointer-events-none absolute left-3
+                top-1/2 size-4 -translate-y-1/2"
             />
             <Input
               class="h-9 min-w-0 pl-9 text-xs"

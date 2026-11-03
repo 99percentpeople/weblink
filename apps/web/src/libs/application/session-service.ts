@@ -71,6 +71,7 @@ import {
 import type { SignalingService } from "../domain/signaling";
 import {
   appState,
+  getSignalingWebSocketUrl,
   setAppState,
 } from "@/libs/state/app-state";
 
@@ -431,7 +432,11 @@ export class SessionService {
     this.loadIceServers =
       options.loadIceServers ??
       (() =>
-        loadSessionIceServers(appState.options.servers));
+        loadSessionIceServers(
+          appState.options.servers,
+          this.service?.websocketUrl ??
+            getSignalingWebSocketUrl(),
+        ));
   }
 
   setClipboard(message: SendClipboardMessage) {

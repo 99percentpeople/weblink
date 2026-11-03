@@ -30,6 +30,7 @@ import { transferManager } from "@/libs/application/transfer/transfer-service";
 import {
   appState,
   saveMediaConstraintsToSession,
+  getSignalingWebSocketUrl,
   setAppState,
 } from "@/libs/state/app-state";
 import {
@@ -148,9 +149,11 @@ export function createAppState(
     messageStores,
   );
   onCleanup(() => messaging.dispose());
-  const namespace = getRoomNamespace();
   const desiredRoom = createMemo(() => {
     const roomId = appState.roomStatus.roomId?.trim();
+    const namespace = getRoomNamespace(
+      appState.roomStatus.websocketUrl,
+    );
     return roomId
       ? {
           roomId,
@@ -550,6 +553,8 @@ export function createAppState(
 
   const [roomConflict, setRoomConflict] =
     createSignal(false);
+  const [conflictEndpoint, setConflictEndpoint] =
+    createSignal<string>();
   const [recoverLocalConflict, setRecoverLocalConflict] =
     createSignal(false);
   const [manualJoin, setManualJoin] = createSignal(false);
@@ -575,6 +580,7 @@ export function createAppState(
           ) {
             recovery?.stop();
             room.leave();
+            setConflictEndpoint(options.websocketUrl);
             setRecoverLocalConflict(
               notice === "tab-replaced",
             );
@@ -588,7 +594,7 @@ export function createAppState(
       void messageStores
         .recordRoomJoin(
           profile.roomId.trim(),
-          namespace,
+          getRoomNamespace(profile.websocketUrl),
           profile.password,
         )
         .catch((error) =>
@@ -598,7 +604,12 @@ export function createAppState(
     onMemberJoined: (roomId, client) => {
       const id = roomId.trim();
       messageStores.recordRoomMember(
-        roomConversationId(namespace, id),
+        roomConversationId(
+          getRoomNamespace(
+            sessionService.clientService?.websocketUrl,
+          ),
+          id,
+        ),
         client.clientId,
       );
     },
@@ -610,8 +621,9 @@ export function createAppState(
   const joinRoom = async (options?: ClientJoinOptions) => {
     recovery?.stop();
     setManualJoin(true);
+    const websocketUrl = getSignalingWebSocketUrl();
     try {
-      await room.join(options);
+      await room.join(options, websocketUrl);
       setRoomConflict(false);
     } catch (error) {
       if (
@@ -620,6 +632,7 @@ export function createAppState(
           "Room is already open in another tab"
       ) {
         setRecoverLocalConflict(true);
+        setConflictEndpoint(websocketUrl);
         setRoomConflict(true);
       }
       throw error;
@@ -633,20 +646,26 @@ export function createAppState(
     room.leave();
   };
   createEffect(() => {
-    if (
-      !roomConflict() ||
-      !recoverLocalConflict() ||
-      manualJoin()
-    )
-      return;
+    if (!roomConflict() || manualJoin()) return;
     recoveryRevision();
+    const websocketUrl = getSignalingWebSocketUrl();
+    if (conflictEndpoint() !== websocketUrl) {
+      setRoomConflict(false);
+      return;
+    }
+    if (!recoverLocalConflict()) return;
     const { roomId, clientId, password } = appState.profile;
     // Changing room credentials retires the old observer and any in-flight join.
     void password;
     const current = new RoomConflictRecovery({
       waitUntilAvailable: (signal) =>
-        waitForRoomAvailability(roomId, clientId, signal),
-      join: () => room.join(),
+        waitForRoomAvailability(
+          roomId,
+          clientId,
+          signal,
+          websocketUrl,
+        ),
+      join: () => room.join({}, websocketUrl),
       cancelJoin: () => room.leave(),
       onRestored: () => setRoomConflict(false),
       onError: (error) => {
