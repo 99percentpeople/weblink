@@ -15,8 +15,9 @@ Weblink 1.4.0 brings media and data onto one native connection per peer on Windo
 - **Keep screen audio in sync.** Record a single selected audio track directly and mix only when multiple tracks are selected. For a screen and its matching audio track, Chromium recordings use receiver timing to align Opus audio with video. Windows screen shares now offer RTP Absolute Capture Time as a fallback before sender reports arrive.
 - **More precise MKV seeking.** Store each video frame's display duration so seeking while paused lands on the frame covering the requested time. Smooth uneven frame intervals in high-frame-rate screen recordings while preserving static holds and variable frame rates.
 
-### Signaling and room cleanup
+### Connections and file transfers
 
+- **Faster Windows file transfers.** The desktop app batches queued file blocks and bandwidth-test packets between the WebView and Rust, reducing IPC calls while preserving the DataChannel format used by web peers.
 - **Choose a signaling server.** Settings → Connection shows the deployment's WebSocket URL. Edits save automatically and apply the next time you join a room. Use Reset below the field to restore the default. Each server has its own room history and supplies its own managed TURN credentials.
 - **Limit incomplete joins.** The Bun server and Cloudflare Worker rate-limit WebSocket upgrades per IP, close connections that miss the join deadline (15 seconds by default), and create room state only after a valid join. Both cap room membership at 128 by default.
 - **Expire empty rooms.** A pending handshake can no longer keep an empty room or its password verifier alive after the reconnect window expires. If the verifier changes during a handshake, the client must reconnect to get the current one. The Bun server also releases expired local sessions when a Redis lease check fails and omits plaintext room IDs from application logs.

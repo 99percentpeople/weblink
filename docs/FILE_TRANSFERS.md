@@ -78,6 +78,12 @@ The protocol string is currently **unversioned legacy wire format**. An
 incompatible future transfer format must use a new protocol identifier rather
 than silently changing the meaning of `transfer`.
 
+On Windows, the native room adapter sends queued binary file blocks to Rust in
+one IPC call when they fit within 256 KiB and 32 messages. Rust sends each block
+as its original DataChannel message. A lone block goes out immediately, and
+transfer control messages keep their place in the queue. The native channel's
+drain notifications continue to drive sender backpressure.
+
 ### JSON control frames
 
 The active transfer channel exchanges these JSON frames:

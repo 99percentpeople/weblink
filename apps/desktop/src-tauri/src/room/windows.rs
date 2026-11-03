@@ -297,7 +297,7 @@ pub async fn room_write(
     webview: Webview,
     state: State<'_, Service>,
     request: Request<'_>,
-) -> Result<(), String> {
+) -> Result<Option<usize>, String> {
     let header = |name: &str| {
         request
             .headers()
@@ -323,15 +323,19 @@ pub async fn room_write(
             data,
             format == "nv12",
         ),
-        kind @ ("binary" | "text") => state.get(owner, id)?.write(
-            header("x-channel")?
+        kind @ ("binary" | "text" | "binary-batch") => {
+            let peer = state.get(owner, id)?;
+            let key = header("x-channel")?
                 .parse()
-                .map_err(|_| "Invalid channel")?,
-            data,
-            kind == "binary",
-        ),
+                .map_err(|_| "Invalid channel")?;
+            if kind == "binary-batch" {
+                return super::batch::write(data, |packet| peer.write(key, packet, true)).map(Some);
+            }
+            peer.write(key, data, kind == "binary")
+        }
         _ => Err("Unknown room packet".into()),
-    }
+    }?;
+    Ok(None)
 }
 #[tauri::command]
 pub fn room_audio(

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { BinaryWriteBatch } from "./write-batch";
 
 /** The WebView owns event dispatch and outbound IPC buffering. SCTP stays on the room peer. */
 export class RoomDataChannel
@@ -23,6 +24,8 @@ export class RoomDataChannel
   onmessage: RTCDataChannel["onmessage"] = null;
   onopen: RTCDataChannel["onopen"] = null;
   private writes = Promise.resolve();
+  private tailBatch?: BinaryWriteBatch;
+  private writeFailed = false;
   private readonly encoder = new TextEncoder();
   constructor(
     private readonly peer: string,
@@ -91,6 +94,13 @@ export class RoomDataChannel
       new MessageEvent("message", { data }),
     );
   }
+  private failWrite(unsent: number) {
+    this.writeFailed = true;
+    if (this.readyState === "closed") return;
+    this.close();
+    this.drain(unsent);
+    this.dispatchEvent(new Event("error"));
+  }
   send(
     data: string | Blob | ArrayBuffer | ArrayBufferView,
   ) {
@@ -99,22 +109,14 @@ export class RoomDataChannel
         "Room channel is not open",
         "InvalidStateError",
       );
-    const payload =
-      typeof data === "string"
-        ? this.encoder.encode(data)
-        : data instanceof Blob
-          ? data
-          : data instanceof ArrayBuffer
-            ? new Uint8Array(data.slice(0))
-            : new Uint8Array(
-                data.buffer,
-                data.byteOffset,
-                data.byteLength,
-              ).slice();
+    const binary = typeof data !== "string";
+    const source = binary
+      ? data
+      : this.encoder.encode(data);
     const length =
-      payload instanceof Blob
-        ? payload.size
-        : payload.byteLength;
+      source instanceof Blob
+        ? source.size
+        : source.byteLength;
     if (
       length > 16 * 1024 * 1024 ||
       this.bufferedAmount + length > 32 * 1024 * 1024
@@ -123,34 +125,76 @@ export class RoomDataChannel
         "Room channel send buffer full",
         "OperationError",
       );
+    // Snapshot caller-owned buffers only after checking the queue limit.
+    const view =
+      source instanceof Blob
+        ? source
+        : ArrayBuffer.isView(source)
+          ? new Uint8Array(
+              source.buffer,
+              source.byteOffset,
+              source.byteLength,
+            )
+          : new Uint8Array(source);
+    const payload =
+      binary && !(view instanceof Blob)
+        ? view.slice()
+        : view;
     this.bufferedAmount += length;
-    this.writes = this.writes
-      .then(async () => {
-        if (this.readyState === "closed") return;
-        await invoke(
+    let batch: BinaryWriteBatch | undefined;
+    if (
+      (this.protocol === "transfer" ||
+        this.protocol === "weblink-speedtest-v1") &&
+      binary &&
+      !(payload instanceof Blob)
+    ) {
+      if (this.tailBatch?.append(payload)) return;
+      const next = new BinaryWriteBatch();
+      if (next.append(payload)) batch = next;
+    }
+    // Only consecutive binary writes can join the tail. Text and Blob are barriers.
+    this.tailBatch = batch;
+    this.writes = this.writes.then(async () => {
+      if (this.tailBatch === batch)
+        this.tailBatch = undefined;
+      if (this.readyState === "closed") return;
+      let unsent = batch?.payloadBytes ?? length;
+      if (this.writeFailed) {
+        this.drain(unsent);
+        return;
+      }
+      try {
+        const frame = batch?.encode();
+        const accepted = await invoke<number | null>(
           "room_write",
-          payload instanceof Blob
-            ? await payload.arrayBuffer()
-            : payload,
+          frame ??
+            (payload instanceof Blob
+              ? await payload.arrayBuffer()
+              : payload),
           {
             headers: {
               "x-weblink-handle": this.peer,
               "x-channel": String(this.key),
-              "x-weblink-payload":
-                typeof data === "string"
-                  ? "text"
-                  : "binary",
+              "x-weblink-payload": frame
+                ? "binary-batch"
+                : binary
+                  ? "binary"
+                  : "text",
             },
           },
         );
-      })
-      .catch(() => {
-        this.drain(length);
-        if (this.readyState !== "closed") {
-          this.dispatchEvent(new Event("error"));
-          this.close();
+        if (frame && accepted !== unsent) {
+          // Rust can accept a prefix before SCTP closes. Its drain events
+          // already own those bytes, and that prefix must never be retried.
+          unsent -= accepted ?? 0;
+          throw new Error(
+            "Incomplete native data channel write",
+          );
         }
-      });
+      } catch {
+        this.failWrite(unsent);
+      }
+    });
   }
   close() {
     if (

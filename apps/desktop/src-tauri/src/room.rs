@@ -1,4 +1,6 @@
 //! The main WebView owns its peer handles. Closing a peer releases SCTP and all RTP outputs.
+#[cfg(any(windows, test))]
+mod batch;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
