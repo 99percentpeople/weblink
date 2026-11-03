@@ -1,12 +1,14 @@
 /** Native receive connections retain standard SDP/ICE and a UI-facing media stream. */
-export interface NativeScreenReceive {
+export interface NativeMediaReceive {
   /** False keeps decode failures and retries on the native receive path. */
   readonly allowBrowserFallback?: boolean;
+  /** RTP audio and video MIME types supported by the native receive factory. */
   codecs(): Promise<string[]>;
   open(
     configuration: RTCConfiguration,
     onEvent: (event: NativeReceiveEvent) => void,
     signal: AbortSignal,
+    source?: "screen" | "camera",
   ): Promise<NativeReceiveConnection>;
 }
 

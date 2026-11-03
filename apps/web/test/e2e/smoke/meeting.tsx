@@ -2,6 +2,7 @@ import { createAppSettings } from "@/libs/state/create-app-settings";
 import { platform } from "@/libs/platform/runtime";
 import { MeetingSessionProvider } from "../../support/meeting-session-provider";
 import { createRoot, type ParentProps } from "solid-js";
+import { createSessionService } from "@/libs/application/session-service";
 import { createAppPermissions } from "@/libs/state/create-app-permissions";
 import { render } from "solid-js/web";
 import {
@@ -853,6 +854,7 @@ async function main() {
     permissions: appPermissions,
     settings,
   } = createRoot(() => {
+    createSessionService();
     const permissions = createAppPermissions({
       notifications: undefined,
       outputSupported: () =>

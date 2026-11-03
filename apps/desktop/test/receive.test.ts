@@ -7,7 +7,7 @@ import {
 } from "vitest";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import type { Channel } from "@tauri-apps/api/core";
-import { createNativeScreenReceive } from "../src/receive";
+import { createNativeMediaReceive } from "../src/receive";
 
 const presenter = vi.hoisted(() => ({
   stream: { getAudioTracks: () => [], addTrack: vi.fn() },
@@ -29,7 +29,7 @@ const postMessage = vi.fn();
 const release = vi.fn();
 const unwatch = vi.fn();
 const received = vi.fn();
-const api = createNativeScreenReceive((callback) => {
+const api = createNativeMediaReceive((callback) => {
   visible = callback;
   return unwatch;
 });
@@ -108,7 +108,7 @@ it("opens GPU receiving without shared buffers or browser decoding", async () =>
   mockIPC((command, args) => {
     calls.push({ command, args });
   });
-  const native = createNativeScreenReceive(() => () => {}, {
+  const native = createNativeMediaReceive(() => () => {}, {
     create,
   } as any);
   const abort = new AbortController();
@@ -141,7 +141,7 @@ it.each(["windows", "linux", "macos"])(
       if (command === "receive_codecs")
         return os === "windows" ? ["video/h265"] : [];
     });
-    const receive = createNativeScreenReceive(
+    const receive = createNativeMediaReceive(
       () => () => {},
     );
     expect(receive.allowBrowserFallback).toBe(false);
@@ -158,7 +158,7 @@ it("keeps Windows native-only when decoder discovery fails", async () => {
       return { os: "windows" };
     throw new Error("decoder discovery failed");
   });
-  const receive = createNativeScreenReceive(() => () => {});
+  const receive = createNativeMediaReceive(() => () => {});
   await expect(receive.codecs()).rejects.toThrow(
     "decoder discovery failed",
   );

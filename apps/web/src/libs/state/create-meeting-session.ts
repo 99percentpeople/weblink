@@ -88,6 +88,7 @@ export function createMeetingSession({
       name: client.name,
       avatar: client.avatar ?? undefined,
       stream: client.stream,
+      nativeCameraTrackId: client.nativeCameraTrackId,
       nativeScreenStream: client.nativeScreenStream,
       nativeScreenViews: client.nativeScreenViews,
       videoSources: client.videoSources,

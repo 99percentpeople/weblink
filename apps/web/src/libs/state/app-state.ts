@@ -60,6 +60,7 @@ export interface ClientInfo extends TransferClient {
   streamState?: "placeholder" | "media";
   videoSources?: StreamVideoSource[];
   videoTracks?: RemoteMediaTrackBinding[];
+  nativeCameraTrackId?: string;
   nativeScreenStream?: MediaStream;
   nativeScreenViews?: NativeScreenView[];
   audioSources?: StreamAudioSource[];

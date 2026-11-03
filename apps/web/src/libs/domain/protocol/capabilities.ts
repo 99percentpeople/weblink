@@ -57,6 +57,8 @@ export interface PeerCapabilities {
     queue?: boolean;
   };
   room?: { chat: boolean; files: boolean };
+  /** A null receiver publishes cameras but receives them on the ordinary meeting connection. */
+  meetingMedia?: { camera: MediaDecodeCapabilities | null };
   screen?: {
     decode: MediaDecodeCapabilities;
     trickleIce: boolean;
@@ -164,6 +166,10 @@ const validators: Record<
     record(v) &&
     (v.queue === undefined || typeof v.queue === "boolean"),
   room: (v) => flags(v, ["chat", "files"]),
+  meetingMedia: (v) =>
+    record(v) &&
+    (v.camera === null ||
+      !!parseMediaDecodeCapabilities(v.camera)),
   screen: (v) =>
     record(v) &&
     flags(v, ["trickleIce", "multiScreen"]) &&

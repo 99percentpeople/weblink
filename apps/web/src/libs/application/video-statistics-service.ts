@@ -8,6 +8,11 @@ import type { NativeScreenSession } from "../domain/native-screen/session";
 export interface VideoStatisticsPeer {
   pc: RTCPeerConnection | null;
   native?: NativeScreenSession;
+  camera?: {
+    stats(
+      track: MediaStreamTrack,
+    ): Promise<VideoStatsBatch[]>;
+  };
   name?: string;
 }
 
@@ -21,7 +26,16 @@ export async function readVideoStatistics(
   const pending: Promise<VideoStatsBatch[]>[] = [];
   if (publication?.getPreviewStats)
     pending.push(publication.getPreviewStats());
-  for (const { pc, native, name } of peers) {
+  for (const { pc, native, camera, name } of peers) {
+    if (camera)
+      pending.push(
+        camera.stats(track).then((batches) =>
+          batches.map((batch) => ({
+            ...batch,
+            peer: name,
+          })),
+        ),
+      );
     if (native)
       pending.push(
         native

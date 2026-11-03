@@ -2182,6 +2182,15 @@ Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
 MediaStream destination, preserving the existing mute, volume and playback owner.
 Browser autoplay policy still applies; user interaction resumes suspended audio.
 
+### Remote meeting cameras
+
+A peer that implements `meetingMedia/1` can send its camera and microphone on
+a dedicated WebRTC connection when Windows advertises native camera codecs.
+SDP and ICE travel over the authenticated media channel. The native receiver owns
+RTP, decoder selection, audio playback and GPU presentation. Closing the camera
+releases this connection. A microphone that stays on returns to the main meeting
+connection. Browser viewers and older peers use ordinary meeting tracks.
+
 ### Platform boundaries
 
 `packages/platform` owns the receive, presentation binding and recording contracts;
@@ -2312,11 +2321,13 @@ corrupt a frame retained by Chromium. This transport depends on the constructor'
 independent pixel snapshot. GPU presentation avoids both shared-buffer copies;
 it does not change or weaken the shared-buffer ownership contract.
 
-Windows desktop advertises native receive formats only and does not automatically
-fall back to browser reception. Legacy non-trickle sessions, unsupported formats
-and additional simultaneous views are rejected by this single-lane backend.
-A native startup/presentation/decode failure excludes that format for the current
-application session; automatic sender selection can negotiate another native format.
+Windows reserves one native screen receive slot per window and admits up to
+eight concurrent GPU-backed camera connections in the same window. Each
+connection owns its decoder and render surface. Screen sessions require trickle
+ICE and negotiate from the native receiver's supported formats.
+A native screen startup, presentation or decode failure excludes that screen
+format for the current application session. Automatic sender selection can
+negotiate another native format.
 Explicit fixed sender codec choices retain their existing failure semantics.
 An MF decoder that accepts successive inputs without output first flushes its
 compressed state and requests a fresh keyframe on the existing connection. Its

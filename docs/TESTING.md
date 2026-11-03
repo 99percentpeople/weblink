@@ -247,6 +247,13 @@ moving texture in its own window, controlled by the exchange directory's `motion
 file. Use native capture and decoded browser RTP together when checking scene-cut
 bitrate recovery; publication smoke tests do not measure native encoder performance.
 
+`test:e2e:native-screen` also sends a synthetic camera and microphone alongside
+a shared screen, then stops the camera and checks that voice and chat continue.
+The browser run substitutes a WebRTC receiver for the native adapter. In a
+Windows desktop dev WebView, `/test/e2e/smoke/native-screen.html?camera&codec=h264`
+or `?camera&codec=vp8` runs the same scenario through native decoding and checks
+that the GPU compositor presents frames. Keep the test window unminimized.
+
 `test:e2e:playback` uses Node 22+ and Chromium with the actual video component
 and received RTP. It checks deferred source attachment, interrupted playback,
 visibility/presentation recovery, borrowed-track cleanup, and continuous playback

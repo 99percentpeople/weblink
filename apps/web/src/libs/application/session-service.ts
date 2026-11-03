@@ -1,3 +1,4 @@
+import { MeetingCameraPeer } from "./meeting-camera-peer";
 import { scopes } from "@weblink/automation";
 import {
   VideoQualityPeer,
@@ -19,7 +20,7 @@ import { RemoteControlHost } from "./remote-control-host";
 import { PeerCapabilitiesService } from "./peer-capabilities";
 import type { AutomationCapability } from "../domain/protocol/capabilities";
 import { requiredMessageFeatures } from "../domain/protocol/protocol-versions";
-import { NativeScreenReceiveService } from "./native-screen-receive";
+import { MediaReceiveService } from "./media-receive-service";
 import {
   NativeScreenSession,
   NATIVE_SCREEN_CHANNEL,
@@ -69,6 +70,7 @@ import {
 
 export interface SessionServiceOptions {
   loadIceServers?: () => Promise<RTCIceServer[]>;
+  mediaReceive?: import("@weblink/platform").NativeMediaReceive;
 }
 
 export interface ReceivedVideoQuality {
@@ -78,8 +80,11 @@ export interface ReceivedVideoQuality {
 }
 
 export class SessionService {
-  private readonly screenReceive =
-    new NativeScreenReceiveService(platform.screenReceive);
+  private readonly mediaReceive: MediaReceiveService;
+  private readonly cameras = new Map<
+    PeerSession,
+    MeetingCameraPeer
+  >();
   private readonly videoQuality = new Map<
     PeerSession,
     VideoQualityPeer
@@ -93,15 +98,17 @@ export class SessionService {
       ([session, quality]) =>
         quality.receivers().map((control) => ({
           clientId: session.targetClientId,
-          kind: control.source.locator.startsWith("native:")
-            ? ("screen" as const)
-            : (appState.session.clientViewData[
-                session.targetClientId
-              ]?.videoSources?.find(
-                (source) =>
-                  `browser:${source.mid}` ===
-                  control.source.locator,
-              )?.kind ?? "video"),
+          kind: control.source.locator.startsWith("camera:")
+            ? ("camera" as const)
+            : control.source.locator.startsWith("native:")
+              ? ("screen" as const)
+              : (appState.session.clientViewData[
+                  session.targetClientId
+                ]?.videoSources?.find(
+                  (source) =>
+                    `browser:${source.mid}` ===
+                    control.source.locator,
+                )?.kind ?? "video"),
           control,
         })),
     );
@@ -212,8 +219,20 @@ export class SessionService {
         : {},
       files: { content: true, shared: true, queue: true },
       room: { chat: true, files: true },
+      ...(typeof RTCRtpTransceiver !== "undefined" &&
+      typeof RTCRtpTransceiver.prototype
+        .setCodecPreferences === "function" &&
+      typeof globalThis.RTCRtpSender?.getCapabilities ===
+        "function"
+        ? {
+            meetingMedia: {
+              camera:
+                this.mediaReceive.cameraCapabilities(),
+            },
+          }
+        : {}),
       screen: {
-        decode: this.screenReceive.capabilities(),
+        decode: this.mediaReceive.capabilities(),
         trickleIce: true,
         multiScreen: true,
       },
@@ -263,6 +282,8 @@ export class SessionService {
     }
   }
   reportNativeDecodeFailure(track: MediaStreamTrack) {
+    for (const camera of this.cameras.values())
+      camera.decodeFailed(track);
     for (const native of this.nativeScreens.values())
       native.decodeFailed(track);
   }
@@ -287,6 +308,7 @@ export class SessionService {
       Object.values(this.sessions).map((session) => ({
         pc: session.peerConnection,
         native: this.nativeScreens.get(session),
+        camera: this.cameras.get(session),
         name:
           this.clientViewData[session.clientId]?.name ??
           session.clientId,
@@ -344,7 +366,10 @@ export class SessionService {
     const browserStream = browserMediaStream(
       stream ?? null,
     );
-    session.setStream(browserStream);
+    const camera = this.cameras.get(session);
+    session.setStream(
+      camera ? camera.route(browserStream) : browserStream,
+    );
     this.nativeScreens
       .get(session)
       ?.setPublications(publications);
@@ -367,6 +392,9 @@ export class SessionService {
   >;
 
   constructor(options: SessionServiceOptions = {}) {
+    this.mediaReceive = new MediaReceiveService(
+      options.mediaReceive ?? platform.mediaReceive,
+    );
     this.loadIceServers =
       options.loadIceServers ??
       (() =>
@@ -578,8 +606,60 @@ export class SessionService {
     const controller = new AbortController();
     let controlGeneration = createUuid();
     let mainChannelReady = false;
+    let meetingStream: MediaStream | null = null;
+    let cameraStream: MediaStream | null = null;
+    const publishMeetingStream = () => {
+      if (
+        this.sessions[client.clientId] !== session ||
+        !this.clientViewData[client.clientId]
+      )
+        return;
+      const stream =
+        meetingStream && cameraStream
+          ? new MediaStream([
+              ...meetingStream.getTracks(),
+              ...cameraStream.getTracks(),
+            ])
+          : (meetingStream ?? cameraStream);
+      setAppState(
+        "session",
+        "clientViewData",
+        client.clientId,
+        {
+          stream: stream ?? undefined,
+          nativeCameraTrackId:
+            cameraStream?.getVideoTracks()[0]?.id,
+        },
+      );
+    };
+    const camera = new MeetingCameraPeer({
+      createReceiver:
+        this.mediaReceive.createCameraReceiver,
+      accepts: () =>
+        this.canReceive(client.clientId) &&
+        !!this.mediaReceive.cameraCapabilities(),
+      loadIceServers: this.loadIceServers,
+      relayOnly: () => appState.options.relayOnly,
+      settings: () => ({
+        limits: nativeScreenOptions(appState.options),
+        videoCodec: appState.options.preferredVideoCodec,
+        audioCodec: appState.options.preferredAudioCodec,
+        degradationPreference:
+          appState.options.degradationPreference ??
+          "balanced",
+      }),
+      changed: (stream) => {
+        cameraStream = stream;
+        publishMeetingStream();
+      },
+      captureEnded: () => this.applySessionStream(session),
+      error: (error) =>
+        console.warn("Meeting camera connection", error),
+    });
+    this.cameras.set(session, camera);
     const native = new NativeScreenSession({
-      createReceiver: this.screenReceive.createReceiver,
+      createReceiver:
+        this.mediaReceive.createScreenReceiver,
       clientId: session.clientId,
       loadControlCapabilities: () =>
         this.remoteControl.capabilities(client.clientId),
@@ -645,6 +725,9 @@ export class SessionService {
         this.canReceive(client.clientId)
           ? [
               ...native.qualitySources(),
+              ...[camera.sender?.qualitySource()].filter(
+                (s) => s !== undefined,
+              ),
               ...session.qualitySources(
                 nativeScreenOptions(appState.options),
               ),
@@ -658,6 +741,16 @@ export class SessionService {
           return Promise.reject(
             new Error("Screen permission revoked"),
           );
+        if (source.id.startsWith("camera:")) {
+          if (!camera.sender)
+            return Promise.reject(
+              new Error("Camera stopped"),
+            );
+          return camera.sender.applyQuality(
+            source,
+            preference,
+          );
+        }
         return source.id.startsWith("native:")
           ? native.applyQuality(source, preference)
           : session.applyQuality(source, preference);
@@ -680,6 +773,7 @@ export class SessionService {
     if (this.displayFrameRate)
       quality.setRefreshRate(this.displayFrameRate);
     const bindMedia = (channel: RTCDataChannel) => {
+      camera.bind(channel);
       native.bind(channel);
       quality.bind(channel);
     };
@@ -687,6 +781,11 @@ export class SessionService {
     const disposeCapabilities = this.capabilities.bind(
       session,
       (services) => {
+        camera.setCapabilities(
+          this.canReceive(client.clientId)
+            ? services?.meetingMedia
+            : undefined,
+        );
         native.setRemoteCapabilities(services);
         session.refreshMediaCodecs();
         // Binding can publish before openNative is initialized.
@@ -722,10 +821,16 @@ export class SessionService {
               "trust",
               trust?.state,
             );
+          camera.setCapabilities(
+            this.canReceive(client.clientId)
+              ? this.capabilities.get(session)?.meetingMedia
+              : undefined,
+          );
           this.applySessionStream(session);
           session.refreshAccess();
           if (!this.canReceive(client.clientId)) {
             native.reset();
+            camera.disconnect();
             quality.dispose();
           }
           queueMicrotask(() => openNative());
@@ -737,7 +842,11 @@ export class SessionService {
             () => appState.options.preferredVideoCodec,
             () => appState.options.preferredAudioCodec,
           ],
-          () => session.refreshMediaCodecs(),
+          () => {
+            session.refreshMediaCodecs();
+            this.applySessionStream(session);
+            camera.sender?.refreshCodecs();
+          },
           { defer: true },
         ),
       );
@@ -787,13 +896,16 @@ export class SessionService {
       ) {
         opening = false;
         native.reset();
+        camera.disconnect();
         quality.disconnect();
         return;
       }
       if (
         !session.polite ||
         !mainChannelReady ||
-        !capabilities?.screen ||
+        !(
+          capabilities?.screen || capabilities?.meetingMedia
+        ) ||
         capabilities.identity?.receiveContent !== true ||
         opening ||
         !session.peerConnection
@@ -835,6 +947,7 @@ export class SessionService {
         opening = false;
         mainChannelReady = false;
         native.reset();
+        camera.disconnect();
         quality.disconnect();
         controlGeneration = createUuid();
       },
@@ -848,6 +961,7 @@ export class SessionService {
         else {
           opening = false;
           native.reset();
+          camera.disconnect();
           quality.disconnect();
           controlGeneration = createUuid();
         }
@@ -862,6 +976,8 @@ export class SessionService {
         disposeTrust();
         this.requestedStreams.delete(session);
         mainChannelReady = false;
+        camera.dispose();
+        this.cameras.delete(session);
         native.dispose();
         quality.dispose();
         this.videoQuality.delete(session);
@@ -1017,13 +1133,8 @@ export class SessionService {
     session.addEventListener(
       "remotestreamchange",
       (ev) => {
-        setAppState(
-          "session",
-          "clientViewData",
-          client.clientId,
-          "stream",
-          reconcile(ev.detail ?? undefined),
-        );
+        meetingStream = ev.detail;
+        publishMeetingStream();
       },
       { signal: controller.signal },
     );

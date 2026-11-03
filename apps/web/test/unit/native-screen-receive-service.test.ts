@@ -5,7 +5,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { NativeScreenReceiveService } from "@/libs/application/native-screen-receive";
+import { MediaReceiveService } from "@/libs/application/media-receive-service";
 import { ScreenReceiver } from "@/libs/domain/native-screen/receiver";
 import {
   ScreenDecodeError,
@@ -14,7 +14,7 @@ import {
 import type {
   NativeReceiveConnection,
   NativeReceiveEvent,
-  NativeScreenReceive,
+  NativeMediaReceive,
 } from "@weblink/platform";
 import type {
   ControlDataChannel,
@@ -74,7 +74,7 @@ function fixture(
     send: vi.fn(async () => {}),
     close: vi.fn(),
   };
-  const native: NativeScreenReceive = {
+  const native: NativeMediaReceive = {
     allowBrowserFallback,
     codecs: vi.fn(async () => codecs),
     open: vi.fn(async (_config, event) => {
@@ -82,12 +82,12 @@ function fixture(
       return connection;
     }),
   };
-  const service = new NativeScreenReceiveService(native);
+  const service = new MediaReceiveService(native);
   const changed = vi.fn();
   const failed = vi.fn();
   const candidate = vi.fn();
   const create = (codec = "H265") =>
-    service.createReceiver(
+    service.createScreenReceiver(
       offer(codec),
       {},
       changed,
@@ -130,6 +130,34 @@ it("advertises only native video formats when browser fallback is disabled", asy
   expect(() => f.create("H264")).toThrow(ScreenDecodeError);
 });
 
+it("reserves the screen slot independently of camera receivers and advertises native audio separately", async () => {
+  const f = fixture(["video/h265", "audio/opus"], false);
+  await f.service.ready;
+  expect(f.service.cameraCapabilities()).toEqual({
+    video: ["video/h265"],
+    audio: ["audio/opus"],
+  });
+  expect(f.service.capabilities().video).toEqual([
+    "video/h265",
+  ]);
+  const screen = f.create();
+  const camera = f.service.createCameraReceiver(
+    offer(),
+    {},
+    vi.fn(),
+    vi.fn(),
+    vi.fn(),
+  );
+  expect(
+    vi
+      .mocked(f.native.open)
+      .mock.calls.map((args) => args[3]),
+  ).toEqual(["screen", "camera"]);
+  camera.close();
+  expect(() => f.create()).toThrow("already in use");
+  screen.close();
+});
+
 it("does not route unsupported, busy or legacy native-only sessions to the browser", async () => {
   const unavailable = fixture([], false);
   await unavailable.service.ready;
@@ -142,7 +170,7 @@ it("does not route unsupported, busy or legacy native-only sessions to the brows
   expect(() => f.create("H264")).toThrow("already in use");
   receiver.close();
   expect(() =>
-    f.service.createReceiver(
+    f.service.createScreenReceiver(
       offer(),
       {},
       f.changed,
@@ -243,7 +271,7 @@ it("keeps the second view and legacy non-trickle offers on the browser path", as
   expect(f.create("H264")).toBeInstanceOf(ScreenReceiver);
   first.close();
   expect(
-    f.service.createReceiver(
+    f.service.createScreenReceiver(
       offer(),
       {},
       f.changed,
@@ -383,7 +411,7 @@ it("preserves control send order across asynchronous native IPC and drops queued
     },
     close: () => channel?.close(),
   });
-  const receiver = f.service.createReceiver(
+  const receiver = f.service.createScreenReceiver(
     offer(),
     {},
     f.changed,

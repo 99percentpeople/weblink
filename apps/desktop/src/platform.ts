@@ -4,7 +4,7 @@ import { nativeNotifications } from "./notifications";
 import { nativeFileSystem } from "./filesystem";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { createNativeScreenReceive } from "./receive";
+import { createNativeMediaReceive } from "./receive";
 import { createNativePresentation } from "./presentation";
 import { createGpuPreview } from "./preview-gpu";
 import { nativeKeyboard } from "./keyboard";
@@ -35,7 +35,7 @@ const nativePresentation =
   createNativePresentation(watchVisibility);
 
 export const platform: PlatformRuntime = {
-  screenReceive: createNativeScreenReceive(
+  mediaReceive: createNativeMediaReceive(
     watchVisibility,
     nativePresentation,
   ),

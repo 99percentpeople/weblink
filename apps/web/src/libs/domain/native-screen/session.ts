@@ -1,6 +1,6 @@
+import { answerMediaOffer } from "../media-offer";
 import { ScreenControlRequest } from "./control-request";
 import {
-  resolveVideoQuality,
   type VideoQualitySource,
   type VideoQualityPreference,
 } from "../video-quality";
@@ -89,12 +89,7 @@ export class NativeScreenSession {
       source.id.slice("native:".length),
     );
     if (!sender) throw new Error("Video source stopped");
-    const applied = resolveVideoQuality(
-      source.limits,
-      preference,
-    );
-    await sender.applyQuality(source, applied);
-    return applied;
+    return sender.applyQuality(source, preference);
   }
   readonly screenControl = new ScreenControlRequest(
     (value) => this.send(value),
@@ -716,34 +711,35 @@ export class NativeScreenSession {
       );
     };
     try {
-      const servers = await this.port.loadIceServers();
-      if (!current()) return;
-      let answered = false;
-      const pending: RTCIceCandidateInit[] = [];
-      const onCandidate = (
-        candidate: RTCIceCandidateInit,
-      ) => {
-        if (!current()) return;
-        if (!answered) {
-          if (pending.length < 256) pending.push(candidate);
-        } else
-          this.send({
-            type: "candidate",
-            id: incoming.id,
-            candidate,
-          });
-      };
-      const receiver = (incoming.receiver = (
-        this.port.createReceiver ??
-        ((_sdp, ...args) => new ScreenReceiver(...args))
-      )(
-        value.sdp,
+      await answerMediaOffer(
+        value,
+        incoming,
         {
-          iceServers: servers,
-          iceTransportPolicy: this.port.relayOnly()
-            ? "relay"
-            : "all",
+          createReceiver: (
+            sdp,
+            config,
+            changed,
+            failed,
+            candidate,
+          ) => {
+            const create =
+              this.port.createReceiver ??
+              ((_sdp, ...args) =>
+                new ScreenReceiver(...args));
+            return create(
+              sdp,
+              config,
+              changed,
+              failed,
+              candidate,
+              incoming.control,
+            );
+          },
+          loadIceServers: () => this.port.loadIceServers(),
+          relayOnly: () => this.port.relayOnly(),
+          send: (message) => this.send(message),
         },
+        current,
         (stream) => {
           if (!current()) return;
           if (stream) bindNativeScreenAudio(stream);
@@ -753,32 +749,7 @@ export class NativeScreenSession {
           this.changed();
         },
         failed,
-        value.trickleIce === true ? onCandidate : undefined,
-        incoming.control,
-      ));
-      for (const candidate of incoming.candidates.splice(0))
-        await receiver.addIceCandidate(candidate);
-      const sdp = await receiver.answer(value.sdp);
-      if (!current()) {
-        receiver.close();
-        return;
-      }
-      this.send({ type: "answer", id: value.id, sdp });
-      answered = true;
-      pending.forEach(onCandidate);
-      await receiver.connected();
-      if (!current()) {
-        receiver.close();
-        return;
-      }
-      receiver.monitorDecode(() => {
-        if (current())
-          this.send({
-            type: "receiver-status",
-            id: value.id,
-            state: "healthy",
-          });
-      });
+      );
     } catch (error) {
       failed(error);
     }

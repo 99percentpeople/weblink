@@ -1,7 +1,7 @@
 import type { NativePresentation } from "./presentation";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
-  NativeScreenReceive,
+  NativeMediaReceive,
   NativeReceiveEvent,
 } from "@weblink/platform";
 import { createPreviewTrack } from "./preview-track";
@@ -17,12 +17,12 @@ type Event =
   | ReceiveFrame
   | { type: "audio" | "audio-track" };
 
-export function createNativeScreenReceive(
+export function createNativeMediaReceive(
   watchVisibility: (
     changed: (visible: boolean) => void,
   ) => () => void,
   presentation?: NativePresentation,
-): NativeScreenReceive {
+): NativeMediaReceive {
   // Fail closed until discovery identifies an unsupported desktop platform.
   // Windows keeps native receiving even when discovery or a decoder fails.
   let allowBrowserFallback = false;
@@ -37,7 +37,12 @@ export function createNativeScreenReceive(
       allowBrowserFallback = runtime.os !== "windows";
       return invoke<string[]>("receive_codecs");
     },
-    async open(configuration, onEvent, signal) {
+    async open(
+      configuration,
+      onEvent,
+      signal,
+      source = "screen",
+    ) {
       signal.throwIfAborted();
       const runtime = window as Window & {
         chrome?: { webview?: SharedWebview };
@@ -282,6 +287,7 @@ export function createNativeScreenReceive(
         opening = invoke("receive_open", {
           id,
           gpu: !!surface,
+          camera: source === "camera",
           events,
           relayOnly:
             configuration.iceTransportPolicy === "relay",

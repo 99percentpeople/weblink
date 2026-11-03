@@ -1,3 +1,5 @@
+import { platform } from "@/libs/platform/runtime";
+import { cameraReceiverFixture } from "./camera-receiver-fixture";
 import { remoteScreenRequestCheck } from "./remote-screen-request";
 import { createRoot } from "solid-js";
 import { liveVideoSettingsCheck } from "./live-video-settings";
@@ -5,7 +7,10 @@ import { streamStatisticsCheck } from "./stream-statistics";
 import { readBrowserVideoStats } from "@/libs/domain/video-stats";
 import { SessionService } from "@/libs/application/session-service";
 import { createNativeScreenStream } from "@/libs/application/native-screen-service";
-import { appState } from "@/libs/state/app-state";
+import {
+  appState,
+  setAppState,
+} from "@/libs/state/app-state";
 import { createMeetingSources } from "@/routes/home/components/meeting-sources";
 import { MultiEventEmitter } from "@/libs/utils/event-emitter";
 import type { ClientService } from "@/libs/domain/client";
@@ -236,6 +241,8 @@ function source() {
     },
   };
   return {
+    stream,
+    resumeAudio: () => audio.resume(),
     share,
     capture,
     offers,
@@ -250,10 +257,31 @@ function source() {
   };
 }
 
-async function scenario(
+async function assertAudioPlaying(
+  sharedAudio: MediaStreamTrack[],
+) {
+  const context = new AudioContext();
+  try {
+    await context.resume();
+    const analyser = context.createAnalyser();
+    context
+      .createMediaStreamSource(new MediaStream(sharedAudio))
+      .connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    await until(() => {
+      analyser.getFloatTimeDomainData(samples);
+      return samples.some(
+        (sample) => Math.abs(sample) > 0.005,
+      );
+    }, "Native audio RTP did not produce audible samples");
+  } finally {
+    await context.close();
+  }
+}
+
+function pair(
   polite: boolean,
-  beforeJoin: boolean,
-  withAudio = true,
+  mediaReceive?: import("@weblink/platform").NativeMediaReceive,
 ) {
   // Both service instances use the shared test store with distinct peer IDs.
   // Each stream is scoped explicitly to its own managed session.
@@ -261,7 +289,10 @@ async function scenario(
     { urls: "stun:127.0.0.1:9" },
   ];
   const a = new SessionService({ loadIceServers }),
-    b = new SessionService({ loadIceServers });
+    b = new SessionService({
+      loadIceServers,
+      mediaReceive,
+    });
   const sa = new Sender("native", "web"),
     sb = new Sender("web", "native");
   sa.remote = sb;
@@ -278,6 +309,15 @@ async function scenario(
       addEventListener: () => {},
       close: () => {},
     } as unknown as ClientService);
+  return { a, b, time };
+}
+
+async function scenario(
+  polite: boolean,
+  beforeJoin: boolean,
+  withAudio = true,
+) {
+  const { a, b, time } = pair(polite);
   const synthetic = source();
   const options = {
     audio: withAudio,
@@ -441,27 +481,7 @@ async function scenario(
       sharedAudio.length === (withAudio ? 1 : 0),
       "Native screen audio did not match the sharing choice",
     );
-    if (withAudio) {
-      const context = new AudioContext();
-      try {
-        await context.resume();
-        const analyser = context.createAnalyser();
-        context
-          .createMediaStreamSource(
-            new MediaStream(sharedAudio),
-          )
-          .connect(analyser);
-        const samples = new Float32Array(analyser.fftSize);
-        await until(() => {
-          analyser.getFloatTimeDomainData(samples);
-          return samples.some(
-            (sample) => Math.abs(sample) > 0.005,
-          );
-        }, "Native audio RTP did not produce audible samples");
-      } finally {
-        await context.close();
-      }
-    }
+    if (withAudio) await assertAudioPlaying(sharedAudio);
     assert(
       !pa
         .peerConnection!.getSenders()
@@ -697,7 +717,217 @@ async function scenario(
     video.remove();
   }
 }
+async function meetingCamera() {
+  const { a, b, time } = pair(
+    true,
+    platform.mediaReceive ?? cameraReceiverFixture,
+  );
+  const sourceMedia = source();
+  const video = document.createElement("video");
+  video.muted = true;
+  video.autoplay = true;
+  document.body.append(video);
+  let screen: MediaStream | undefined;
+  const screenCapture = source();
+  let unbind: (() => void) | undefined;
+  try {
+    await sourceMedia.resumeAudio();
+    const sender = await a.addClient({
+      clientId: "web",
+      createdAt: 2,
+      name: "Viewer",
+      avatar: null,
+    });
+    const viewer = await b.addClient({
+      clientId: "native",
+      createdAt: time,
+      name: "Camera",
+      avatar: null,
+    });
+    a.setSessionStream(sender, sourceMedia.stream);
+    await Promise.all([sender.listen(), viewer.listen()]);
+    await viewer.connect();
+    const remote = () => b.clientViewData.native?.stream;
+    await until(
+      () =>
+        !!remote()
+          ?.getVideoTracks()
+          .some(
+            (track) =>
+              track.id ===
+              b.clientViewData.native?.nativeCameraTrackId,
+          ) && !!remote()?.getAudioTracks().length,
+      "Dedicated camera and microphone did not reach the meeting",
+    );
+    const track = remote()!
+      .getVideoTracks()
+      .find(
+        (t) =>
+          t.id ===
+          b.clientViewData.native?.nativeCameraTrackId,
+      )!;
+    video.srcObject = remote()!;
+    unbind = platform.videoPresentation?.bind(
+      track,
+      video,
+      true,
+    );
+    await video.play();
+    await assertAudioPlaying(remote()!.getAudioTracks());
+    let diagnostic: unknown;
+    let implementation: string | undefined;
+    let codec: string | undefined;
+    let hardware: boolean | undefined;
+    let presentedFrames: number | undefined;
+    await until(async () => {
+      const samples = (
+        await b.getVideoStats(track)
+      ).flatMap((batch) => batch.samples);
+      const sample = samples.find(
+        (s) => (s.frames ?? 0) > 2,
+      );
+      diagnostic = {
+        samples,
+        bound: !!unbind,
+        visibility: document.visibilityState,
+        size: [video.videoWidth, video.videoHeight],
+      };
+      implementation = sample?.implementation;
+      codec = sample?.codec;
+      hardware = sample?.powerEfficientDecoder;
+      presentedFrames =
+        sample?.nativeReceive?.renderer?.presentedFrames;
+      return (
+        !!sample &&
+        (!platform.mediaReceive ||
+          (!!unbind && (presentedFrames ?? 0) > 0))
+      );
+    }, "Camera did not decode and present frames").catch(
+      (error) => {
+        throw new Error(
+          error.message + ": " + JSON.stringify(diagnostic),
+        );
+      },
+    );
+    assert(
+      !sender
+        .peerConnection!.getSenders()
+        .some(
+          (s) =>
+            s.track &&
+            sourceMedia.stream
+              .getTracks()
+              .some((t) => t === s.track),
+        ),
+      "Camera or microphone duplicated on main connection",
+    );
+    screen = await createNativeScreenStream(
+      screenCapture.capture,
+      screenCapture.share,
+      "camera-with-screen",
+      undefined,
+      {
+        audio: false,
+        maxWidth: 320,
+        maxHeight: 180,
+        frameRate: 10,
+        maxBitrate: 1_000_000,
+        codec: null,
+        degradationPreference: "balanced",
+      },
+    );
+    a.setSessionStream(
+      sender,
+      new MediaStream([
+        ...sourceMedia.stream.getTracks(),
+        ...screen.getTracks(),
+      ]),
+    );
+    const sharedTrack = () =>
+      b.clientViewData.native?.nativeScreenStream?.getVideoTracks()[0];
+    await until(async () => {
+      const shared = sharedTrack();
+      return (
+        !!shared &&
+        (await b.getVideoStats(shared)).some((batch) =>
+          batch.samples.some((s) => (s.frames ?? 0) > 2),
+        )
+      );
+    }, "Concurrent camera and shared screen did not decode");
+    assert(
+      remote()?.getVideoTracks().includes(track),
+      "Screen sharing displaced the native camera",
+    );
+    const pc = sender.peerConnection;
+    const microphone =
+      sourceMedia.stream.getAudioTracks()[0];
+    a.setSessionStream(
+      sender,
+      new MediaStream([microphone, ...screen.getTracks()]),
+    );
+    await until(
+      () =>
+        !remote()?.getVideoTracks().length &&
+        !!remote()?.getAudioTracks().length &&
+        !!pc
+          ?.getSenders()
+          .some((s) => s.track === microphone),
+      "Microphone-only meeting failed after stopping camera",
+    );
+    assert(
+      pc === sender.peerConnection &&
+        viewer.isMessageChannelReady &&
+        sourceMedia.stream
+          .getTracks()
+          .every((t) => t.readyState === "live"),
+      "Camera teardown interrupted meeting or capture",
+    );
+    assert(
+      sharedTrack()?.readyState === "live",
+      "Stopping camera closed concurrent screen",
+    );
+    return {
+      codec,
+      implementation,
+      hardware,
+      presentedFrames,
+      concurrentScreen: true,
+      native: !!platform.mediaReceive,
+    };
+  } finally {
+    unbind?.();
+    a.destoryAllSession();
+    b.destoryAllSession();
+    screen?.getTracks().forEach((t) => t.stop());
+    screenCapture.close();
+    sourceMedia.close();
+    video.srcObject = null;
+    video.remove();
+  }
+}
 async function main() {
+  const params = new URLSearchParams(location.search);
+  const previousCodec =
+    appState.options.preferredVideoCodec;
+  const codec = params.get("codec");
+  let camera;
+  try {
+    if (codec === "h264" || codec === "vp8")
+      setAppState(
+        "options",
+        "preferredVideoCodec",
+        "video/" + codec,
+      );
+    camera = await meetingCamera();
+  } finally {
+    if (codec)
+      setAppState(
+        "options",
+        "preferredVideoCodec",
+        previousCodec,
+      );
+  }
+  if (params.has("camera")) return { ok: true, camera };
   const remoteScreenRequest =
     await remoteScreenRequestCheck();
   const liveSettings = await liveVideoSettingsCheck();
@@ -708,6 +938,7 @@ async function main() {
   scenarios.push(await scenario(true, false, false));
   return {
     ok: true,
+    camera,
     unreachableStun: true,
     remoteScreenRequest,
     liveSettings,

@@ -685,16 +685,19 @@ may select concrete infrastructure implementations.
     Availability events preserve healthy connections, and failed attempts wait
     for fresh availability instead of running a polling loop.
   - `native-screen/session.ts`: authenticated native-media channel, capability
-    negotiation, incoming streams and view identity. `native-screen/sender.ts`
+    negotiation, incoming screens and view identity. `media-publication.ts`
     owns each outgoing publication's offers, ICE, retry budget and cleanup;
     its retained receiver identity survives a closed or pending transport.
     `native-screen/signaling.ts` owns the additive wire messages and parser,
     while `native-screen/receiver.ts` owns browser receive-only RTC and its
-    receiver contract. `application/native-screen-receive.ts` selects the optional
+    receiver contract. `application/media-receive-service.ts` selects the optional
     platform receiver and owns its capability/failure policy. Windows reception
     lives in `crates/desktop-capture/src/receive.rs`; `apps/desktop/src/receive.ts`
     presents bounded native video/audio through the existing MediaStream UI.
-    The shared
+    `application/meeting-camera-peer.ts` negotiates a camera and its microphone
+    on a send-only connection when the viewer advertises native camera codecs
+    under `meetingMedia/1`. Both sources share SDP/ICE ordering, bounded sender
+    retries and the native receive adapter. Only screen connections bind input channels.
     `native-screen/decode-monitor.ts` observes foreground decode progress.
   - `signaling-protocol.ts`: transport-neutral WebSocket signaling envelope,
     presence, routed-peer messages, join acknowledgment, deployed version and

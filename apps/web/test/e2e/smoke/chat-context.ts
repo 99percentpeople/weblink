@@ -1,8 +1,11 @@
 // Only replace the application context: chat, history, layout and observers are real.
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
+import { createContext } from "solid-js";
 import { clipboardFixture } from "./clipboard-context";
 import { createScreenSharing } from "@/libs/application/screen-sharing";
 let context: AppStateContextProps;
+export const AppStateContext =
+  createContext<AppStateContextProps>();
 export const setChatTestContext = (
   value: Omit<
     AppStateContextProps,
@@ -58,5 +61,6 @@ export const setChatTestContext = (
       },
     },
   };
+  AppStateContext.defaultValue = context;
 };
 export const useAppState = () => context;

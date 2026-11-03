@@ -73,15 +73,23 @@ pub struct Receiver {
 }
 
 pub fn codecs() -> Vec<String> {
-    PeerConnectionFactory::for_screen_receive()
-        .get_rtp_receiver_capabilities(MediaType::Video)
-        .codecs
+    let factory = PeerConnectionFactory::for_screen_receive();
+    [MediaType::Video, MediaType::Audio]
         .into_iter()
+        .flat_map(|kind| factory.get_rtp_receiver_capabilities(kind).codecs)
         .map(|c| c.mime_type.to_lowercase())
         .filter(|c| {
             matches!(
                 c.as_str(),
-                "video/h265" | "video/h264" | "video/vp8" | "video/vp9" | "video/av1"
+                "video/h265"
+                    | "video/h264"
+                    | "video/vp8"
+                    | "video/vp9"
+                    | "video/av1"
+                    | "audio/opus"
+                    | "audio/g722"
+                    | "audio/pcmu"
+                    | "audio/pcma"
             )
         })
         .collect()
@@ -227,7 +235,7 @@ impl Receiver {
             || sdp.matches("\nm=video ").count() > 1
             || sdp.matches("\nm=audio ").count() > 1
         {
-            return Err("Invalid single-screen offer".into());
+            return Err("Invalid single-video offer".into());
         }
         self.pc
             .set_remote_description(

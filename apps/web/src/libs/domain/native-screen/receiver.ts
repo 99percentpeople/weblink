@@ -6,22 +6,9 @@ import {
 import { monitorScreenDecode } from "./decode-monitor";
 import { readBrowserVideoStats } from "../video-stats";
 
-export interface ScreenReceiveConnection {
-  readonly stream: MediaStream;
-  /** Audio delivery lag relative to video in seconds, sampled for recording. */
-  recordingAudioSkew?(): Promise<number | undefined>;
-  answer(sdp: string): Promise<string>;
-  addIceCandidate(
-    candidate: RTCIceCandidateInit,
-  ): Promise<void>;
-  connected(audio?: boolean): Promise<void>;
-  monitorDecode(healthy: () => void): void;
-  decodeFailed(): void;
-  close(): void;
-  getVideoStats(
-    track: MediaStreamTrack,
-  ): ReturnType<typeof readBrowserVideoStats>;
-}
+import type { MediaReceiveConnection } from "../media-receiver";
+export type ScreenReceiveConnection =
+  MediaReceiveConnection;
 
 export type ScreenReceiverFactory = (
   sdp: string,

@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.6] - 2026-11-03
+
+Weblink 1.3.6 reduces web streaming latency, improves audio sync and seeking in screen recordings, tightens room admission on both signaling servers, and updates desktop security dependencies.
+
+### Meeting playback and screen recording
+
+- **Native camera playback on Windows.** Receive a compatible peer's camera and microphone on a dedicated media connection. Camera video shares the desktop screen viewer's hardware and software decoders and GPU renderer. Web viewers and older peers keep the existing meeting path.
+- **Lower playback latency.** When playing meeting streams or native screen shares, the browser now skips `RTCRtpScriptTransform` on incoming audio and video by default. Frames reach the decoder without passing through a JavaScript worker. Dedicated meeting connections can still opt into the transform for encoded recording.
+- **Record on the viewing device.** Web viewers now record a shared Windows screen directly from the video and audio tracks they receive. Starting, pausing, resuming and stopping a recording leave live playback uninterrupted. Chromium can reuse the incoming encoded video when supported.
+- **Keep screen audio in sync.** Record a single selected audio track directly and mix only when multiple tracks are selected. For a screen and its matching audio track, Chromium recordings use receiver timing to align Opus audio with video. Windows screen shares now offer RTP Absolute Capture Time as a fallback before sender reports arrive.
+- **More precise MKV seeking.** Store each video frame's display duration so seeking while paused lands on the frame covering the requested time. Smooth uneven frame intervals in high-frame-rate screen recordings while preserving static holds and variable frame rates.
+
+### Signaling and room cleanup
+
+- **Limit incomplete joins.** The Bun server and Cloudflare Worker rate-limit WebSocket upgrades per IP, close connections that miss the join deadline (15 seconds by default), and create room state only after a valid join. Both cap room membership at 128 by default.
+- **Expire empty rooms.** A pending handshake can no longer keep an empty room or its password verifier alive after the reconnect window expires. If the verifier changes during a handshake, the client must reconnect to get the current one. The Bun server also releases expired local sessions when a Redis lease check fails and omits plaintext room IDs from application logs.
+
+### Maintenance
+
+- Update the desktop Tauri updater to 2.14.1 and rustls to 0.23.46 for security fixes. Remove the unused Serverless Devs deployment configuration from the Bun signaling server.
+
 ## [1.3.5] - 2026-11-01
 
 Weblink 1.3.5 adds native screen reception and GPU playback to Windows desktop, connects native video to the existing recording controls, and simplifies remembered automation permissions and emergency revocation.

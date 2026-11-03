@@ -17,6 +17,7 @@ export interface MeetingParticipant extends RemoteAudioSources {
   name: string;
   avatar?: string;
   stream?: MediaStream | null;
+  nativeCameraTrackId?: string;
   nativeScreenStream?: MediaStream;
   nativeScreenViews?: readonly NativeScreenView[];
   videoSources?: readonly StreamVideoSource[];
@@ -149,6 +150,8 @@ export function createMeetingSources(
               track,
               kind: getMeetingVideoSourceKind(track),
             };
+          if (participant.nativeCameraTrackId === track.id)
+            return { track, kind: "camera" };
           const mid = midByTrackId.get(track.id);
           return {
             track,

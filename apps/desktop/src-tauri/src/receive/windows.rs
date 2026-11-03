@@ -69,6 +69,7 @@ pub fn release_notification(invoke: &tauri::ipc::Invoke<tauri::Wry>) -> bool {
 }
 
 struct Entry {
+    camera: bool,
     owner: String,
     receiver: Arc<Receiver>,
     delivery: Arc<Delivery>,
@@ -157,16 +158,24 @@ pub async fn receive_open(
     ice_servers: Vec<IceServer>,
     relay_only: bool,
     gpu: Option<bool>,
+    camera: Option<bool>,
     events: Channel<Value>,
 ) -> Result<(), String> {
     if id.is_empty() || id.len() > 128 {
         return Err("Invalid receiver id".into());
     }
     let gpu = gpu.unwrap_or(false);
+    let camera = camera.unwrap_or(false);
     let owner = webview.label().to_owned();
     let delivery = {
         let mut entries = service.entries.lock().unwrap();
-        if entries.contains_key(&id) || entries.values().any(|e| e.owner == owner) {
+        // Reserve the existing screen lane independently of bounded meeting cameras.
+        let occupied = entries
+            .values()
+            .filter(|e| e.owner == owner && e.camera == camera)
+            .count();
+        let limit = if camera && gpu { 8 } else { 1 };
+        if entries.contains_key(&id) || occupied >= limit {
             return Err("Native receiver is busy".into());
         }
         let wake = Arc::new(tokio::sync::Notify::new());
@@ -189,6 +198,7 @@ pub async fn receive_open(
         entries.insert(
             id.clone(),
             Entry {
+                camera,
                 owner: owner.clone(),
                 receiver,
                 delivery: delivery.clone(),

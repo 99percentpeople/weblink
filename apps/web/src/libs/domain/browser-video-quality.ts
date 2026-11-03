@@ -39,22 +39,34 @@ export async function applyBrowserVideoQuality(
   source: VideoQualitySource,
   preference: VideoQualityPreference,
 ): Promise<VideoQualityLimits> {
+  return setBrowserVideoLimits(
+    sender,
+    source.limits,
+    resolveVideoQuality(source.limits, preference),
+  );
+}
+
+export async function setBrowserVideoLimits(
+  sender: RTCRtpSender,
+  bounds: VideoQualityLimits,
+  applied: VideoQualityLimits,
+  degradationPreference?: RTCDegradationPreference,
+): Promise<VideoQualityLimits> {
   const track = sender.track;
   if (!track || track.readyState === "ended")
     throw new Error("Video source stopped");
-  const applied = resolveVideoQuality(
-    source.limits,
-    preference,
-  );
   const settings = track.getSettings();
-  const width = settings.width || source.limits.maxWidth;
-  const height = settings.height || source.limits.maxHeight;
+  const width = settings.width || bounds.maxWidth;
+  const height = settings.height || bounds.maxHeight;
   const scale = Math.max(
     1,
     width / applied.maxWidth,
     height / applied.maxHeight,
   );
   const parameters = sender.getParameters();
+  if (degradationPreference)
+    parameters.degradationPreference =
+      degradationPreference;
   if (!parameters.encodings?.length)
     throw new Error(
       "Video encoding parameters unavailable",
