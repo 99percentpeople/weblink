@@ -136,7 +136,7 @@ struct Pending {
     damage: Damage,
     options: Option<MediaOptions>,
     // Driver/HRD ceiling for a pooled worker, independent of its BWE target.
-    group_limit: Option<u64>,
+    group_limit: Option<(u64, u32)>,
     stopped: bool,
     wake: bool,
     keyframe: bool,
@@ -193,6 +193,8 @@ impl Fallback {
 
 #[derive(Clone, Default)]
 pub struct EncodeStatistics {
+    #[cfg(test)]
+    opens: u32,
     pub implementation: &'static str,
     pub frames: u64,
     pub gpu_inputs: u64,
@@ -276,7 +278,7 @@ impl Encoder {
     ) -> Result<Self> {
         let pending = Arc::new((
             Mutex::new(Pending {
-                group_limit: bitrate.map(|_| options.max_bitrate),
+                group_limit: bitrate.map(|target| (options.max_bitrate, target)),
                 ..Default::default()
             }),
             Condvar::new(),
@@ -343,6 +345,7 @@ impl Encoder {
             .unwrap_or_else(|e| e.into_inner())
             .remove(&id);
     }
+    #[cfg(test)]
     pub fn set_bitrate(&self, bitrate: u32) {
         self.pending
             .0
@@ -409,16 +412,20 @@ impl Encoder {
     }
     pub(super) fn set_group_limit(&self, limit: u64, target: u32) {
         let mut pending = self.pending.0.lock().unwrap_or_else(|e| e.into_inner());
-        if !pending.stopped && pending.group_limit != Some(limit) {
-            pending.group_limit = Some(limit);
+        if !pending.stopped && pending.group_limit != Some((limit, target)) {
+            pending.group_limit = Some((limit, target));
             pending.bitrate = Some(target);
             pending.wake = true;
             self.pending.1.notify_one();
         }
     }
     #[cfg(test)]
-    pub(super) fn group_limit(&self) -> Option<u64> {
+    pub(super) fn group_budget(&self) -> Option<(u64, u32)> {
         self.pending.0.lock().unwrap().group_limit
+    }
+    #[cfg(test)]
+    pub(super) fn group_limit(&self) -> Option<u64> {
+        self.group_budget().map(|(limit, _)| limit)
     }
     pub fn close(&self) {
         self.recording.end();
@@ -449,12 +456,10 @@ fn run(
     bitrate: Option<u32>,
     outputs: Arc<Mutex<HashMap<u64, (Arc<super::encoding_output::Output>, u64)>>>,
 ) -> Result<()> {
-    let runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
+    let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
     selection.set_preset(options.encoding_preset);
     let mut encoder: Option<backend::Encoder> = None;
-    let mut reopen_for_bitrate = false;
-    let mut overlapping_sessions = true;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
     let mut waiting_for_budget = false;
@@ -503,7 +508,7 @@ fn run(
             keyframe |= std::mem::take(&mut pending.keyframe);
             let (frame, damage) = pending.take_input();
             let mut next_options = pending.options.take();
-            if let Some(limit) = pending.group_limit {
+            if let Some((limit, _)) = pending.group_limit {
                 if let Some(next) = next_options.as_mut() {
                     next.max_bitrate = limit;
                 } else if options.max_bitrate != limit {
@@ -521,9 +526,8 @@ fn run(
             if let Some(next) = next_options {
                 damage = Damage::default();
                 rate_control.set_limit(next.max_bitrate as u32);
-                if next.frame_rate != options.frame_rate || next.max_bitrate != options.max_bitrate
-                {
-                    // Frame rate and HRD capacity can be fixed at initialization.
+                if next.frame_rate != options.frame_rate {
+                    // Frame rate is part of the negotiated media type.
                     // Reopen the encoder while keeping the source and RTP sender alive.
                     encoder = None;
                     in_flight.clear();
@@ -579,65 +583,16 @@ fn run(
             if bitrate == 0 {
                 keyframe = true;
             } else if let Some(active) = &mut encoder {
-                match active.try_set_bitrate(bitrate) {
-                    Ok(applied) => {
-                        reopen_for_bitrate = !applied;
-                        if applied {
-                            statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate =
-                                Some(bitrate);
-                        }
-                    }
-                    Err(error) if selection.reject_nvenc(&error) => {
-                        encoder = None;
-                        in_flight.clear();
-                        keyframe = true;
-                        damage = Damage::default();
-                        continue;
-                    }
-                    Err(error) => return Err(error),
+                if active.try_set_bitrate(bitrate) {
+                    statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate = Some(bitrate);
                 }
-            }
-        }
-        // Drivers which latch their rate at initialization can prepare a second
-        // session while the current one continues to consume the live budget.
-        if let Some(active) = encoder.as_mut().filter(|_| overlapping_sessions) {
-            let compatible_input = latest.as_ref().is_some_and(|frame| {
-                (active.width, active.height) == (frame.width, frame.height)
-                    && active.device.as_ref() == frame.device()
-            });
-            match active.prepare_bitrate(
-                rate_control.current(),
-                compatible_input,
-                &selection,
-                &wake,
-                &runtime,
-            ) {
-                Ok(true) => {
-                    reopen_for_bitrate = false;
-                    in_flight.clear();
-                    damage = Damage::default();
-                    keyframe = true;
-                    let controls = active.control_status();
-                    let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
-                    stats.bitrate = Some(rate_control.current());
-                    stats.controls = controls;
-                    stats.in_flight = 0;
-                }
-                Ok(false) => {}
-                // A driver with only one hardware session still supports rate
-                // changes using exclusive renegotiation on a fresh input.
-                Err(_) => overlapping_sessions = false,
             }
         }
         if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
-            let format_changed = encoder.as_ref().is_none_or(|encoder| {
+            if encoder.as_ref().is_none_or(|encoder| {
                 (encoder.width, encoder.height) != (frame.width, frame.height)
                     || encoder.device.as_ref() != frame.device()
-            });
-            if format_changed || (!overlapping_sessions && reopen_for_bitrate) {
-                if format_changed {
-                    overlapping_sessions = true;
-                }
+            }) {
                 // Reconfigure on a fresh input so an idle sender can still drain earlier output.
                 drop(encoder.take());
                 in_flight.clear();
@@ -683,10 +638,13 @@ fn run(
                     Err(error) => return Err(error),
                 }
                 let controls = encoder.as_ref().unwrap().control_status();
-                reopen_for_bitrate = false;
                 let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                #[cfg(test)]
+                {
+                    stats.opens += 1;
+                }
                 stats.implementation = encoder.as_ref().unwrap().implementation();
-                stats.bitrate = Some(rate_control.current());
+                stats.bitrate = Some(encoder.as_ref().unwrap().bitrate);
                 stats.selection = selection.report.clone();
                 stats.controls = controls;
                 stats.in_flight = 0;
@@ -1177,6 +1135,7 @@ mod tests {
         let second = acquire("second", "test-bad", false);
         let recording = acquire("recording", "test-bad", true);
         let retained = acquire("retained", "test-good", false);
+        super::super::encoding_pool::tests::confirm_startup(&pool);
         let failed = first.encoder().unwrap();
         assert!(Arc::ptr_eq(&failed, &second.encoder().unwrap()));
         assert!(Arc::ptr_eq(&failed, &recording.encoder().unwrap()));
@@ -1302,8 +1261,8 @@ mod tests {
                 };
                 let encoder = Encoder::new(info.id.clone(), options.clone(), false).unwrap();
                 let pending = Arc::downgrade(&encoder.pending);
-                // Include ceiling-only changes: drivers can ignore HRD writes on a
-                // running transform, so the new budget must reach a reopened encoder.
+                let mut opened_ceiling = 0;
+                let mut opened_fps = 0;
                 for (fps, ceiling) in [
                     (60, 8_000_000),
                     (60, 1_500_000),
@@ -1311,6 +1270,10 @@ mod tests {
                     (30, 12_000_000),
                     (60, 8_000_000),
                 ] {
+                    if fps != opened_fps {
+                        opened_fps = fps;
+                        opened_ceiling = ceiling;
+                    }
                     options.frame_rate = fps;
                     options.max_bitrate = ceiling;
                     encoder.update_options(options.clone());
@@ -1331,7 +1294,7 @@ mod tests {
                         .iter()
                         .find(|c| c.name == "bufferBytes")
                         .unwrap();
-                    assert_eq!(buffer.requested, (ceiling as u32).div_ceil(8 * fps));
+                    assert_eq!(buffer.requested, (opened_ceiling as u32).div_ceil(8 * fps));
                     assert_eq!(stats.in_flight, 0);
                 }
                 // Every fresh input has completed; now repeat only cached pixels.

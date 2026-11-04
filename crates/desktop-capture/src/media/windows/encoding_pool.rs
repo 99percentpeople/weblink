@@ -5,15 +5,31 @@ use crate::Result;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, Weak},
+    time::{Duration, Instant},
 };
 #[cfg(test)]
 #[path = "encoding_pool_tests.rs"]
-mod tests;
+pub(super) mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Key {
     profile: EncodingProfile,
-    bitrate: u32,
+    allocation: Allocation,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Allocation {
+    Independent(u64),
+    Shared(u32),
+}
+
+// The network budget is immediate. Only a change of group membership needs
+// sustained evidence, so a transient bandwidth estimate cannot move a viewer.
+const GROUP_SETTLE: Duration = Duration::from_secs(2);
+
+struct Candidate {
+    bucket: u32,
+    diverging: bool,
+    since: Instant,
 }
 struct Slot {
     id: String,
@@ -23,10 +39,55 @@ struct Slot {
     warming: bool,
     preview: bool,
     recording: bool,
-    target: u64,
+    target: Option<u64>,
+    allocation: Allocation,
+    candidate: Option<Candidate>,
     key: Key,
     encoder: Arc<hardware::Encoder>,
     output: Option<Arc<Output>>,
+}
+impl Slot {
+    fn budget(&self) -> u32 {
+        self.target.unwrap_or(300_000).min(self.options.max_bitrate) as u32
+    }
+    fn observe_group(&mut self, bucket: Option<u32>, diverging: bool, now: Instant) {
+        let Some(bucket) = bucket else {
+            self.candidate = None;
+            return;
+        };
+        if self.allocation == Allocation::Shared(bucket) {
+            self.candidate = None;
+            return;
+        }
+        // While viewers diverge, a steadily rising/falling estimate may cross
+        // several bands. Measure how long the divergence lasts, not how long
+        // an estimate stays exactly in its final band.
+        let since = self
+            .candidate
+            .as_ref()
+            .filter(|previous| {
+                if previous.diverging != diverging {
+                    return false;
+                }
+                match self.allocation {
+                    Allocation::Shared(base) if diverging => {
+                        previous.bucket.cmp(&base) == bucket.cmp(&base)
+                    }
+                    _ => previous.bucket == bucket,
+                }
+            })
+            .map_or(now, |previous| previous.since);
+        if now.saturating_duration_since(since) >= GROUP_SETTLE {
+            self.allocation = Allocation::Shared(bucket);
+            self.candidate = None;
+        } else {
+            self.candidate = Some(Candidate {
+                bucket,
+                diverging,
+                since,
+            });
+        }
+    }
 }
 #[derive(Default)]
 struct State {
@@ -40,15 +101,44 @@ struct Retired {
     slot: Slot,
     last: bool,
 }
+#[derive(Clone, Copy)]
+struct GroupBudget {
+    low: u32,
+    high: u32,
+    ceiling: u64,
+}
+impl GroupBudget {
+    fn member(slot: &Slot) -> Self {
+        let rate = slot.budget();
+        Self {
+            low: rate,
+            high: rate,
+            ceiling: slot.options.max_bitrate,
+        }
+    }
+    fn combine(self, other: Self) -> Self {
+        // A paused viewer constrains neither the active target nor its ceiling.
+        match (self.high, other.high) {
+            (0, 1..) => other,
+            (1.., 0) => self,
+            _ => Self {
+                low: self.low.min(other.low),
+                high: self.high.max(other.high),
+                ceiling: self.ceiling.min(other.ceiling),
+            },
+        }
+    }
+}
 impl State {
     fn sync_limit(&self, encoder: &Arc<hardware::Encoder>) {
-        if let Some(strictest) = self
+        let budget = self
             .slots
             .values()
             .filter(|slot| !slot.warming && Arc::ptr_eq(&slot.encoder, encoder))
-            .min_by_key(|slot| slot.options.max_bitrate)
-        {
-            encoder.set_group_limit(strictest.options.max_bitrate, strictest.key.bitrate);
+            .map(GroupBudget::member)
+            .reduce(GroupBudget::combine);
+        if let Some(budget) = budget {
+            encoder.set_group_limit(budget.ceiling, budget.low);
         }
     }
     fn remove(&mut self, token: u64) -> Option<Retired> {
@@ -144,22 +234,22 @@ impl Pool {
                 self.feedback.clone().unwrap_or_else(|| wake.clone()),
             )?)
         };
-        let target = if recording || preview {
-            options.max_bitrate
-        } else {
-            300_000
-        };
-        let key = Key {
-            profile: EncodingProfile::new(&backend, &options, preview),
-            bitrate: bitrate_bucket(target, options.max_bitrate),
-        };
+        let target = (recording || preview).then_some(options.max_bitrate);
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.closed {
             return Err("Native encoder pool is closed".into());
         }
-        let encoder = self.get_or_create(&mut state, &key, &backend, &options, wake)?;
         state.next += 1;
         let token = state.next;
+        let allocation = target.map_or(Allocation::Independent(token), |budget| {
+            Allocation::Shared(bitrate_bucket(budget, options.max_bitrate))
+        });
+        let key = Key {
+            profile: EncodingProfile::new(&backend, &options, preview),
+            allocation,
+        };
+        let initial = target.unwrap_or(300_000).min(options.max_bitrate) as u32;
+        let encoder = self.get_or_create(&mut state, &key, &backend, &options, initial, wake)?;
         state.slots.insert(
             token,
             Slot {
@@ -171,6 +261,8 @@ impl Pool {
                 preview,
                 recording,
                 target,
+                allocation,
+                candidate: None,
                 key,
                 encoder: encoder.clone(),
                 output: output.clone(),
@@ -192,6 +284,7 @@ impl Pool {
         key: &Key,
         backend: &str,
         options: &MediaOptions,
+        initial: u32,
         wake: crate::surface::gpu::Wake,
     ) -> Result<Arc<hardware::Encoder>> {
         if let Some(encoder) = state
@@ -207,7 +300,7 @@ impl Pool {
             options.clone(),
             wake,
             self.feedback.clone().unwrap_or_else(|| Arc::new(|| {})),
-            key.bitrate,
+            initial,
         )?);
         state.groups.retain(|_, encoder| encoder.strong_count() > 0);
         state.groups.insert(key.clone(), Arc::downgrade(&encoder));
@@ -310,6 +403,9 @@ impl Pool {
         result
     }
     pub fn reconcile(&self, wake: crate::surface::gpu::Wake) -> Result<()> {
+        self.reconcile_at(wake, Instant::now())
+    }
+    fn reconcile_at(&self, wake: crate::surface::gpu::Wake, now: Instant) -> Result<()> {
         let mut retired = Vec::new();
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut tokens: Vec<_> = state
@@ -318,27 +414,50 @@ impl Pool {
             .filter(|(_, slot)| !slot.warming)
             .map(|(token, _)| *token)
             .collect();
-        tokens.sort_by_key(|token| !state.slots[token].recording);
-        // Read every pending budget before deciding whether a shared group
-        // needs to split. Processing one viewer at a time can otherwise reopen
-        // an encoder even when all viewers are moving to the same bucket.
-        for slot in state.slots.values_mut() {
+        tokens.sort_by_key(|token| (!state.slots[token].recording, *token));
+        // Compare all feedback from the same snapshot before deciding membership.
+        let mut budgets: HashMap<u64, GroupBudget> = HashMap::new();
+        for slot in state.slots.values_mut().filter(|slot| !slot.warming) {
             if let Some(output) = &slot.output {
                 if output.take_keyframe_request() {
                     slot.encoder.request_recording_keyframe();
                 }
                 if let Some(rate) = output.source.take_rate_control_request() {
                     if !slot.preview {
-                        slot.target = rate.target_bitrate_bps;
+                        slot.target = Some(rate.target_bitrate_bps);
+                        if output.set_paused(rate.target_bitrate_bps == 0) {
+                            slot.encoder.request_recording_keyframe();
+                        }
                     }
                 }
             }
+            let member = GroupBudget::member(slot);
+            budgets
+                .entry(slot.encoder.group_id)
+                .and_modify(|budget| *budget = budget.combine(member))
+                .or_insert(member);
+        }
+        for encoder in state.groups.values().filter_map(Weak::upgrade) {
+            if let Some(budget) = budgets.get(&encoder.group_id) {
+                encoder.set_group_limit(budget.ceiling, budget.low);
+            }
+        }
+        for slot in state.slots.values_mut().filter(|s| !s.warming) {
+            let budget = slot.budget();
+            let group = budgets[&slot.encoder.group_id];
+            let diverging = u64::from(group.high) * 2 >= u64::from(group.low) * 3;
+            let bucket = slot.target.filter(|_| budget > 0).map(|_| {
+                // Crossing a band boundary by a few kilobits does not justify a split.
+                let group_rate = if diverging { budget } else { group.low };
+                bitrate_bucket(u64::from(group_rate), slot.options.max_bitrate)
+            });
+            slot.observe_group(bucket, diverging, now);
         }
         for token in tokens {
             let slot = state.slots.get_mut(&token).unwrap();
             let key = Key {
                 profile: EncodingProfile::new(&slot.backend, &slot.options, slot.preview),
-                bitrate: bitrate_bucket(slot.target, slot.options.max_bitrate),
+                allocation: slot.allocation,
             };
             let unchanged = slot.key == key;
             let recording = slot.recording;
@@ -347,6 +466,7 @@ impl Pool {
             let backend = slot.backend.clone();
             let output = slot.output.clone();
             let old_key = slot.key.clone();
+            let budget = slot.budget();
             let existing = state
                 .groups
                 .get(&key)
@@ -357,7 +477,6 @@ impl Pool {
                 // place; viewers sharing it can move after their budgets change.
                 if !unchanged {
                     old.update_options(options.clone());
-                    old.set_bitrate(key.bitrate);
                     state.groups.remove(&old_key);
                     for member in state.slots.values_mut() {
                         if Arc::ptr_eq(&member.encoder, &old) {
@@ -381,14 +500,13 @@ impl Pool {
                 .filter(|s| Arc::ptr_eq(&s.encoder, &old))
                 .all(|s| {
                     EncodingProfile::new(&s.backend, &s.options, s.preview) == key.profile
-                        && bitrate_bucket(s.target, s.options.max_bitrate) == key.bitrate
+                        && s.allocation == key.allocation
                 });
             let encoder = if let Some(existing) = existing {
                 existing
             } else if moves_together {
                 // Keep the bitstream and all output generations intact when
                 // the entire group changes rate, including a sole viewer.
-                old.set_bitrate(key.bitrate);
                 if old_key.profile != key.profile {
                     old.update_options(options.clone());
                 }
@@ -401,7 +519,7 @@ impl Pool {
                 }
                 old.clone()
             } else {
-                self.get_or_create(&mut state, &key, &backend, &options, wake.clone())?
+                self.get_or_create(&mut state, &key, &backend, &options, budget, wake.clone())?
             };
             let slot = state.slots.get_mut(&token).unwrap();
             slot.key = key;
@@ -454,7 +572,7 @@ impl Pool {
             }
             slot.options = options;
             if slot.recording || slot.preview {
-                slot.target = slot.options.max_bitrate;
+                slot.target = Some(slot.options.max_bitrate);
             }
         }
         for encoder in changed_limits.values() {
@@ -510,7 +628,7 @@ impl Pool {
         let next = settings.bounded(&bounds.apply(&slot.options)?)?;
         let key = Key {
             profile: EncodingProfile::new(&slot.backend, &next, slot.preview),
-            bitrate: bitrate_bucket(slot.target, next.max_bitrate),
+            allocation: slot.allocation,
         };
         if key == slot.key {
             let encoder = slot.encoder.clone();
@@ -522,11 +640,14 @@ impl Pool {
         }
         let backend = slot.backend.clone();
         let target = slot.target;
+        let allocation = slot.allocation;
+        let initial = slot.budget().min(next.max_bitrate as u32);
         let encoder = self.get_or_create(
             &mut state,
             &key,
             &backend,
             &next,
+            initial,
             self.feedback.clone().unwrap_or_else(|| Arc::new(|| {})),
         )?;
         // Warm a candidate without detaching the viewer or exposing its failures
@@ -544,6 +665,8 @@ impl Pool {
                 preview: false,
                 recording: false,
                 target,
+                allocation,
+                candidate: None,
                 key: key.clone(),
                 encoder: encoder.clone(),
                 output: None,
@@ -569,7 +692,7 @@ impl Pool {
                 let Some(current) = state.slots.get(&token) else {
                     break Err("Video receiver no longer active".into());
                 };
-                if bitrate_bucket(current.target, next.max_bitrate) != key.bitrate {
+                if current.allocation != key.allocation {
                     break Ok(false);
                 }
             }
@@ -585,7 +708,7 @@ impl Pool {
                 .ok_or("Video receiver no longer active")?;
             if !ready
                 || warmed.as_ref().is_none_or(|candidate| candidate.key != key)
-                || bitrate_bucket(slot.target, next.max_bitrate) != key.bitrate
+                || slot.allocation != key.allocation
             {
                 return Ok(false);
             }

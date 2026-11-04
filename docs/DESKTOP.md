@@ -586,21 +586,18 @@ hardware/software format combinations. Stored settings accept fully automatic en
 Other combinations use the automatic default; unavailable saved concrete pairs
 are marked instead of silently replaced. Each remote peer owns its encoded-frame
 source and RTP connection, with independent bitrate and keyframe feedback. Native
-H.264/H.265 hardware workers are pooled within a capture: the backend, codec,
-size/FPS limits, colour settings, encoder preset, preview mode and bandwidth bucket must match.
-Viewers with different bitrate ceilings can share one worker in the same
-bucket. The driver uses the lowest ceiling of its current consumers. Each RTP
-sender still enforces its viewer's limit. When allocations diverge, only the
-affected viewers move; they can rejoin the group when their buckets match again.
-Consumers in the same group receive copies of one encoded access unit. Allocations
-use geometric 1.5× buckets rounded down, including the configured ceiling.
-A budget change can split or merge only the affected viewer; it retains its RTP
-connection, rejects stale group output, and resumes on a keyframe with a common
-monotonic timestamp. A sole viewer, or an entire group moving to the same bandwidth
-bucket, changes bitrate in place without resetting output admission or waiting for
-a new keyframe. Pending feedback is collected for all viewers before regrouping.
-When individual bandwidth budgets change, the pool splits or rejoins workers
-on the next reconciliation without an additional hold on upward changes.
+H.264/H.265 viewers start with independent hardware workers and bandwidth feedback.
+Viewers can share one encoded bitstream when their backend, codec, dimensions, frame
+rate, colour, preset and preview mode match and their allocations settle in the
+same bitrate band for two seconds. The pool uses geometric 1.5× bands only to
+decide membership. The encoder follows the lowest positive allocation of its
+active consumers, capped by their settings. A suspended viewer skips frames
+and resumes on a keyframe without pausing the other viewers.
+Short excursions across a band boundary leave the current bitstream intact.
+When viewers' budgets diverge by a factor of 1.5 or more for two seconds, a
+viewer can move to a separate worker. Compatible streams can rejoin after their
+budgets settle again. Each viewer retains its RTP sender. A sole viewer or a
+whole group changing rate together adjusts the active encoder in place.
 Hardware frame timestamps follow capture time, not worker submission time, so
 queueing, conversion retries and driver readiness do not rewrite the media cadence.
 Static refreshes advance on the frame's preparation time and timestamps remain
@@ -633,9 +630,9 @@ separately (including auto). Missing preferences default to balanced. Changes
 apply to the next share; live resolution/bitrate updates and codec negotiation
 preserve the session's preset. Encoder groups include preset intent in their key.
 Preset intent is independent of codec, resolution, frame rate and bitrate limits.
-Media Foundation maps the intents to quality/speed values 33, 67 and 0 while
-retaining low-latency CBR and no B frames. Discovery initializes each preset;
-non-default MF choices also require matching control readback. Native software
+Media Foundation maps the intents to quality/speed values 33, 67 and 0 and
+requests low latency and zero B frames. Discovery initializes each preset.
+Non-default MF choices also require matching control readback. Native software
 VP8, VP9, H.264 and AV1 expose the same three intents through the SDK's
 software preset API. Balanced preserves upstream defaults. On a shared room
 connection, each software screen sender owns its preset and live VFR target.
@@ -728,12 +725,10 @@ Hardware encoding keeps the selected frame cadence independent of WebRTC's
 observed input frame rate, so motion can resume after static content. Remote peers
 start conservatively and apply bandwidth reductions immediately. Upward updates
 are coalesced over 50 ms and then follow the latest allocation directly, without
-an additional multiplicative recovery ramp. Shared workers first use the bandwidth
-bucket described above; the hardware controller then quantizes down in 16 kbps
-steps, preserving smaller positive allocations.
-The encoder target stays within its members' latest bandwidth allocations
-and configured bitrate cap; WebRTC retains congestion control and pacing. These
-limits govern the target rate, not the size of individual keyframe bursts. Where
+an additional multiplicative recovery ramp. The hardware controller rounds the
+actual budget down in 16 kbps steps, preserving smaller positive allocations.
+Frame admission obeys the current network budget. WebRTC controls congestion and
+pacing, and individual keyframes may exceed a single frame's byte budget. Where
 the driver supports it, Media Foundation requests a one-frame HRD/VBV budget
 at the configured bitrate ceiling before negotiating media types. Some drivers
 latch this capacity at initialization and silently ignore later writes. Using
@@ -741,19 +736,19 @@ the ceiling instead of the conservative startup estimate leaves room for bitrate
 recovery. A driver that rejects the early request gets another attempt after type
 negotiation. Hardware also requests the low-complexity quality/speed setting (33),
 favoring interactive latency at a potential cost to compression efficiency.
-Both controls are optional and their readback remains visible in diagnostics. Lowering
-the live bitrate ceiling takes effect immediately; raising it waits for new
-transport feedback. Explicit frame-rate or bitrate-ceiling changes recreate
-only the hardware transform to refresh its fixed media type and buffer budget;
-the RTP session stays connected. For bandwidth feedback, a Media Foundation
-encoder must confirm its new average bitrate through the codec API. Some
-transforms acknowledge the write but keep encoding at the bitrate negotiated
-in their initial output media type. When a live change cannot be confirmed,
-the worker opens a replacement at the new target in the background. The current
-encoder keeps sending frames under the latest network budget until the replacement
-can accept a fresh frame. The switch starts with a keyframe on the same RTP sender.
-A superseded target is discarded. Drivers limited to one concurrent session
-use exclusive renegotiation.
+Both controls are optional and their readback remains visible in diagnostics.
+A lower ceiling limits the transport target immediately. A higher ceiling lets
+the target follow the available bandwidth. A change to the negotiated frame
+rate, dimensions or input device can require a new media type.
+Bitrate feedback and bitrate ceiling edits keep the running
+encoder. NVENC reconfigures the existing session. Media Foundation negotiates
+the configured ceiling at initialization and requests the transport target on
+that same instance. Intel MFTs use unconstrained VBR when the driver accepts
+it, so the mean bitrate can follow WebRTC feedback during encoding. Other MFTs
+use CBR. If the driver ignores live writes, the encoder keeps its
+last confirmed rate. Frame admission can reduce the delivered frame rate on a
+slower link. Statistics report the confirmed encoder setting separately from
+the transport target and actual transmitted bitrate.
 
 After the first encoded frame binds the source to its sender, transport rate
 feedback reaches the source independently of subsequent frames and wakes the

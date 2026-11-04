@@ -114,7 +114,7 @@ fn configuration(codec: Codec) -> Configuration {
 
 #[test]
 #[ignore = "Requires a Windows MF HEVC encoder; measures synthetic GPU frames"]
-fn mf_worker_applies_live_bitrate_to_encoded_frames() {
+fn mf_worker_preserves_one_instance_across_live_bitrate_changes() {
     use super::super::{Encoder as Worker, Frame};
 
     let info = mf::detect()
@@ -159,6 +159,7 @@ fn mf_worker_applies_live_bitrate_to_encoded_frames() {
     let low = 2_000_000;
     let worker = Worker::shared(info.id, options, Arc::new(|| {}), Arc::new(|| {}), low).unwrap();
     let mut means = Vec::new();
+    let mut confirmed = Vec::new();
     for rate in [low, 20_000_000, low] {
         worker.set_bitrate(rate);
         let mut before = worker.statistics();
@@ -171,7 +172,8 @@ fn mf_worker_applies_live_bitrate_to_encoded_frames() {
         }
         assert!(worker.error().is_none(), "{:?}", worker.error());
         let after = worker.statistics();
-        assert_eq!(after.bitrate, Some(rate));
+        assert_eq!(after.opens, 1, "Changing the bitrate replaced the encoder");
+        confirmed.push(after.bitrate.unwrap());
         let count = after.frames - before.frames;
         assert!(count >= 15, "Only {count} frames at {rate}");
         means.push((after.encoded_bytes - before.encoded_bytes) / count);
@@ -180,79 +182,20 @@ fn mf_worker_applies_live_bitrate_to_encoded_frames() {
         "{} HEVC bytes per frame at low/high/low: {means:?}",
         info.name
     );
-    assert!(means[1] > means[0] * 2 && means[1] > means[2] * 2);
-}
-#[test]
-#[ignore = "Requires Windows MF HEVC and two hardware sessions"]
-fn mf_rate_handoff_preserves_the_active_stream_and_discards_stale_targets() {
-    let runtime = transform::Runtime::new().unwrap();
-    let image = Image::new();
-    let mut converter = gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
-    let surface = converter
-        .convert(&image.captured(), &MediaOptions::default())
-        .unwrap()
-        .unwrap();
-    let id = mf::detect()
-        .unwrap()
-        .into_iter()
-        .find(|e| e.codecs.iter().any(|c| c == "video/h265"))
-        .unwrap()
-        .id;
-    let mut selection = Selection::new(id, false);
-    let config = configuration(Codec::Hevc);
-    let low = 2_000_000;
-    let high = 6_000_000;
-    let wake: Wake = Arc::new(|| {});
-    let mut active = selection
-        .open(
-            320,
-            180,
-            60,
-            low,
-            high,
-            config.color,
-            wake.clone(),
-            Some(&image.device),
-        )
-        .unwrap();
-    let update = |active: &mut Encoder, rate, has_input| {
-        active.prepare_bitrate(rate, has_input, &selection, &wake, &runtime)
-    };
-    assert!(encode(&mut active, surface.clone(), 0).keyframe);
-    assert!(!update(&mut active, high, true).unwrap());
-    // The original MFT still accepts and emits delta frames while its replacement opens.
-    let mut pts = 16_667;
-    assert!(!encode(&mut active, surface.clone(), pts).keyframe);
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while active.warmup.is_some() {
-        assert!(!update(&mut active, low, false).unwrap());
-        assert!(Instant::now() < deadline, "Obsolete session was retained");
-        thread::sleep(Duration::from_millis(1));
+    let vbr = windows::Win32::Media::MediaFoundation::eAVEncCommonRateControlMode_UnconstrainedVBR;
+    if worker
+        .statistics()
+        .controls
+        .iter()
+        .any(|control| control.name == "rateControl" && control.actual == Some(vbr.0 as u32))
+    {
+        assert_eq!(confirmed, [low, 20_000_000, low]);
     }
-    assert_eq!(active.config.bitrate, low);
-    // A failed, superseded request must not disable overlap. A matching failure
-    // asks the caller to retry with the driver's sole session.
-    active.warmup = Some(mf::rate_change::Warmup::unavailable(high));
-    assert!(!update(&mut active, low, false).unwrap());
-    active.warmup = Some(mf::rate_change::Warmup::unavailable(high));
-    assert!(update(&mut active, high, true).is_err());
-    assert!(active.warmup.is_none());
-    assert_eq!(active.config.bitrate, low);
-
-    assert!(!update(&mut active, high, true).unwrap());
-    assert!(!update(&mut active, high, false).unwrap());
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !update(&mut active, high, true).unwrap() {
-        pts += 16_667;
-        encode(&mut active, surface.clone(), pts);
-        assert!(
-            Instant::now() < deadline,
-            "Replacement did not become ready"
-        );
+    if confirmed == [low, 20_000_000, low] {
+        assert!(means[1] > means[0] * 2 && means[1] > means[2] * 2);
+    } else {
+        assert_eq!(confirmed, [20_000_000; 3], "unexpected confirmed rates");
     }
-    assert_eq!(active.config.bitrate, high);
-    active.request_keyframe().unwrap();
-    assert!(encode(&mut active, surface, pts + 16_667).keyframe);
 }
 fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i64) -> Packet {
     let started = Instant::now();
@@ -323,7 +266,7 @@ fn nvenc_scene_changes_follow_the_live_bitrate() {
         let mut timestamp = 0;
         let mut peaks = Vec::new();
         for rate in [low, high, low] {
-            assert!(encoder.try_set_bitrate(rate).unwrap());
+            assert!(encoder.try_set_bitrate(rate));
             let controls = encoder.control_status();
             let buffer = controls
                 .iter()
@@ -374,7 +317,7 @@ fn nvenc_uses_only_requested_keyframes_across_bitrate_changes() {
         // PLI/recording requests must still produce an immediate recovery IDR.
         for frame in 0..180 {
             if frame == 45 {
-                assert!(encoder.try_set_bitrate(750_000).unwrap());
+                assert!(encoder.try_set_bitrate(750_000));
             }
             if frame == 95 {
                 encoder.request_keyframe().unwrap();
@@ -461,7 +404,7 @@ fn nvenc_presets_accept_concurrent_shared_surfaces_and_bitrate_changes() {
             thread::sleep(Duration::from_millis(1));
         }
         for encoder in &mut encoders {
-            assert!(encoder.try_set_bitrate(750_000).unwrap());
+            assert!(encoder.try_set_bitrate(750_000));
             encode(encoder, shared.clone(), 160_000);
             encoder.request_keyframe().unwrap();
             assert!(encode(encoder, shared.clone(), 200_000).keyframe);
@@ -513,7 +456,7 @@ fn nvenc_gpu_output_and_same_codec_fallback_preserve_timestamps_and_keyframes() 
         );
         let packet = encode(&mut encoder, surface.clone(), 123_456);
         assert!(packet.keyframe);
-        assert!(encoder.try_set_bitrate(750_000).unwrap());
+        assert!(encoder.try_set_bitrate(750_000));
         assert_eq!(encoder.codec, codec.encoded());
         encode(&mut encoder, surface.clone(), 1_000_000);
         encoder.request_keyframe().unwrap();

@@ -1,4 +1,4 @@
-//! Windows hardware H.264/HEVC transforms. Each instance has a single owner in the COM MTA.
+//! Windows hardware H.264/HEVC transforms. Every instance stays on its owning MTA thread.
 use super::encoders::Codec;
 use crate::damage::DirtyRect;
 use crate::media::latency::CodecControl;
@@ -213,13 +213,19 @@ impl Transform {
                         fps.saturating_mul(2),
                         false,
                     ));
-                    configuration.push(set_control(
-                        api,
-                        "rateControl",
-                        &CODECAPI_AVEncCommonRateControlMode,
-                        eAVEncCommonRateControlMode_CBR.0 as u32,
-                        false,
-                    ));
+                    let mode = rate_control(&activation, api);
+                    if mode.accepted
+                        && mode.requested == eAVEncCommonRateControlMode_UnconstrainedVBR.0 as u32
+                    {
+                        configuration.push(set_control(
+                            api,
+                            "maxBitrate",
+                            &CODECAPI_AVEncCommonMaxBitRate,
+                            bitrate_limit,
+                            false,
+                        ));
+                    }
+                    configuration.push(mode);
                     configuration.push(super::preset::apply(api, preset));
                     // Some drivers latch HRD at SetOutputType and silently ignore
                     // later writes. Reserve one frame at the configured ceiling,
@@ -352,6 +358,7 @@ impl Transform {
                     "bFrames" => &CODECAPI_AVEncMPVDefaultBPictureCount,
                     "gopFrames" => &CODECAPI_AVEncMPVGOPSize,
                     "rateControl" => &CODECAPI_AVEncCommonRateControlMode,
+                    "maxBitrate" => &CODECAPI_AVEncCommonMaxBitRate,
                     "qualityVsSpeed" => &CODECAPI_AVEncCommonQualityVsSpeed,
                     "bufferBytes" => &CODECAPI_AVEncCommonBufferSize,
                     "dirtyRegions" => &CODECAPI_AVEncVideoDirtyRectEnabled,
@@ -381,7 +388,7 @@ impl Transform {
             return false;
         };
         // Some MFTs report a successful write while retaining the bitrate from
-        // SetOutputType. Only a confirmed live change can reuse this instance.
+        // SetOutputType. Report only a confirmed change on the running instance.
         unsafe {
             let key = &CODECAPI_AVEncCommonMeanBitRate;
             api.SetValue(key, &VARIANT::from(bitrate)).is_ok()
@@ -535,6 +542,37 @@ impl Transform {
             }))
         }
     }
+}
+fn rate_control(activation: &IMFActivate, api: &ICodecAPI) -> CodecControl {
+    let mut vendor = [0; 32];
+    let mut len = 0;
+    let intel = unsafe {
+        activation.GetString(
+            &MFT_ENUM_HARDWARE_VENDOR_ID_Attribute,
+            &mut vendor,
+            Some(&mut len),
+        )
+    }
+    .is_ok()
+        && String::from_utf16_lossy(&vendor[..len as usize]).eq_ignore_ascii_case("VEN_8086");
+    let set = |mode: eAVEncCommonRateControlMode| {
+        set_control(
+            api,
+            "rateControl",
+            &CODECAPI_AVEncCommonRateControlMode,
+            mode.0 as u32,
+            false,
+        )
+    };
+    // Intel MFTs can acknowledge mean bitrate writes in CBR while continuing
+    // to encode at the original media-type rate. VBR supports live changes.
+    if intel {
+        let mode = set(eAVEncCommonRateControlMode_UnconstrainedVBR);
+        if mode.accepted {
+            return mode;
+        }
+    }
+    set(eAVEncCommonRateControlMode_CBR)
 }
 fn set_control(
     api: &ICodecAPI,

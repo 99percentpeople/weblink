@@ -66,7 +66,7 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
         wait_for_shared(&media, false).await;
         let original = media.hardware.encoder("second").unwrap();
         let before = decoded(&first).await;
-        let update = |width, height, fps| {
+        let update = |width, height, fps, max_bitrate| {
             let media = media.clone();
             tokio::task::spawn_blocking(move || {
                 media.update_peer_video_settings(
@@ -75,15 +75,30 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
                         max_width: width,
                         max_height: height,
                         frame_rate: fps,
-                        max_bitrate: 280_000,
+                        max_bitrate,
                         degradation_preference: "balanced".into(),
                     },
                 )
             })
         };
-        // A lower ceiling in the same allocation bucket keeps both bitstreams on
-        // the same worker. Only a subsequent resolution/fps change needs a split.
-        let (result, _) = tokio::join!(update(640, 360, 30), recording::frames(&media, 35));
+        // Keep both senders live while only the first viewer's budget diverges.
+        // The second viewer must retain its encoder throughout the split and merge.
+        let (result, _) = tokio::join!(
+            update(640, 360, 30, 160_000),
+            recording::frames(&media, 115)
+        );
+        result.unwrap().unwrap();
+        assert!(!Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("first").unwrap()
+        ));
+        assert!(Arc::ptr_eq(
+            &original,
+            &media.hardware.encoder("second").unwrap()
+        ));
+        assert!(decoded(&first).await > before + 5);
+        let (result, _) =
+            tokio::join!(update(640, 360, 30, 280_000), recording::frames(&media, 35));
         result.unwrap().unwrap();
         wait_for_shared(&media, false).await;
         assert!(Arc::ptr_eq(
@@ -91,7 +106,8 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
             &media.hardware.encoder("first").unwrap()
         ));
         assert_eq!(original.group_limit(), Some(280_000));
-        let (result, _) = tokio::join!(update(320, 180, 15), recording::frames(&media, 60));
+        let (result, _) =
+            tokio::join!(update(320, 180, 15, 280_000), recording::frames(&media, 60));
         result.unwrap().unwrap();
         assert!(decoded(&first).await > before + 5);
         assert!(decoded(&second).await > 10);
@@ -115,7 +131,8 @@ fn viewer_quality_splits_and_rejoins_live_encoders_without_reconnecting() {
             .unwrap()
             .iter()
             .any(|s| s.width == 640 && s.height == 360));
-        let (result, _) = tokio::join!(update(640, 360, 30), recording::frames(&media, 45));
+        let (result, _) =
+            tokio::join!(update(640, 360, 30, 280_000), recording::frames(&media, 45));
         result.unwrap().unwrap();
         wait_for_shared(&media, false).await;
         assert!(Arc::ptr_eq(

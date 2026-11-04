@@ -30,8 +30,7 @@ impl EncodingProfile {
     }
 }
 
-/// Round down, so a shared stream never exceeds any member's allocated bitrate.
-/// Nearby connections reuse an encoder instead of reconfiguring on every BWE sample.
+/// Classify a viewer for encoder reuse. The transport keeps its actual budget.
 pub(crate) fn bitrate_bucket(target: u64, limit: u64) -> u32 {
     let target = target.min(limit).min(u32::MAX as u64);
     if target < 150_000 {

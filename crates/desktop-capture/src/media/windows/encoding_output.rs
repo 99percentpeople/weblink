@@ -16,6 +16,7 @@ pub(super) struct Output {
 }
 struct State {
     generation: u64,
+    paused: bool,
     waiting_keyframe: bool,
     last_timestamp: i64,
 }
@@ -26,7 +27,8 @@ impl State {
         self.generation
     }
     fn accepts(&self, generation: u64, timestamp: i64, keyframe: bool) -> bool {
-        generation == self.generation
+        !self.paused
+            && generation == self.generation
             && timestamp > self.last_timestamp
             && (!self.waiting_keyframe || keyframe)
     }
@@ -50,6 +52,7 @@ impl Output {
             keyframe_requested: Arc::new(AtomicBool::new(false)),
             wake,
             state: Mutex::new(State {
+                paused: false,
                 generation: 0,
                 waiting_keyframe: true,
                 last_timestamp: -1,
@@ -68,6 +71,15 @@ impl Output {
     pub fn take_keyframe_request(&self) -> bool {
         let requested = self.keyframe_requested.swap(false, Ordering::AcqRel);
         self.source.take_keyframe_request() || requested
+    }
+    /// A suspended viewer must not pause an encoder still serving other viewers.
+    /// Resume only on a fresh keyframe because this viewer missed references.
+    pub fn set_paused(&self, paused: bool) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let resumed = state.paused && !paused;
+        state.paused = paused;
+        state.waiting_keyframe |= paused;
+        resumed
     }
     pub fn replace(&self) -> u64 {
         self.state
@@ -109,8 +121,23 @@ mod tests {
     }
 
     #[test]
+    fn paused_viewer_resumes_only_on_a_fresh_keyframe() {
+        let output = Output::new(&super::super::MediaOptions::default(), Arc::new(|| {})).unwrap();
+        let generation = output.replace();
+        output.state.lock().unwrap().delivered(100);
+        assert!(!output.set_paused(true));
+        assert!(!output.state.lock().unwrap().accepts(generation, 101, true));
+        assert!(output.set_paused(false));
+        assert!(!output.set_paused(false));
+        let state = output.state.lock().unwrap();
+        assert!(!state.accepts(generation, 101, false));
+        assert!(state.accepts(generation, 102, true));
+    }
+
+    #[test]
     fn group_migration_rejects_old_frames_and_waits_for_a_new_monotonic_keyframe() {
         let mut state = State {
+            paused: false,
             generation: 0,
             waiting_keyframe: true,
             last_timestamp: -1,

@@ -1,10 +1,100 @@
 use super::*;
 
+fn settle(pool: &Pool) {
+    let now = Instant::now();
+    pool.reconcile_at(Arc::new(|| {}), now).unwrap();
+    pool.reconcile_at(Arc::new(|| {}), now + GROUP_SETTLE)
+        .unwrap();
+}
+
+// Give new viewers real, matching allocations before testing shared ownership.
+pub(in crate::media::windows) fn confirm_startup(pool: &Pool) {
+    for slot in pool.state.lock().unwrap().slots.values_mut() {
+        if slot.target.is_none() {
+            slot.target = Some(300_000);
+        }
+    }
+    settle(pool);
+}
+
+#[test]
+fn independent_budgets_apply_immediately_and_regroup_only_after_sustained_divergence() {
+    let pool = Arc::new(Pool::default());
+    let viewer = |id: &str| {
+        pool.acquire(
+            id.into(),
+            "test".into(),
+            MediaOptions {
+                max_bitrate: 20_000_000,
+                ..options()
+            },
+            false,
+            false,
+            Arc::new(|| {}),
+        )
+        .unwrap()
+    };
+    let first = viewer("first");
+    let second = viewer("second");
+    assert!(!Arc::ptr_eq(
+        &first.encoder().unwrap(),
+        &second.encoder().unwrap()
+    ));
+    let start = Instant::now();
+    let sample = |first_rate, second_rate, ms| {
+        let mut state = pool.state.lock().unwrap();
+        state.slots.get_mut(&first.token).unwrap().target = Some(first_rate);
+        state.slots.get_mut(&second.token).unwrap().target = Some(second_rate);
+        drop(state);
+        pool.reconcile_at(Arc::new(|| {}), start + Duration::from_millis(ms))
+            .unwrap();
+    };
+    sample(5_739_000, 5_739_000, 0);
+    sample(5_739_000, 5_739_000, 1999);
+    assert_eq!(pool.active().len(), 2);
+    sample(5_739_000, 5_739_000, 2000);
+    let shared = first.encoder().unwrap();
+    assert!(Arc::ptr_eq(&shared, &second.encoder().unwrap()));
+    // The two real Intel estimates straddle a group band by less than 1%.
+    sample(5_739_000, 5_775_000, 2100);
+    sample(5_739_000, 5_775_000, 4500);
+    assert_eq!(pool.active().len(), 1);
+    assert_eq!(shared.group_budget(), Some((20_000_000, 5_739_000)));
+    sample(5_739_000, 1_000_000, 4600);
+    assert_eq!(shared.group_budget(), Some((20_000_000, 1_000_000)));
+    sample(5_739_000, 5_739_000, 4700);
+    sample(5_739_000, 1_000_000, 5000);
+    sample(5_739_000, 500_000, 6500);
+    assert_eq!(pool.active().len(), 1);
+    sample(5_739_000, 500_000, 7000);
+    assert!(Arc::ptr_eq(&shared, &first.encoder().unwrap()));
+    let lower = second.encoder().unwrap();
+    assert!(!Arc::ptr_eq(&shared, &lower));
+    assert_eq!(shared.group_budget(), Some((20_000_000, 5_739_000)));
+    assert_eq!(lower.group_budget(), Some((20_000_000, 500_000)));
+    sample(5_739_000, 5_739_000, 7200);
+    sample(5_739_000, 5_739_000, 9200);
+    assert!(Arc::ptr_eq(&shared, &second.encoder().unwrap()));
+    sample(5_739_000, 0, 9300);
+    assert_eq!(shared.group_budget(), Some((20_000_000, 5_739_000)));
+    sample(0, 0, 9400);
+    assert_eq!(shared.group_budget(), Some((20_000_000, 0)));
+    // Time spent moving together must not count towards a later split.
+    sample(12_000_000, 12_000_000, 10_000);
+    sample(12_000_000, 5_739_000, 11_900);
+    sample(12_000_000, 5_739_000, 13_899);
+    assert_eq!(pool.active().len(), 1);
+    sample(12_000_000, 5_739_000, 13_900);
+    assert_eq!(pool.active().len(), 2);
+    pool.close();
+}
+
 #[test]
 fn changed_feedback_retries_warmup_without_reconfiguring_a_replacement_viewer() {
     let pool = Arc::new(Pool::default());
     let first = acquire(&pool, "viewer", false);
     let other = acquire(&pool, "other", false);
+    confirm_startup(&pool);
     let update_pool = pool.clone();
     let updating = std::thread::spawn(move || {
         update_pool.update_peer(
@@ -23,14 +113,9 @@ fn changed_feedback_retries_warmup_without_reconfiguring_a_replacement_viewer() 
     // or its consumer retires. This exercises the race without a hardware driver.
     let wait_for_budget = |target| {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        while !pool
-            .state
-            .lock()
-            .unwrap()
-            .slots
-            .values()
-            .any(|s| s.warming && s.key.bitrate == bitrate_bucket(target, 300_000))
-        {
+        while !pool.state.lock().unwrap().slots.values().any(|s| {
+            s.warming && s.key.allocation == Allocation::Shared(bitrate_bucket(target, 300_000))
+        }) {
             assert!(
                 std::time::Instant::now() < deadline,
                 "missing warmup for {target}"
@@ -45,12 +130,13 @@ fn changed_feedback_retries_warmup_without_reconfiguring_a_replacement_viewer() 
         .slots
         .get_mut(&first.token)
         .unwrap()
-        .target = 160_000;
-    pool.reconcile(Arc::new(|| {})).unwrap();
+        .target = Some(160_000);
+    settle(&pool);
     wait_for_budget(160_000);
     first.close();
     let replacement = acquire(&pool, "viewer", false);
     assert!(updating.join().unwrap().is_err());
+    confirm_startup(&pool);
     assert!(Arc::ptr_eq(
         &replacement.encoder().unwrap(),
         &other.encoder().unwrap()
@@ -79,6 +165,7 @@ fn different_viewer_ceilings_share_only_while_their_bitrate_buckets_match() {
     };
     let high = viewer("high", 4_000_000);
     let low = viewer("low", 1_000_000);
+    confirm_startup(&pool);
     let encoder = high.encoder().unwrap();
     let low_output = low.output.as_ref().unwrap().clone();
     assert!(Arc::ptr_eq(&encoder, &low.encoder().unwrap()));
@@ -90,8 +177,8 @@ fn different_viewer_ceilings_share_only_while_their_bitrate_buckets_match() {
             .slots
             .get_mut(&high.token)
             .unwrap()
-            .target = target;
-        pool.reconcile(Arc::new(|| {})).unwrap();
+            .target = Some(target);
+        settle(&pool);
     };
     change(3_000_000);
     assert_eq!(pool.active().len(), 2);
@@ -128,6 +215,7 @@ fn failed_viewer_profile_keeps_the_original_encoder_and_other_consumers() {
     let viewer = acquire(&pool, "viewer", false);
     let other = acquire(&pool, "other", false);
     let recording = acquire(&pool, "recording", true);
+    confirm_startup(&pool);
     let original = viewer.encoder().unwrap();
     let output = viewer.output.as_ref().unwrap().clone();
     let worker_pool = pool.clone();
@@ -196,6 +284,7 @@ fn concurrent_viewers_and_recording_share_one_encoder_and_own_their_lifetimes() 
         .into_iter()
         .map(|thread| thread.join().unwrap())
         .collect();
+    confirm_startup(&pool);
     let recording = acquire(&pool, "recording", true);
     let encoder = recording.encoder().unwrap();
     assert_eq!(pool.active().len(), 1);
@@ -210,6 +299,7 @@ fn concurrent_viewers_and_recording_share_one_encoder_and_own_their_lifetimes() 
     assert_eq!(pool.statistics()[0].group_id, encoder.group_id);
     assert_eq!(pool.statistics()[0].consumers, ["recording"]);
     let later = acquire(&pool, "later", false);
+    confirm_startup(&pool);
     recording.close();
     assert!(Arc::ptr_eq(&encoder, &later.encoder().unwrap()));
     later.close();
@@ -237,6 +327,7 @@ fn bandwidth_changes_split_only_the_changed_viewer_and_rejoin_without_replacing_
     let pool = Arc::new(Pool::default());
     let first = acquire(&pool, "first", false);
     let second = acquire(&pool, "second", false);
+    confirm_startup(&pool);
     let original = first.encoder().unwrap();
     let output = second.output.as_ref().unwrap().clone();
     let target = |value| {
@@ -246,8 +337,8 @@ fn bandwidth_changes_split_only_the_changed_viewer_and_rejoin_without_replacing_
             .slots
             .get_mut(&second.token)
             .unwrap()
-            .target = value;
-        pool.reconcile(Arc::new(|| {})).unwrap();
+            .target = Some(value);
+        settle(&pool);
     };
     target(160_000);
     assert!(Arc::ptr_eq(&original, &first.encoder().unwrap()));
@@ -273,15 +364,16 @@ fn viewers_changing_bandwidth_together_keep_their_shared_encoder() {
     let viewers: Vec<_> = (0..3)
         .map(|n| acquire(&pool, &format!("viewer-{n}"), false))
         .collect();
+    confirm_startup(&pool);
     let original = viewers[0].encoder().unwrap();
     for target in [160_000, 0, 300_000, 160_000, 300_000] {
         {
             let mut state = pool.state.lock().unwrap();
             for slot in state.slots.values_mut() {
-                slot.target = target;
+                slot.target = Some(target);
             }
         }
-        pool.reconcile(Arc::new(|| {})).unwrap();
+        settle(&pool);
         assert_eq!(pool.active().len(), 1);
         for viewer in &viewers {
             assert!(
@@ -293,8 +385,8 @@ fn viewers_changing_bandwidth_together_keep_their_shared_encoder() {
         assert_eq!(state.groups.len(), 1);
         for slot in state.slots.values() {
             assert_eq!(
-                slot.key.bitrate,
-                bitrate_bucket(target, options().max_bitrate)
+                slot.key.allocation,
+                Allocation::Shared(bitrate_bucket(target.max(160_000), options().max_bitrate))
             );
         }
     }
@@ -306,15 +398,16 @@ fn staggered_recovery_applies_each_budget_and_rejoins_the_existing_encoder() {
     let pool = Arc::new(Pool::default());
     let first = acquire(&pool, "first", false);
     let second = acquire(&pool, "second", false);
+    confirm_startup(&pool);
     let first_output = first.output.as_ref().unwrap().clone();
     let second_output = second.output.as_ref().unwrap().clone();
     {
         let mut state = pool.state.lock().unwrap();
         for slot in state.slots.values_mut() {
-            slot.target = 160_000;
+            slot.target = Some(160_000);
         }
     }
-    pool.reconcile(Arc::new(|| {})).unwrap();
+    settle(&pool);
     let original = second.encoder().unwrap();
     pool.state
         .lock()
@@ -322,8 +415,8 @@ fn staggered_recovery_applies_each_budget_and_rejoins_the_existing_encoder() {
         .slots
         .get_mut(&first.token)
         .unwrap()
-        .target = 300_000;
-    pool.reconcile(Arc::new(|| {})).unwrap();
+        .target = Some(300_000);
+    settle(&pool);
     assert_eq!(
         pool.active().len(),
         2,
@@ -335,12 +428,12 @@ fn staggered_recovery_applies_each_budget_and_rejoins_the_existing_encoder() {
     {
         let state = pool.state.lock().unwrap();
         assert_eq!(
-            state.slots[&first.token].key.bitrate,
-            bitrate_bucket(300_000, 300_000)
+            state.slots[&first.token].key.allocation,
+            Allocation::Shared(bitrate_bucket(300_000, 300_000))
         );
         assert_eq!(
-            state.slots[&second.token].key.bitrate,
-            bitrate_bucket(160_000, 300_000)
+            state.slots[&second.token].key.allocation,
+            Allocation::Shared(bitrate_bucket(160_000, 300_000))
         );
     }
     pool.state
@@ -349,16 +442,18 @@ fn staggered_recovery_applies_each_budget_and_rejoins_the_existing_encoder() {
         .slots
         .get_mut(&second.token)
         .unwrap()
-        .target = 300_000;
-    pool.reconcile(Arc::new(|| {})).unwrap();
+        .target = Some(300_000);
+    settle(&pool);
     assert_eq!(pool.active().len(), 1);
     assert!(Arc::ptr_eq(&recovered, &first.encoder().unwrap()));
     assert!(Arc::ptr_eq(&recovered, &second.encoder().unwrap()));
     assert!(Arc::ptr_eq(&first_output, first.output.as_ref().unwrap()));
     assert!(Arc::ptr_eq(&second_output, second.output.as_ref().unwrap()));
     assert_eq!(
-        pool.state.lock().unwrap().slots[&first.token].key.bitrate,
-        bitrate_bucket(300_000, 300_000)
+        pool.state.lock().unwrap().slots[&first.token]
+            .key
+            .allocation,
+        Allocation::Shared(bitrate_bucket(300_000, 300_000))
     );
     pool.close();
 }
@@ -390,7 +485,7 @@ fn different_formats_do_not_share_and_live_settings_preserve_consumers() {
         degradation_preference: "balanced".into(),
     })
     .unwrap();
-    pool.reconcile(Arc::new(|| {})).unwrap();
+    settle(&pool);
     assert!(Arc::ptr_eq(&first_encoder, &first.encoder().unwrap()));
     assert!(!Arc::ptr_eq(&first_encoder, &hevc.encoder().unwrap()));
     pool.close();
@@ -403,14 +498,15 @@ fn live_bitrate_changes_keep_the_recording_tap_on_its_original_worker() {
     let recording = acquire(&pool, "recording", true);
     let original = recording.encoder().unwrap();
     let slow = acquire(&pool, "slow", false);
+    confirm_startup(&pool);
     pool.state
         .lock()
         .unwrap()
         .slots
         .get_mut(&slow.token)
         .unwrap()
-        .target = 150_000;
-    pool.reconcile(Arc::new(|| {})).unwrap();
+        .target = Some(150_000);
+    settle(&pool);
     assert_eq!(pool.active().len(), 2);
     pool.update(&VideoSettings {
         max_width: 1920,
@@ -420,7 +516,7 @@ fn live_bitrate_changes_keep_the_recording_tap_on_its_original_worker() {
         degradation_preference: "balanced".into(),
     })
     .unwrap();
-    pool.reconcile(Arc::new(|| {})).unwrap();
+    settle(&pool);
     assert!(Arc::ptr_eq(&original, &recording.encoder().unwrap()));
     assert!(Arc::ptr_eq(&original, &viewer.encoder().unwrap()));
     assert!(Arc::ptr_eq(&original, &slow.encoder().unwrap()));
