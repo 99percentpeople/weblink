@@ -114,7 +114,7 @@ struct Session {
         wake = callback;
         context = callback_context;
         if (!device || (options.codec != 1 && options.codec != 2) || !options.fps ||
-            !options.width || !options.height || !options.bitrate || !options.ceiling ||
+            !options.width || !options.height || !options.bitrate || !options.buffer_bits ||
             options.preset < 1 || options.preset > 7 ||
             (options.tuning != NV_ENC_TUNING_INFO_LOW_LATENCY && options.tuning != NV_ENC_TUNING_INFO_ULTRA_LOW_LATENCY) ||
             options.spatial_aq > 15)
@@ -165,7 +165,7 @@ struct Session {
         rate.rateControlMode = NV_ENC_PARAMS_RC_CBR;
         rate.averageBitRate = options.bitrate;
         rate.maxBitRate = options.bitrate;
-        rate.vbvBufferSize = std::max(1u, options.ceiling / options.fps);
+        rate.vbvBufferSize = options.buffer_bits;
         rate.vbvInitialDelay = rate.vbvBufferSize;
         rate.enableLookahead = 0;
         rate.lookaheadDepth = 0;
@@ -173,7 +173,8 @@ struct Session {
         rate.aqStrength = options.spatial_aq;
         rate.enableTemporalAQ = 0;
         rate.zeroReorderDelay = 1;
-        rate.multiPass = NV_ENC_MULTI_PASS_DISABLED;
+        // Analyze this picture before allocating its bits. No future input is required.
+        rate.multiPass = options.quarter_pass ? NV_ENC_TWO_PASS_QUARTER_RESOLUTION : NV_ENC_MULTI_PASS_DISABLED;
         auto vui = [&](auto& v) {
             v.videoSignalTypePresentFlag = 1;
             v.videoFormat = NV_ENC_VUI_VIDEO_FORMAT_UNSPECIFIED;
@@ -351,9 +352,10 @@ struct Session {
         completed.fetch_and(~(1u << index), std::memory_order_acq_rel);
         return 1;
     }
-    void bitrate(uint32_t value) {
+    void bitrate(uint32_t value, uint32_t buffer_bits) {
         auto next = config;
         next.rcParams.averageBitRate = next.rcParams.maxBitRate = value;
+        next.rcParams.vbvBufferSize = next.rcParams.vbvInitialDelay = buffer_bits;
         NV_ENC_RECONFIGURE_PARAMS update{};
         update.version = NV_ENC_RECONFIGURE_PARAMS_VER;
         update.reInitEncodeParams = init;
@@ -425,7 +427,7 @@ int32_t weblink_nvenc_input(void* session, void* texture, int64_t timestamp, uin
 int32_t weblink_nvenc_poll(void* session, WeblinkNvencPacket* packet, char* error) {
     return guarded(error, [&] { return static_cast<Session*>(session)->poll(*packet); });
 }
-int32_t weblink_nvenc_bitrate(void* session, uint32_t bitrate, char* error) {
-    return guarded(error, [&] { static_cast<Session*>(session)->bitrate(bitrate); return 1; });
+int32_t weblink_nvenc_bitrate(void* session, uint32_t bitrate, uint32_t buffer_bits, char* error) {
+    return guarded(error, [&] { static_cast<Session*>(session)->bitrate(bitrate, buffer_bits); return 1; });
 }
 }

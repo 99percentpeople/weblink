@@ -297,7 +297,7 @@ impl Encoder {
     }
     pub fn take_controls_changed(&mut self) -> bool {
         match &mut self.inner {
-            Inner::Nvenc(_) => false,
+            Inner::Nvenc(e) => e.take_controls_changed(),
             Inner::Mf(e) => e.take_controls_changed(),
         }
     }

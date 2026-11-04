@@ -623,9 +623,12 @@ MIT notice in `crates/desktop-capture/vendor/nvcodec`.
 
 The native preset vocabulary is `balanced`, `quality` and `latency`. NVENC maps
 these to P3/ultra-low-latency/no AQ, P4/low-latency/spatial AQ strength 5, and
-P1/ultra-low-latency/no AQ respectively. All three use single-pass CBR, zero
-reordering, no B frames, no lookahead and no temporal AQ. Settings offer the three
-intents for backends with verified preset support, remembering each encoder ID
+P1/ultra-low-latency/no AQ respectively. Balanced and quality analyze the current
+frame at quarter resolution before encoding it at full resolution. Their one-frame
+VBV follows the live transport bitrate so abrupt scene changes spend fewer bits
+on a constrained connection. Latency uses single-pass encoding. All three use
+CBR with frame reordering, B frames, lookahead and temporal AQ disabled.
+Settings offer the three intents for backends with verified preset support, remembering each encoder ID
 separately (including auto). Missing preferences default to balanced. Changes
 apply to the next share; live resolution/bitrate updates and codec negotiation
 preserve the session's preset. Encoder groups include preset intent in their key.
@@ -731,7 +734,7 @@ steps, preserving smaller positive allocations.
 The encoder target stays within its members' latest bandwidth allocations
 and configured bitrate cap; WebRTC retains congestion control and pacing. These
 limits govern the target rate, not the size of individual keyframe bursts. Where
-the driver supports it, the hardware encoder requests a one-frame HRD/VBV budget
+the driver supports it, Media Foundation requests a one-frame HRD/VBV budget
 at the configured bitrate ceiling before negotiating media types. Some drivers
 latch this capacity at initialization and silently ignore later writes. Using
 the ceiling instead of the conservative startup estimate leaves room for bitrate
@@ -955,9 +958,10 @@ Capture settings and the shared encoder pool own adaptation before encoding;
 transport bitrate feedback, congestion control and pacing remain enabled. Hardware
 workers apply transport bitrate feedback to the active backend and account for actual encoded
 bytes with a bounded 50 ms burst allowance. When a driver overshoots its accepted
-target, raw inputs are skipped before encoding; completed encoded references are
-preserved. Idle time cannot bank an unbounded burst, and bitrate reductions retain
-existing byte debt. Pipeline diagnostics expose `encodedBytes` and
+target, the worker retains the newest raw frame and its accumulated damage until
+the budget recovers. It wakes at that deadline even if capture has gone idle.
+Newer inputs can replace the waiting frame. Idle time cannot bank an unbounded
+burst, and bitrate reductions retain existing byte debt. Pipeline diagnostics expose `encodedBytes` and
 `rateLimitedInputs` separately from input replacement and player drops. This
 preserves bitrate limits rather than promising the requested FPS for arbitrarily
 complex content at insufficient bandwidth.
@@ -1179,6 +1183,9 @@ its publication ID. Input channels carry the same ID in their labels. Adding or
 removing a screen renegotiates transceivers on the room connection. The room
 keeps its ICE transport, data channels and other publications. Each screen keeps
 its own quality settings, bounded retries and statistics.
+The native publisher owns its send-only audio and video sections. When a browser
+shares back, it places its local track on a separate media section if
+`addTrack` selected one of those incoming screen sections.
 Peers without this capability receive the first active publication; stopping it
 promotes the next one without replacing the room connection.
 Closing/replacing that channel releases its native senders and remote receivers.

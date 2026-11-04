@@ -8,7 +8,7 @@ pub(super) struct Config {
     pub height: u32,
     pub fps: u32,
     pub bitrate: u32,
-    pub ceiling: u32,
+    pub buffer_bits: u32,
     pub primaries: u32,
     pub transfer: u32,
     pub matrix: u32,
@@ -16,6 +16,7 @@ pub(super) struct Config {
     pub preset: u32,
     pub tuning: u32,
     pub spatial_aq: u32,
+    pub quarter_pass: u32,
 }
 #[repr(C)]
 pub(super) struct Packet {
@@ -43,5 +44,10 @@ unsafe extern "C" {
     ) -> i32;
     pub fn weblink_nvenc_poll(session: *mut c_void, packet: *mut Packet, error: *mut c_char)
         -> i32;
-    pub fn weblink_nvenc_bitrate(session: *mut c_void, bitrate: u32, error: *mut c_char) -> i32;
+    pub fn weblink_nvenc_bitrate(
+        session: *mut c_void,
+        bitrate: u32,
+        buffer_bits: u32,
+        error: *mut c_char,
+    ) -> i32;
 }

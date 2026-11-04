@@ -117,6 +117,13 @@ export class PeerSessionMediaController {
     MediaStreamTrack,
     RoomSender
   >();
+  // The sender half of a received native screen must remain empty.
+  private readonly reservedScreenSenders =
+    new WeakSet<RoomSender>();
+  private readonly sendOnlyTransceivers = new WeakMap<
+    RoomSender,
+    RTCRtpTransceiver
+  >();
   private readonly encodedVideo = new Map<
     RoomSender,
     RtpEncodedMediaTrack
@@ -338,7 +345,11 @@ export class PeerSessionMediaController {
 
         try {
           transceiver.setCodecPreferences(
-            transceiver.sender.track || preferredMimeType
+            !this.reservedScreenSenders.has(
+              transceiver.sender,
+            ) &&
+              (transceiver.sender.track ||
+                preferredMimeType)
               ? ordered
               : [],
           );
@@ -395,7 +406,15 @@ export class PeerSessionMediaController {
     const allowed =
       this.options.acceptsContent?.() !== false;
     setInteractivePlayout(event.receiver);
-    if (this.options.roomScreen?.(event)) return;
+    if (this.options.roomScreen?.(event)) {
+      if (!this.options.nativeRoom) {
+        const sender = event.transceiver.sender;
+        this.reservedScreenSenders.add(sender);
+        // The remote offer may identify the screen after a local track was added.
+        if (sender.track) this.syncLocalTracks();
+      }
+      return;
+    }
     event.track.enabled = allowed;
     const receiver = event.receiver;
     if (
@@ -708,16 +727,30 @@ export class PeerSessionMediaController {
       const attached =
         currentSenders.has(sender) &&
         sender.track === track;
-      if (tracks.has(track) && attached) continue;
-      this.encodedVideo.get(sender)?.end();
+      const reserved =
+        this.reservedScreenSenders.has(sender);
+      if (tracks.has(track) && attached && !reserved)
+        continue;
+      const sendOnly =
+        this.sendOnlyTransceivers.get(sender);
+      if (sendOnly || reserved) {
+        this.encodedVideo.get(sender)?.dispose();
+        this.encodedVideo.delete(sender);
+      } else this.encodedVideo.get(sender)?.end();
       if (attached) pc.removeTrack(sender);
+      if (!reserved) sendOnly?.stop();
+      this.sendOnlyTransceivers.delete(sender);
       this.senders.delete(track);
       changed = true;
     }
     if (stream)
       for (const track of tracks) {
         if (this.senders.has(track)) continue;
-        const sender = pc.addTrack(track, stream);
+        const sender = this.addLocalTrack(
+          pc,
+          track,
+          stream,
+        );
         this.senders.set(track, sender);
         if (
           !this.options.nativeRoom &&
@@ -739,6 +772,31 @@ export class PeerSessionMediaController {
       this.applyPreferredCodecPreferences(pc);
       this.notifyLocalStreamState(stream);
     }
+  }
+
+  private addLocalTrack(
+    pc: RoomConnection,
+    track: MediaStreamTrack,
+    stream: MediaStream,
+  ): RoomSender {
+    const sender = pc.addTrack(track, stream);
+    if (
+      !this.reservedScreenSenders.has(sender) ||
+      !pc.addTransceiver
+    )
+      return sender;
+    // addTrack reused the receiving half of a native send-only publication.
+    // Give the reverse track its own media section on the same connection.
+    pc.removeTrack(sender);
+    const transceiver = pc.addTransceiver(track, {
+      direction: "sendonly",
+      streams: [stream],
+    });
+    this.sendOnlyTransceivers.set(
+      transceiver.sender,
+      transceiver,
+    );
+    return transceiver.sender;
   }
 
   resetConnection(): void {

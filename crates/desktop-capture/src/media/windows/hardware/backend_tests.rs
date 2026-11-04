@@ -132,6 +132,78 @@ fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i
 
 #[test]
 #[ignore = "Requires NVIDIA NVENC H.264 and H.265"]
+fn nvenc_scene_changes_follow_the_live_bitrate() {
+    let image = Image::new();
+    let mut converter = gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+    let flat = converter
+        .convert(&image.captured(), &MediaOptions::default())
+        .unwrap()
+        .unwrap();
+    let mut pixels = Vec::new();
+    for y in 0u32..180 {
+        for x in 0u32..320 {
+            let value =
+                (((x / 3).wrapping_mul(747796405) ^ (y / 3).wrapping_mul(2891336453)) >> 24) as u8;
+            pixels.extend_from_slice(&[value, value, value, 255]);
+        }
+    }
+    unsafe {
+        image
+            .context
+            .UpdateSubresource(&image.texture, 0, None, pixels.as_ptr().cast(), 320 * 4, 0)
+    };
+    let scene = converter
+        .convert(&image.captured(), &MediaOptions::default())
+        .unwrap()
+        .unwrap();
+    for (id, codec) in [(nvenc::H264, Codec::H264), (nvenc::HEVC, Codec::Hevc)] {
+        let low = 512_000;
+        let high = 8_000_000;
+        let mut selection = Selection::new(id.into(), false);
+        let config = configuration(codec);
+        let mut encoder = selection
+            .open(
+                config.width,
+                config.height,
+                config.fps,
+                low,
+                high,
+                config.color,
+                Arc::new(|| {}),
+                Some(&image.device),
+            )
+            .unwrap();
+        assert_eq!(encoder.implementation(), "NVENC");
+        let mut timestamp = 0;
+        let mut peaks = Vec::new();
+        for rate in [low, high, low] {
+            encoder.set_bitrate(rate).unwrap();
+            let controls = encoder.control_status();
+            let buffer = controls
+                .iter()
+                .find(|control| control.name == "bufferBytes")
+                .unwrap();
+            assert_eq!(buffer.requested, (rate / config.fps).div_ceil(8));
+            // Warm up on a static desktop, then switch to a detailed image.
+            for _ in 0..30 {
+                encode(&mut encoder, flat.clone(), timestamp);
+                timestamp += 33_333;
+            }
+            let packet = encode(&mut encoder, scene.clone(), timestamp);
+            timestamp += 33_333;
+            assert!(!packet.keyframe);
+            peaks.push(packet.bytes.len());
+        }
+        eprintln!("{id} scene change bytes at low/high/low budgets: {peaks:?}");
+        assert!(
+            peaks[0] * 2 < peaks[1] && peaks[2] * 2 < peaks[1],
+            "The same scene cut must spend fewer bits at the lower target: {id} {peaks:?}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "Requires NVIDIA NVENC H.264 and H.265"]
 fn nvenc_uses_only_requested_keyframes_across_bitrate_changes() {
     let image = Image::new();
     let captured = image.captured();

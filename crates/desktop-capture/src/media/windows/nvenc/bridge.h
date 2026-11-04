@@ -3,9 +3,9 @@
 
 // Only these POD values cross the Rust boundary; NVIDIA's ABI stays in C++.
 struct WeblinkNvencConfig {
-    uint32_t codec, width, height, fps, bitrate, ceiling;
+    uint32_t codec, width, height, fps, bitrate, buffer_bits;
     uint32_t primaries, transfer, matrix, full_range;
-    uint32_t preset, tuning, spatial_aq;
+    uint32_t preset, tuning, spatial_aq, quarter_pass;
 };
 struct WeblinkNvencPacket {
     const uint8_t* bytes;
@@ -22,5 +22,5 @@ uint32_t weblink_nvenc_ready(void* session);
 int32_t weblink_nvenc_input(void* session, void* texture, int64_t timestamp,
                            uint32_t keyframe, char* error);
 int32_t weblink_nvenc_poll(void* session, WeblinkNvencPacket* packet, char* error);
-int32_t weblink_nvenc_bitrate(void* session, uint32_t bitrate, char* error);
+int32_t weblink_nvenc_bitrate(void* session, uint32_t bitrate, uint32_t buffer_bits, char* error);
 }

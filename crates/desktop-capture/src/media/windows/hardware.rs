@@ -455,6 +455,7 @@ fn run(
     let mut encoder: Option<backend::Encoder> = None;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
+    let mut waiting_for_budget = false;
     // Independent of the latest-frame slot: discarded/rate-limited inputs must
     // remain in the damage baseline until this receiver's MFT accepts a frame.
     let mut damage = Damage::default();
@@ -555,11 +556,14 @@ fn run(
                     damage.merge(&next_damage);
                 }
                 if latest.replace(frame).is_some() {
-                    statistics
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .replaced_inputs += 1;
+                    let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                    if waiting_for_budget {
+                        stats.rate_limited_inputs += 1;
+                    } else {
+                        stats.replaced_inputs += 1;
+                    }
                 }
+                waiting_for_budget = false;
             }
         }
         // The pool collects feedback from real consumer sources and forwards
@@ -740,25 +744,28 @@ fn run(
                 }
             }
             if active.ready() {
-                if latest.is_some() && !keyframe && !cadence.ready(Instant::now()) {
-                    continue_wait(
-                        &work,
-                        &rate_control,
-                        started,
-                        Some(cadence.remaining(Instant::now())),
-                    );
-                    continue;
-                }
-                if let Some(frame) = latest.take() {
-                    // MF drivers can exceed their accepted bitrate target. Skip raw
-                    // inputs before encoding so the emitted reference chain stays intact.
-                    if !frame_budget.can_encode(started.elapsed()) {
-                        statistics
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .rate_limited_inputs += 1;
+                if latest.is_some() {
+                    // A scene change can overspend a frame's budget just before
+                    // capture goes idle. Keep its newest successor until eligible.
+                    let budget = frame_budget.next_input_in(started.elapsed());
+                    let cadence_delay = if keyframe {
+                        Duration::ZERO
+                    } else {
+                        cadence.remaining(Instant::now())
+                    };
+                    waiting_for_budget = budget.is_none_or(|wait| wait > cadence_delay);
+                    let delay = budget.map(|wait| wait.max(cadence_delay));
+                    if delay != Some(Duration::ZERO) {
+                        continue_wait(
+                            &work,
+                            &rate_control,
+                            started,
+                            delay.into_iter().chain(active.watchdog()).min(),
+                        );
                         continue;
                     }
+                }
+                if let Some(frame) = latest.take() {
                     if keyframe {
                         active.request_keyframe()?;
                         damage = Damage::default();
@@ -875,7 +882,7 @@ fn continue_wait(
     work: &Arc<(Mutex<Pending>, Condvar)>,
     rate_control: &BitrateController,
     started: Instant,
-    watchdog: Option<Duration>,
+    wake_in: Option<Duration>,
 ) {
     // Synchronize the predicate with every producer, including the MFT
     // callback: a notification between poll() and wait() cannot be lost.
@@ -892,7 +899,7 @@ fn continue_wait(
     if let Some(delay) = rate_control
         .next_update_in(started.elapsed())
         .into_iter()
-        .chain(watchdog)
+        .chain(wake_in)
         .min()
     {
         drop(
@@ -908,6 +915,51 @@ fn continue_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "Requires a Windows Media Foundation H.264 hardware encoder"]
+    fn scene_change_delivers_the_last_frame_after_a_bitrate_overshoot() {
+        let id = super::super::mf::detect()
+            .unwrap()
+            .into_iter()
+            .find(|info| info.codecs.iter().any(|codec| codec == "video/h264"))
+            .unwrap()
+            .id;
+        let options = MediaOptions {
+            encoder: id.clone(),
+            frame_rate: 60,
+            ..Default::default()
+        };
+        let bitrate = 1_024_000;
+        let worker =
+            Encoder::shared(id, options, Arc::new(|| {}), Arc::new(|| {}), bitrate).unwrap();
+        let packets = worker.recording.subscribe().unwrap();
+        let mut scene = I420Buffer::new_black(640, 360);
+        let mut seed = 17u32;
+        for pixel in scene.data_mut().0 {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            *pixel = (seed >> 24) as u8;
+        }
+        worker.submit(Arc::new(Frame::from_i420(&scene, None)));
+        let first = packets.receive(Duration::from_secs(5)).unwrap();
+        let debt = Duration::from_secs_f64(first.bytes.len() as f64 * 8.0 / f64::from(bitrate))
+            .saturating_sub(Duration::from_millis(50));
+        let started = Instant::now();
+        worker.submit(Arc::new(Frame::from_i420(
+            &I420Buffer::new_black(640, 360),
+            None,
+        )));
+        // No more capture events. Only the worker can deliver the final scene.
+        let last = packets
+            .receive(debt + Duration::from_millis(400))
+            .expect("Lost the last screen update");
+        assert!(last.timestamp_us > first.timestamp_us);
+        eprintln!(
+            "Scene change: {} bytes, budget wait {debt:?}, final frame after {:?}",
+            first.bytes.len(),
+            started.elapsed()
+        );
+    }
 
     #[test]
     fn keyframe_admission_survives_worker_polling_until_pixels_are_submitted() {
@@ -993,7 +1045,7 @@ mod tests {
         let (latest, damage) = pending.take_input();
         assert_eq!(latest.unwrap().damage.rects(), Some(b.as_slice()));
         worker_damage.merge(&damage);
-        // An input dropped by FrameBudget does not clear the worker's baseline.
+        // Replacing a frame while waiting for bitrate does not clear its damage.
         pending.replace_frame(make(&[]));
         worker_damage.merge(&pending.take_input().1);
         assert_eq!(worker_damage.rects(), Some([a[0], b[0]].as_slice()));

@@ -232,6 +232,7 @@ it("applies interactive playout to a screen claimed by the shared connection", (
   pc.dispatchEvent(
     Object.assign(new Event("track"), {
       receiver,
+      transceiver: { sender: { track: null } },
       track: new Track("video", "screen"),
     }),
   );
@@ -241,6 +242,74 @@ it("applies interactive playout to a screen claimed by the shared connection", (
   });
   expect(remote).not.toHaveBeenCalled();
 });
+
+it.each(["video", "audio"] as const)(
+  "keeps reverse %s off a native screen's send-only section, including after restart",
+  (kind) => {
+    const { controller, bind } = setup(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+    );
+    const { pc } = bind();
+    const remote = new Track(kind, "desktop");
+    const reserved = {
+      mid: "screen",
+      receiver: { track: asTrack(remote) },
+      sender: { track: null as MediaStreamTrack | null },
+      setCodecPreferences: vi.fn(),
+    };
+    pc.transceivers.push(reserved);
+    pc.senders.push(reserved.sender);
+    const announceScreen = () =>
+      pc.dispatchEvent(
+        Object.assign(new Event("track"), {
+          track: remote,
+          streams: [],
+          transceiver: reserved,
+          receiver: reserved.receiver,
+        }),
+      );
+    const addFresh = pc.addTrack.getMockImplementation()!;
+    pc.addTrack.mockImplementation((track) => {
+      reserved.sender.track = track;
+      return reserved.sender as RTCRtpSender;
+    });
+    pc.addTransceiver.mockImplementation((track, init) => {
+      const sender = addFresh(track, init.streams[0]);
+      return Object.assign(
+        pc
+          .getTransceivers()
+          .find((t) => t.sender === sender)!,
+        { stop: vi.fn() },
+      );
+    });
+    for (const id of ["first", "second"]) {
+      const local = new Track(kind, id);
+      const stream = asStream(media(local));
+      controller.setStream(stream);
+      if (id === "first") {
+        expect(reserved.sender.track).toBe(local);
+        announceScreen();
+      }
+      const separate = pc.addTransceiver.mock.lastCall!;
+      expect(separate).toEqual([
+        local,
+        { direction: "sendonly", streams: [stream] },
+      ]);
+      const outgoing =
+        pc.addTransceiver.mock.results.at(-1)!.value;
+      expect(outgoing.sender.track).toBe(local);
+      expect(reserved.sender.track).toBeNull();
+      controller.setStream(null);
+      expect(outgoing.stop).toHaveBeenCalledOnce();
+      expect(local.stop).not.toHaveBeenCalled();
+      expect(remote.stop).not.toHaveBeenCalled();
+    }
+  },
+);
 
 it("installs encoded recording with the sender and keeps forwarding resources until connection disposal", () => {
   const encoded = {

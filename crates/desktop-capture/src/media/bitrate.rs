@@ -41,9 +41,17 @@ impl FrameBudget {
         self.refill(now);
         self.credit_bits -= bytes as f64 * 8.0;
     }
-    pub fn can_encode(&mut self, now: Duration) -> bool {
+    /// None means paused until new transport feedback arrives.
+    pub fn next_input_in(&mut self, now: Duration) -> Option<Duration> {
         self.refill(now);
-        self.bitrate > 0 && self.credit_bits >= 0.0
+        if self.bitrate == 0 {
+            None
+        } else if self.credit_bits >= 0.0 {
+            Some(Duration::ZERO)
+        } else {
+            let seconds = -self.credit_bits / f64::from(self.bitrate);
+            Some(Duration::from_secs_f64(seconds).max(Duration::from_nanos(1)))
+        }
     }
 }
 
@@ -128,7 +136,7 @@ mod tests {
         let mut encoded = 0;
         for ms in (0..2_000).step_by(10) {
             let now = Duration::from_millis(ms);
-            if budget.can_encode(now) {
+            if budget.next_input_in(now) == Some(Duration::ZERO) {
                 // Driver produces 16 Mbps despite an 8 Mbps target.
                 budget.record_output(20_000, now);
                 encoded += 1;
@@ -139,7 +147,7 @@ mod tests {
         let mut recovered = 0;
         for ms in (2_100..3_100).step_by(10) {
             let now = Duration::from_millis(ms);
-            if budget.can_encode(now) {
+            if budget.next_input_in(now) == Some(Duration::ZERO) {
                 budget.record_output(10_000, now);
                 recovered += 1;
             }
@@ -151,14 +159,32 @@ mod tests {
         let mut budget = FrameBudget::new(8_000_000);
         budget.record_output(100_000, Duration::ZERO);
         budget.set_bitrate(1_000_000, Duration::ZERO);
-        assert!(!budget.can_encode(Duration::from_millis(399)));
-        assert!(budget.can_encode(Duration::from_millis(401)));
-        assert!(budget.can_encode(Duration::from_secs(60)));
+        assert_eq!(
+            budget.next_input_in(Duration::from_millis(399)),
+            Some(Duration::from_millis(1))
+        );
+        assert_eq!(
+            budget.next_input_in(Duration::from_millis(400)),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            budget.next_input_in(Duration::from_secs(60)),
+            Some(Duration::ZERO)
+        );
         budget.record_output(10_000, Duration::from_secs(60));
-        assert!(!budget.can_encode(Duration::from_secs(60)));
+        assert_eq!(
+            budget.next_input_in(Duration::from_secs(60)),
+            Some(Duration::from_millis(30))
+        );
         budget.set_bitrate(8_000_000, Duration::from_secs(60));
-        assert!(!budget.can_encode(Duration::from_secs(60)));
-        assert!(budget.can_encode(Duration::from_millis(60_004)));
+        assert_eq!(
+            budget.next_input_in(Duration::from_secs(60)),
+            Some(Duration::from_micros(3750))
+        );
+        assert_eq!(
+            budget.next_input_in(Duration::from_millis(60_004)),
+            Some(Duration::ZERO)
+        );
     }
     #[test]
     fn coalesces_feedback_to_the_latest_target_without_a_second_ramp() {
@@ -212,13 +238,16 @@ mod tests {
         let paused = rate.poll(Duration::from_millis(1)).unwrap();
         assert_eq!(paused, 0);
         budget.set_bitrate(paused, Duration::from_millis(1));
-        assert!(!budget.can_encode(Duration::from_secs(30)));
+        assert_eq!(budget.next_input_in(Duration::from_secs(30)), None);
         assert_eq!(rate.next_update_in(Duration::from_secs(30)), None);
         rate.observe(100_000_000);
         let resumed = rate.poll(Duration::from_secs(30)).unwrap();
         assert_eq!(resumed, 100_000_000);
         budget.set_bitrate(resumed, Duration::from_secs(30));
-        assert!(budget.can_encode(Duration::from_secs(30)));
+        assert_eq!(
+            budget.next_input_in(Duration::from_secs(30)),
+            Some(Duration::ZERO)
+        );
     }
     #[test]
     fn small_positive_targets_and_small_increases_are_not_lost() {

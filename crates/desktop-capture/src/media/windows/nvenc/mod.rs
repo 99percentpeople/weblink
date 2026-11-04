@@ -47,6 +47,7 @@ pub(super) struct Encoder {
     blocked_since: Option<Instant>,
     keyframe: Cell<bool>,
     configuration: Configuration,
+    controls_changed: bool,
     preset: EncodingPreset,
     preset_fallback: Option<(EncodingPreset, String)>,
 }
@@ -102,7 +103,7 @@ impl Encoder {
             height: configuration.height,
             fps: configuration.fps,
             bitrate: configuration.bitrate,
-            ceiling: configuration.bitrate_limit,
+            buffer_bits: settings.buffer_bits(configuration),
             primaries: color.primaries as u32,
             transfer: color.transfer as u32,
             matrix: color.matrix as u32,
@@ -110,6 +111,7 @@ impl Encoder {
             preset: settings.level,
             tuning: settings.tuning,
             spatial_aq: settings.spatial_aq,
+            quarter_pass: u32::from(settings.quarter_pass),
         };
         let mut notify = Box::new(notify);
         let mut message = [0; 512];
@@ -132,6 +134,7 @@ impl Encoder {
             blocked_since: None,
             keyframe: Cell::new(true),
             configuration,
+            controls_changed: false,
             preset,
             preset_fallback: None,
         })
@@ -237,14 +240,31 @@ impl Encoder {
         Ok(packets)
     }
     pub fn set_bitrate(&mut self, bitrate: u32) -> Result<()> {
+        let settings = preset::settings(self.preset);
+        let next = Configuration {
+            bitrate,
+            ..self.configuration
+        };
+        let buffer_bits = settings.buffer_bits(next);
         let mut message = [0; 512];
-        let result =
-            unsafe { ffi::weblink_nvenc_bitrate(self.raw.as_ptr(), bitrate, message.as_mut_ptr()) };
+        let result = unsafe {
+            ffi::weblink_nvenc_bitrate(
+                self.raw.as_ptr(),
+                bitrate,
+                buffer_bits,
+                message.as_mut_ptr(),
+            )
+        };
         if result < 0 {
             Err(error(&message))
         } else {
+            self.controls_changed |= buffer_bits != settings.buffer_bits(self.configuration);
+            self.configuration = next;
             Ok(())
         }
+    }
+    pub fn take_controls_changed(&mut self) -> bool {
+        std::mem::take(&mut self.controls_changed)
     }
     pub fn control_status(&self) -> Vec<CodecControl> {
         let settings = preset::settings(self.preset);
@@ -253,6 +273,10 @@ impl Encoder {
             ("nvencPreset", settings.level),
             ("nvencTuning", settings.tuning),
             ("spatialAQ", settings.spatial_aq),
+            (
+                "nvencQuarterResolutionPass",
+                u32::from(settings.quarter_pass),
+            ),
             ("nvencAsync", 1),
             ("lowLatency", 1),
             ("bFrames", 0),
@@ -260,9 +284,7 @@ impl Encoder {
             ("gopFrames", u32::MAX),
             (
                 "bufferBytes",
-                self.configuration
-                    .bitrate_limit
-                    .div_ceil(8 * self.configuration.fps),
+                settings.buffer_bits(self.configuration).div_ceil(8),
             ),
         ]
         .into_iter()
