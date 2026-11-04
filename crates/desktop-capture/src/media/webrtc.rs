@@ -3,6 +3,27 @@
 mod recording_audio;
 pub(super) use recording_audio::SenderAudioRecording;
 
+pub(crate) fn update_sender_parameters(
+    sender: &libwebrtc::rtp_sender::RtpSender,
+    mut update: impl FnMut(&mut libwebrtc::rtp_parameters::RtpParameters),
+) -> crate::Result<()> {
+    let mut apply = || {
+        let mut parameters = sender.parameters();
+        update(&mut parameters);
+        sender.set_parameters(parameters)
+    };
+    // Negotiation can invalidate the transaction between the two signaling-thread calls.
+    // The pinned SDK distinguishes these conflicts only by message. Start one fresh transaction.
+    match apply() {
+        Err(error) if matches!(error.message.as_str(),
+            "Failed to set parameters since getParameters() has never been called on this sender" |
+            "Failed to set parameters since the transaction_id doesn't match the last value returned from getParameters()"
+        ) => apply(),
+        result => result,
+    }
+    .map_err(|error| error.to_string())
+}
+
 /// Keep software frame budgets stable when the shared capture worker is idle.
 pub(super) fn configure_software_vfr(
     factory: &libwebrtc::peer_connection_factory::PeerConnectionFactory,

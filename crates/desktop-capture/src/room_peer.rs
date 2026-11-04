@@ -1,6 +1,6 @@
 //! One full-duplex WebRTC endpoint for a remote room member.
 use crate::{
-    media::{IceCandidate, IceServer},
+    media::{webrtc::update_sender_parameters, IceCandidate, IceServer},
     receive::{configuration, ice_candidate, Events, MediaOutput},
     Result,
 };
@@ -379,21 +379,21 @@ impl RoomPeer {
     ) -> Result<()> {
         let outgoing = self.outgoing.lock().unwrap();
         let sender = outgoing.get(id).ok_or("Room source removed")?.sender();
-        let mut params = sender.parameters();
-        for e in &mut params.encodings {
-            e.max_bitrate = bitrate;
-            e.max_framerate = fps;
-            e.scale_resolution_down_by = scale;
-        }
-        if let Some(d) = degradation {
-            use libwebrtc::rtp_parameters::DegradationPreference::*;
-            params.set_degradation_preference(match d {
-                "maintain-framerate" => MaintainFramerate,
-                "maintain-resolution" => MaintainResolution,
-                _ => Balanced,
-            });
-        }
-        sender.set_parameters(params).map_err(|e| e.to_string())
+        update_sender_parameters(&sender, |params| {
+            for e in &mut params.encodings {
+                e.max_bitrate = bitrate;
+                e.max_framerate = fps;
+                e.scale_resolution_down_by = scale;
+            }
+            if let Some(d) = degradation {
+                use libwebrtc::rtp_parameters::DegradationPreference::*;
+                params.set_degradation_preference(match d {
+                    "maintain-framerate" => MaintainFramerate,
+                    "maintain-resolution" => MaintainResolution,
+                    _ => Balanced,
+                });
+            }
+        })
     }
     pub fn remove_capture(&self, id: &str) -> Result<()> {
         let entry = self.outgoing.lock().unwrap().remove(id);

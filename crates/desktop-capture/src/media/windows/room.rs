@@ -127,15 +127,13 @@ impl MediaSession {
             };
             // Match the dedicated screen path from the first frame. The
             // upstream encoder already adapts pre-encoded screen video.
-            let mut parameters = sender.parameters();
-            parameters.set_degradation_preference(Self::degradation_preference(
-                &options,
-                false,
-                consumer.is_some(),
-            ));
-            sender
-                .set_parameters(parameters)
-                .map_err(|e| e.to_string())?;
+            update_sender_parameters(&sender, |parameters| {
+                parameters.set_degradation_preference(Self::degradation_preference(
+                    &options,
+                    false,
+                    consumer.is_some(),
+                ));
+            })?;
             let mut recording_audio = None;
             if let Some(audio) = &self.audio {
                 let audio_track =

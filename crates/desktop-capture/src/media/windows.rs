@@ -15,7 +15,7 @@ mod presentation;
 use pixels::from_bgra;
 pub use presentation::PreviewSubscription;
 mod recording;
-use super::webrtc::SenderAudioRecording;
+use super::webrtc::{update_sender_parameters, SenderAudioRecording};
 mod recording_source;
 mod room;
 mod statistics;
@@ -470,26 +470,24 @@ impl MediaSession {
             if !matches!(sender.track(), Some(MediaStreamTrack::Video(_))) {
                 continue;
             }
-            let mut parameters = sender.parameters();
-            for encoding in &mut parameters.encodings {
-                encoding.max_bitrate = Some(options.max_bitrate);
-                encoding.max_framerate = Some(options.frame_rate as f64);
-                if peer.raw_video {
-                    encoding.scale_resolution_down_by = Some(
-                        (capture_size.0 as f64 / options.max_width as f64)
-                            .max(capture_size.1 as f64 / options.max_height as f64)
-                            .max(1.0),
-                    );
+            update_sender_parameters(&sender, |parameters| {
+                for encoding in &mut parameters.encodings {
+                    encoding.max_bitrate = Some(options.max_bitrate);
+                    encoding.max_framerate = Some(options.frame_rate as f64);
+                    if peer.raw_video {
+                        encoding.scale_resolution_down_by = Some(
+                            (capture_size.0 as f64 / options.max_width as f64)
+                                .max(capture_size.1 as f64 / options.max_height as f64)
+                                .max(1.0),
+                        );
+                    }
                 }
-            }
-            parameters.set_degradation_preference(Self::degradation_preference(
-                options,
-                peer.preview,
-                !peer.raw_video,
-            ));
-            sender
-                .set_parameters(parameters)
-                .map_err(|e| e.to_string())?;
+                parameters.set_degradation_preference(Self::degradation_preference(
+                    options,
+                    peer.preview,
+                    !peer.raw_video,
+                ));
+            })?;
         }
         if let Some(profile) = &peer.software_sender {
             profile
@@ -1107,15 +1105,13 @@ impl MediaSession {
                 } else {
                     VideoEncoderBackend::Software
                 });
-                let mut parameters = sender.parameters();
-                parameters.set_degradation_preference(Self::degradation_preference(
-                    &options,
-                    preview,
-                    pre_encoded,
-                ));
-                sender
-                    .set_parameters(parameters)
-                    .map_err(|e| e.to_string())?;
+                update_sender_parameters(&sender, |parameters| {
+                    parameters.set_degradation_preference(Self::degradation_preference(
+                        &options,
+                        preview,
+                        pre_encoded,
+                    ));
+                })?;
                 Self::configure_transport_bitrate(&pc, &options)
             })();
             if let Err(error) = configured {

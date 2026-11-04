@@ -15,7 +15,7 @@ pub mod preview;
 mod recording;
 
 #[cfg(windows)]
-mod webrtc;
+pub(crate) mod webrtc;
 
 /// Local recording may only borrow a sender whose codec the WebView can receive.
 #[derive(Clone, Debug, Deserialize)]

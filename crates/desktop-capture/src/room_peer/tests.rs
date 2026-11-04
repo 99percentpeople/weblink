@@ -192,6 +192,42 @@ fn screen_encoder_and_camera_share_one_room_transport_and_gpu_decoder() {
 }
 
 #[test]
+fn sender_limits_refresh_an_invalidated_rtp_transaction() {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let a = Endpoint::new();
+        let camera = CaptureSource::video();
+        a.peer
+            .add_capture("camera", &camera, vec!["meeting".into()])
+            .unwrap();
+        let sender = a.peer.pc.senders().remove(0);
+        let mut attempts = 0;
+        update_sender_parameters(&sender, |params| {
+            attempts += 1;
+            if attempts == 1 {
+                // Commit a different setting between the outer get and set.
+                let mut newer = sender.parameters();
+                newer.encodings[0].max_bitrate = Some(500_000);
+                sender.set_parameters(newer).unwrap();
+            }
+            params.encodings[0].max_framerate = Some(12.0);
+        })
+        .unwrap();
+        let encoding = sender.parameters().encodings.remove(0);
+        assert_eq!(attempts, 2);
+        assert_eq!(encoding.max_bitrate, Some(500_000));
+        assert_eq!(encoding.max_framerate, Some(12.0));
+        let mut attempts = 0;
+        let invalid = update_sender_parameters(&sender, |params| {
+            attempts += 1;
+            params.encodings.clear();
+        });
+        assert!(invalid.is_err());
+        assert_eq!(attempts, 1);
+        a.peer.close();
+    });
+}
+
+#[test]
 fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
     use crate::media::{
         preset::EncodingPreset, MediaOptions, MediaSession, SendCodecs, VideoSettings,
