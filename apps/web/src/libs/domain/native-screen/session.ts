@@ -63,6 +63,7 @@ interface ScreenSessionPort {
 type Incoming = {
   id: string;
   sourceId: string;
+  offeredControl: boolean;
   receiver?: ScreenReceiveConnection;
   control?: RemotePointer;
   stream?: MediaStream;
@@ -98,6 +99,7 @@ export class NativeScreenSession {
   private screenRequest?: {
     id: string;
     abort: AbortController;
+    sourceId?: string;
   };
   private localCapabilities?: ControlCapabilities;
   private channel?: RTCDataChannel;
@@ -111,6 +113,10 @@ export class NativeScreenSession {
   private controlCapabilities?: ControlCapabilities;
   private remote?: PeerCapabilities;
   private deferred: ScreenSignal[] = [];
+  private initialRoomOffers?: Map<
+    string,
+    Extract<ScreenSignal, { type: "offer" }>
+  > = new Map();
   get remoteControlCapabilities():
     | ControlCapabilities
     | undefined {
@@ -353,6 +359,7 @@ export class NativeScreenSession {
     this.trickleIce = false;
     this.multiScreen = false;
     this.deferred = [];
+    this.initialRoomOffers = new Map();
     this.controlCapabilities = this.remote?.control;
     for (const sender of this.publications.values())
       sender.reset();
@@ -435,6 +442,20 @@ export class NativeScreenSession {
             ? { ...context, sourceId: publication.sourceId }
             : undefined;
         },
+        controlUnavailable: () => {
+          const request = this.screenRequest;
+          if (
+            !request ||
+            request.sourceId !== publication.sourceId
+          )
+            return;
+          this.screenRequest = undefined;
+          this.port.cancelScreenRequest?.();
+          this.send({
+            type: "control-result",
+            id: request.id,
+          });
+        },
         send: (signal) => this.send(signal),
         error: (error) => this.port.error(error),
       });
@@ -474,6 +495,7 @@ export class NativeScreenSession {
   setRemoteCapabilities(
     services: PeerCapabilities | undefined,
   ): void {
+    const hadRemoteHost = this.controlCapabilities?.host;
     const couldHost = this.canHostControl();
     const couldRequest =
       this.controlCapabilities?.request === true;
@@ -487,6 +509,21 @@ export class NativeScreenSession {
     if (couldHost !== this.canHostControl())
       this.restartControlSenders();
     this.applyRemoteCapabilities();
+    // A control offer can beat the host announcement on the main channel.
+    // Viewing started immediately; now request freshly bound input channels.
+    if (
+      !hadRemoteHost &&
+      services?.control?.host &&
+      services.screen &&
+      this.ready
+    )
+      for (const entry of this.incoming.values())
+        if (
+          entry.offeredControl &&
+          !entry.control &&
+          !entry.retired
+        )
+          this.send({ type: "retry", id: entry.id });
   }
   private applyRemoteCapabilities(): void {
     this.trickleIce =
@@ -515,8 +552,17 @@ export class NativeScreenSession {
     for (const sender of this.publications.values())
       sender.refreshCodecs();
     this.publishSelected();
+    if (
+      !this.remote?.roomTransport ||
+      this.remote.identity?.receiveContent === false
+    )
+      this.initialRoomOffers?.clear();
     if (this.ready && this.remote) {
       const pending = this.deferred.splice(0);
+      if (this.remote.screen && this.initialRoomOffers) {
+        pending.unshift(...this.initialRoomOffers.values());
+        this.initialRoomOffers = undefined;
+      }
       for (const value of pending)
         void this.handle(value).catch(this.port.error);
     }
@@ -533,7 +579,23 @@ export class NativeScreenSession {
       this.deferred.push(value);
       return;
     }
-    if (!this.remote.screen) return;
+    if (!this.remote.screen) {
+      // The first room-track offer can overtake screen/1 on the separate
+      // capability channel. Hold only live references until discovery completes.
+      const offers = this.initialRoomOffers;
+      if (value.type === "stop") offers?.delete(value.id);
+      else if (
+        offers &&
+        this.remote.roomTransport?.multiplex &&
+        this.remote.identity?.receiveContent !== false &&
+        value.type === "offer" &&
+        value.sdp === ROOM_SCREEN_PREFIX + value.id &&
+        offers.size < MAX_NATIVE_SCREENS &&
+        !offers.has(value.id)
+      )
+        offers.set(value.id, value);
+      return;
+    }
     if (
       value.type.startsWith("control-") &&
       !this.remote.control
@@ -572,6 +634,11 @@ export class NativeScreenSession {
         !request.abort.signal.aborted &&
         this.port.acceptsControlRequests?.() !== false
       ) {
+        request.sourceId = sourceId;
+        if (sourceId)
+          this.publications
+            .get(sourceId)
+            ?.retryUnavailableControl();
         this.send({
           type: "control-result",
           id: value.id,
@@ -646,6 +713,7 @@ export class NativeScreenSession {
     const incoming: Incoming = {
       id: value.id,
       sourceId: value.sourceId,
+      offeredControl: value.control === true,
       candidates: [],
     };
     if (

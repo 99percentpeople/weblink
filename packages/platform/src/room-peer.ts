@@ -110,12 +110,13 @@ export interface RoomConnection extends Pick<
 /** Additional operations when the platform owns the room's ICE/DTLS transport. */
 export interface RoomScreenTransport {
   receiveContent(allowed: boolean): void;
+  /** Returns whether the optional input channels were attached to this screen. */
   attachScreen(
     capture: string,
     transport: string,
     codecs: NativeSendCodecs,
     control?: NativeControlContext,
-  ): Promise<void>;
+  ): Promise<boolean>;
   detachScreen(transport: string): Promise<void>;
   screenReady(transport: string): Promise<void>;
 }

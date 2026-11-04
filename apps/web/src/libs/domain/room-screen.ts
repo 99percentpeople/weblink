@@ -318,17 +318,20 @@ export class RoomScreens {
           );
         leases.set(id, pc);
         try {
-          await pc.attachScreen(
+          const attached = await pc.attachScreen(
             pub.captureId,
             id,
             codecs,
             control,
           );
+          const sdp = ROOM_SCREEN_PREFIX + id;
+          return control && !attached
+            ? { sdp, control: false as const }
+            : sdp;
         } catch (error) {
           leases.delete(id);
           throw error;
         }
-        return ROOM_SCREEN_PREFIX + id;
       },
       async answer(id, answer) {
         if (answer !== ROOM_SCREEN_PREFIX + id)

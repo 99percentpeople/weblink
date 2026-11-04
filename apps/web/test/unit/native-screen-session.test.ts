@@ -235,15 +235,56 @@ it("applies shared decoder snapshots without another media hello", async () => {
   session.dispose();
 });
 
-it("keeps receiving video with no common control protocol and ignores control requests", async () => {
+it("answers an existing room share when its first offer overtakes screen discovery", async () => {
   const { session, channel } = setup();
-  session.setRemoteCapabilities({
+  const room = {
+    roomTransport: { multiplex: true as const },
+  };
+  const discovered = {
+    ...room,
     screen: {
       decode: { video: null, audio: null },
       trickleIce: true,
       multiScreen: true,
     },
-  });
+  };
+  const offer = (id: string) =>
+    channel.receive({
+      type: "offer",
+      id,
+      sourceId: "display",
+      sdp: "weblink-room-track/" + id,
+    });
+  session.setRemoteCapabilities(room);
+  offer("stopped");
+  channel.receive({ type: "stop", id: "stopped" });
+  offer("live");
+  offer("live");
+  await flush();
+  expect(receivers).toHaveLength(0);
+  session.setRemoteCapabilities(discovered);
+  await flush();
+  expect(
+    channel.sent.filter((s) => s.type === "answer"),
+  ).toEqual([
+    { type: "answer", id: "live", sdp: "browser-answer" },
+  ]);
+  session.setRemoteCapabilities(room);
+  offer("after-withdrawal");
+  session.setRemoteCapabilities(discovered);
+  await flush();
+  expect(receivers).toHaveLength(1);
+  session.dispose();
+});
+
+it("receives video immediately and rebinds offered input only once the host advertises control", async () => {
+  const { session, channel } = setup();
+  const screen = {
+    decode: { video: null, audio: null },
+    trickleIce: true,
+    multiScreen: true,
+  };
+  session.setRemoteCapabilities({ screen });
   channel.receive({
     type: "control-request",
     id: "request",
@@ -263,6 +304,22 @@ it("keeps receiving video with no common control protocol and ignores control re
       (value) => value.type === "control-result",
     ),
   ).toBe(false);
+  const host = {
+    screen,
+    control: {
+      request: true,
+      host: true,
+      occupancy: { state: "idle" as const },
+    },
+  };
+  expect(channel.sent.some((m) => m.type === "retry")).toBe(
+    false,
+  );
+  session.setRemoteCapabilities(host);
+  session.setRemoteCapabilities(host);
+  expect(
+    channel.sent.filter((m) => m.type === "retry"),
+  ).toEqual([{ type: "retry", id: "video" }]);
   session.dispose();
 });
 
@@ -1411,6 +1468,91 @@ it("adds native control only for an eligible display and a capable authenticated
   s.reset();
   expect(display.closePeer).toHaveBeenCalledTimes(1);
   expect(window.closePeer).toHaveBeenCalledTimes(1);
+});
+
+it("publishes video without a failed native control binding and answers each approved control retry", async () => {
+  const port = {
+    loadIceServers: async () => [],
+    relayOnly: () => false,
+    controlCapabilities: { request: true, host: true },
+    controlContext: async () => ({
+      ownerId: "room",
+      peerGeneration: "peer",
+      clientId: "viewer",
+    }),
+    requestScreen: vi.fn(async () => "display"),
+    changed: vi.fn(),
+    error: vi.fn(),
+    cancelScreenRequest: vi.fn(),
+  };
+  const session = new NativeScreenSession(port);
+  let inputAvailable = false;
+  const display = {
+    ...publication("display"),
+    controlEligible: true,
+    offer: vi.fn(async (id: string) => {
+      const sdp = "weblink-room-track/" + id;
+      return inputAvailable
+        ? sdp
+        : { sdp, control: false as const };
+    }),
+  };
+  session.setPublication(display);
+  const channel = new Channel();
+  session.bind(channel as unknown as RTCDataChannel);
+  session.setRemoteCapabilities({
+    screen: {
+      decode: { video: null, audio: null },
+      trickleIce: false,
+      multiScreen: true,
+    },
+    control: {
+      request: true,
+      host: false,
+      occupancy: { state: "unavailable" },
+    },
+  });
+  await flush();
+  const offers = () =>
+    channel.sent.filter((s) => s.type === "offer");
+  expect(offers()).toHaveLength(1);
+  expect(offers()[0].control).toBeUndefined();
+  channel.receive({
+    type: "answer",
+    id: offers()[0].id,
+    sdp: offers()[0].sdp,
+  });
+  await flush();
+  expect(display.answer).toHaveBeenCalledOnce();
+  channel.receive({ type: "control-request", id: "first" });
+  await flush();
+  expect(offers()).toHaveLength(2);
+  expect(offers()[1].control).toBeUndefined();
+  expect(channel.sent.at(-1)).toEqual({
+    type: "control-result",
+    id: "first",
+  });
+  inputAvailable = true;
+  channel.receive({
+    type: "control-request",
+    id: "second",
+  });
+  await flush();
+  expect(offers()).toHaveLength(3);
+  expect(offers()[2].control).toBe(true);
+  expect(
+    channel.sent.filter(
+      (s) =>
+        s.type === "control-result" && s.id === "second",
+    ),
+  ).toEqual([
+    {
+      type: "control-result",
+      id: "second",
+      sourceId: "display",
+    },
+  ]);
+  session.dispose();
 });
 
 it("prepares the local input owner before publishing when peer capabilities arrive during initialization", async () => {

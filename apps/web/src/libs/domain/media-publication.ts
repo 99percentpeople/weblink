@@ -39,7 +39,7 @@ export interface MediaPublication {
     onCandidate?: (candidate: RTCIceCandidateInit) => void,
     control?: NativeControlContext,
     codecs?: NativeSendCodecs,
-  ): Promise<string>;
+  ): Promise<string | { sdp: string; control: false }>;
   answer(peerId: string, sdp: string): Promise<void>;
   addIceCandidate?(
     peerId: string,
@@ -59,6 +59,7 @@ interface MediaSenderPort {
   controlContext?(): Promise<
     NativeControlContext | undefined
   >;
+  controlUnavailable?(): void;
   loadIceServers(): Promise<RTCIceServer[]>;
   relayOnly(): boolean;
   send(signal: MediaSignal): void;
@@ -68,6 +69,7 @@ type Outgoing = {
   id: string;
   codecs?: NativeSendCodecs;
   answerApplied: boolean;
+  controlUnavailable?: boolean;
   candidates: RTCIceCandidateInit[];
 };
 type SenderSignal = Extract<
@@ -213,6 +215,12 @@ export class MediaPublicationSender<
     this.stop(true);
     this.retries = 0;
   }
+  retryUnavailableControl(): void {
+    if (this.outgoing?.controlUnavailable) {
+      this.restartControl();
+      void this.publish();
+    }
+  }
   private clearTimer(): void {
     clearTimeout(this.timer);
     this.timer = undefined;
@@ -301,7 +309,7 @@ export class MediaPublicationSender<
       ] as const;
       const control = await this.port.controlContext?.();
       if (!this.current(outgoing)) return;
-      const sdp = codecs
+      const offer = codecs
         ? await this.publication.offer(
             ...args,
             trickle ? onCandidate : undefined,
@@ -326,12 +334,16 @@ export class MediaPublicationSender<
           .catch(() => {});
         return;
       }
+      outgoing.controlUnavailable =
+        typeof offer !== "string" && !offer.control;
       this.port.send({
         type: "offer",
         id: outgoing.id,
         sourceId: this.publication.sourceId,
-        ...(control ? { control: true as const } : {}),
-        sdp,
+        ...(control && !outgoing.controlUnavailable
+          ? { control: true as const }
+          : {}),
+        sdp: typeof offer === "string" ? offer : offer.sdp,
         ...(trickle ? { trickleIce: true as const } : {}),
       });
       this.receiverId = outgoing.id;
@@ -341,6 +353,8 @@ export class MediaPublicationSender<
         () => this.retry(outgoing.id),
         30000,
       );
+      if (outgoing.controlUnavailable)
+        this.port.controlUnavailable?.();
     } catch (error) {
       if (this.current(outgoing)) {
         this.port.error(error);

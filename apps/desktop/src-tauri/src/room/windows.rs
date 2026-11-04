@@ -362,7 +362,7 @@ pub async fn room_screen(
     track: String,
     codecs: weblink_desktop_capture::media::SendCodecs,
     control: Option<crate::remote_control::Context>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let peer = state.get(webview.label(), &id)?;
     let captures = capture.inner().clone();
     let media = crate::capture::run(capture, {
@@ -383,11 +383,11 @@ pub async fn room_screen(
     } else {
         None
     };
-    let result = peer.attach_screen(&media, &track, &codecs, port.clone());
-    if result.is_err() {
+    if let Err(error) = peer.attach_screen(&media, &track, &codecs, port.clone()) {
         if let Some(port) = port {
             port.closed();
         }
+        return Err(error);
     }
-    result
+    Ok(port.is_some())
 }

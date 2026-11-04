@@ -154,7 +154,7 @@ it("matches early RTP and input channels to an authorized publication, then rele
 
 it("publishes and retires a screen on its original room even after a reconnect", async () => {
   const room: RoomScreenTransport = {
-    attachScreen: vi.fn(async () => {}),
+    attachScreen: vi.fn(async () => false),
     detachScreen: vi.fn(async () => {}),
     screenReady: vi.fn(async () => {}),
     receiveContent: vi.fn(),
@@ -193,6 +193,25 @@ it("publishes and retires a screen on its original room even after a reconnect",
     codecs,
     undefined,
   );
+  expect(
+    await shared.offer(
+      "second",
+      [],
+      false,
+      undefined,
+      {
+        ownerId: "owner",
+        peerGeneration: "peer",
+        clientId: "viewer",
+        sourceId: "display",
+      },
+      codecs,
+    ),
+  ).toEqual({
+    sdp: ROOM_SCREEN_PREFIX + "second",
+    control: false,
+  });
+  await shared.closePeer("second");
   await expect(
     shared.answer(id, offer + "other"),
   ).rejects.toThrow();

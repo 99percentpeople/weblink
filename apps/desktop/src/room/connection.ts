@@ -616,7 +616,7 @@ class NativeConnection
     control?: NativeControlContext,
   ) {
     return this.ordered(() =>
-      invoke<void>("room_screen", {
+      invoke<boolean>("room_screen", {
         id: this.id,
         sessionId,
         track,
