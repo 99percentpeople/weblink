@@ -150,6 +150,7 @@ function setup(
     preferredAudioCodec: null,
   }),
   receivePurpose?: PeerSessionMediaOptions["receivePurpose"],
+  roomScreen?: PeerSessionMediaOptions["roomScreen"],
 ) {
   const state = {
     pc: null as PeerConnection | null,
@@ -162,6 +163,7 @@ function setup(
   const notify = vi.fn();
   const controller = new PeerSessionMediaController({
     receivePurpose,
+    roomScreen,
     targetClientId: () => "peer",
     acceptsContent: () => state.allowed,
     getPeerConnection: () =>
@@ -195,7 +197,50 @@ beforeEach(() => {
   vi.stubGlobal("MediaStream", Stream);
   vi.stubGlobal("RTCRtpSender", undefined);
 });
+it("restores a camera sender retired by rollback and can stop it afterwards", () => {
+  const { controller, bind } = setup();
+  const { pc } = bind();
+  const camera = new Track("video", "camera");
+  controller.setStream(asStream(media(camera)));
+  const old = pc.senders[0];
+  pc.senders = [];
+  pc.transceivers = [];
+  pc.dispatchEvent(new Event("signalingstatechange"));
+  expect(pc.senders).toHaveLength(1);
+  expect(pc.senders[0]).not.toBe(old);
+  expect(pc.senders[0].track).toBe(camera);
+  expect(pc.removeTrack).not.toHaveBeenCalledWith(old);
+  const restored = pc.senders[0];
+  controller.setStream(null);
+  expect(pc.removeTrack).toHaveBeenCalledWith(restored);
+});
 afterEach(() => vi.unstubAllGlobals());
+
+it("applies interactive playout to a screen claimed by the shared connection", () => {
+  const { bind, remote } = setup(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => true,
+  );
+  const { pc } = bind();
+  const receiver = {
+    jitterBufferTarget: 100,
+    playoutDelayHint: 0.2,
+  };
+  pc.dispatchEvent(
+    Object.assign(new Event("track"), {
+      receiver,
+      track: new Track("video", "screen"),
+    }),
+  );
+  expect(receiver).toEqual({
+    jitterBufferTarget: 0,
+    playoutDelayHint: 0,
+  });
+  expect(remote).not.toHaveBeenCalled();
+});
 
 it("installs encoded recording with the sender and keeps forwarding resources until connection disposal", () => {
   const encoded = {

@@ -37,7 +37,13 @@ export async function readVideoStatistics(
           })),
         ),
       );
-    if (native)
+    // A multiplexed screen is already sampled through this room receiver.
+    // Dedicated screen receivers and outgoing publications still own their stats.
+    if (
+      native &&
+      (publication ||
+        !pc?.getReceivers().some((r) => r.track === track))
+    )
       pending.push(
         native
           .getVideoStats(track, publication)

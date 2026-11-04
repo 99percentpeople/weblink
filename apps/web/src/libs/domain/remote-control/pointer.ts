@@ -423,7 +423,11 @@ export class RemotePointer extends EventTarget {
         : "unavailable";
     return s.type;
   }
-  bind(channel: ControlDataChannel, roomSource?: string) {
+  bind(
+    channel: ControlDataChannel,
+    roomSource?: string,
+    earlyReady?: string,
+  ) {
     const movement = channel.protocol === POINTER_CHANNEL;
     if (
       this.lifetime.signal.aborted ||
@@ -478,6 +482,8 @@ export class RemotePointer extends EventTarget {
     }
     if (!this.timer)
       this.timer = setInterval(() => this.tick(), 100);
+    if (!movement && earlyReady) this.receive(earlyReady);
+    if (channel.readyState === "open") this.changed();
   }
   private changed() {
     this.dispatchEvent(new Event("change"));

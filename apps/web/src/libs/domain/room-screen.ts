@@ -27,6 +27,8 @@ type Source = {
   id: string;
   stream: MediaStream;
   channels: RTCDataChannel[];
+  pendingReady?: string;
+  stopListening?: () => void;
   lifetime: AbortController;
   expiry?: ReturnType<typeof setTimeout>;
   update?: () => void;
@@ -122,7 +124,40 @@ export class RoomScreens {
       channel.close();
     else if (source.control)
       source.control.bind(channel, source.id);
-    else source.channels.push(channel);
+    else if (
+      source.channels.some((c) => c.protocol === protocol)
+    )
+      channel.close();
+    else {
+      source.channels.push(channel);
+      if (protocol === CONTROL_CHANNEL) {
+        // SCTP can deliver the host's one-time ready message before the
+        // authenticated publication offer identifies the control target.
+        const early = (event: MessageEvent) => {
+          const data = event.data;
+          if (
+            typeof data !== "string" ||
+            data.length > 4096
+          )
+            return;
+          try {
+            const msg = JSON.parse(data);
+            if (
+              msg?.type === "ready" &&
+              msg.generation === source.id
+            )
+              source.pendingReady = data;
+          } catch {
+            /* Ignore unrelated or malformed messages before binding. */
+          }
+        };
+        channel.addEventListener("message", early, {
+          signal: source.lifetime.signal,
+        });
+        source.stopListening = () =>
+          channel.removeEventListener("message", early);
+      }
+    }
     return true;
   }
   readonly receiver: ScreenReceiverFactory = (
@@ -143,10 +178,19 @@ export class RoomScreens {
     source.claimed = true;
     clearTimeout(source.expiry);
     source.control = control;
+    source.stopListening?.();
+    source.stopListening = undefined;
     for (const channel of source.channels.splice(0)) {
-      if (control) control.bind(channel, id);
+      if (
+        control &&
+        channel.protocol === CONTROL_CHANNEL &&
+        source.pendingReady
+      )
+        control.bind(channel, id, source.pendingReady);
+      else if (control) control.bind(channel, id);
       else channel.close();
     }
+    source.pendingReady = undefined;
     const active = () => this.sources.get(id) === source;
     const monitorOptions = this.native
       ? { maxProcessingDelayMs: 250 }

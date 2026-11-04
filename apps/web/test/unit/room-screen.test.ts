@@ -14,7 +14,8 @@ import type {
 import type { NativeScreenPublication } from "@/libs/domain/native-screen/sender";
 import {
   CONTROL_CHANNEL,
-  type RemotePointer,
+  POINTER_CHANNEL,
+  RemotePointer,
 } from "@/libs/domain/remote-control/pointer";
 
 const id = "233a7d84-f53c-487d-aab2-15bc267e62c3";
@@ -36,13 +37,62 @@ class Stream extends EventTarget {
     return this.tracks.filter((t) => t.kind === "video");
   }
 }
-const channel = () => ({
-  label: CONTROL_CHANNEL + "/" + id,
-  protocol: CONTROL_CHANNEL,
-  close: vi.fn(),
-});
+const channel = (protocol: string = CONTROL_CHANNEL) =>
+  Object.assign(new EventTarget(), {
+    label: protocol + "/" + id,
+    protocol,
+    ordered: protocol === CONTROL_CHANNEL,
+    maxPacketLifeTime: null,
+    maxRetransmits: protocol === CONTROL_CHANNEL ? null : 0,
+    readyState: "open",
+    close: vi.fn(),
+  });
 beforeEach(() => vi.stubGlobal("MediaStream", Stream));
 afterEach(() => vi.unstubAllGlobals());
+
+it("preserves the early ready handshake until the authorized screen offer binds both channels", () => {
+  const screens = new RoomScreens(
+    () => ({}) as RoomConnection,
+    () => true,
+    false,
+  );
+  const reliable = channel(),
+    movement = channel(POINTER_CHANNEL);
+  screens.channel(reliable as unknown as RTCDataChannel);
+  reliable.dispatchEvent(
+    new MessageEvent("message", {
+      data: JSON.stringify({
+        type: "ready",
+        generation: id,
+        target: {
+          sourceId: "source",
+          mediaId: id,
+          geometryRevision: "geometry",
+        },
+      }),
+    }),
+  );
+  screens.channel(movement as unknown as RTCDataChannel);
+  const pointer = new RemotePointer("source", id);
+  const states: string[] = [];
+  pointer.addEventListener("change", () =>
+    states.push(pointer.state()),
+  );
+  const receiver = screens.receiver(
+    offer,
+    {},
+    vi.fn(),
+    vi.fn(),
+    undefined,
+    pointer,
+  );
+  try {
+    expect(pointer.state()).toBe("viewing");
+    expect(states.at(-1)).toBe("viewing");
+  } finally {
+    receiver.close();
+  }
+});
 
 it("matches early RTP and input channels to an authorized publication, then releases only its resources", async () => {
   let allowed = true;

@@ -1,4 +1,5 @@
 import type { RoomConnection } from "@weblink/platform";
+import { setInteractivePlayout } from "../receiver-playout";
 import type { RemotePointer } from "../remote-control/pointer";
 import {
   ScreenDecodeError,
@@ -152,22 +153,7 @@ export class ScreenReceiver {
           return;
         // Interactive screen viewing should not intentionally accumulate
         // video/audio playout delay when a large scene cut arrives.
-        const receiver =
-          event.receiver as RTCRtpReceiver & {
-            jitterBufferTarget?: number | null;
-            playoutDelayHint?: number;
-          };
-        for (const property of [
-          "jitterBufferTarget",
-          "playoutDelayHint",
-        ] as const) {
-          try {
-            if (property in receiver)
-              receiver[property] = 0;
-          } catch {
-            // Older WebViews can expose an unsupported experimental setter.
-          }
-        }
+        setInteractivePlayout(event.receiver);
         this.stream.addTrack(event.track);
         event.track.addEventListener(
           "ended",

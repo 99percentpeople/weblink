@@ -420,6 +420,20 @@ fn check_screen_and_camera(codec: &str) {
             .unwrap();
         a.negotiate(&b).await;
         a.peer.screen_ready(id);
+        let sender = a
+            .peer
+            .pc
+            .senders()
+            .into_iter()
+            .find(|s| {
+                s.track()
+                    .is_some_and(|track| track.id() == format!("screen-{id}"))
+            })
+            .expect("screen RTP sender");
+        assert!(matches!(
+            sender.parameters().degradation_preference(),
+            Some(libwebrtc::rtp_parameters::DegradationPreference::MaintainFramerateAndResolution)
+        ));
         let key = b
             .events
             .lock()

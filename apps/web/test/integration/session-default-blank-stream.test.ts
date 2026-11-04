@@ -99,6 +99,8 @@ describe("PeerSession stream management", () => {
     const pc = {
       addTrack,
       removeTrack,
+      getSenders: () =>
+        addTrack.mock.calls.length ? [sender] : [],
       getTransceivers: () => [],
       close: () => {},
     } as unknown as RTCPeerConnection;

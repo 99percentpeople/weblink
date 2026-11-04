@@ -16,6 +16,7 @@ import {
 } from "./rtp-encoded-media";
 import type { EncodedVideoSource } from "./encoded-video";
 import { recordingMediaSources } from "./recording-media-sources";
+import { setInteractivePlayout } from "./receiver-playout";
 import {
   browserQualitySource,
   applyBrowserVideoQuality,
@@ -393,6 +394,7 @@ export class PeerSessionMediaController {
       return;
     const allowed =
       this.options.acceptsContent?.() !== false;
+    setInteractivePlayout(event.receiver);
     if (this.options.roomScreen?.(event)) return;
     event.track.enabled = allowed;
     const receiver = event.receiver;
@@ -411,12 +413,6 @@ export class PeerSessionMediaController {
         tap.setEnabled(allowed);
         this.encodedReceivers.set(receiver, tap);
       }
-    }
-    if ("jitterBufferTarget" in receiver) {
-      (receiver as any).jitterBufferTarget = 0;
-    }
-    if ("playoutDelayHint" in receiver) {
-      (receiver as any).playoutDelayHint = 0;
     }
 
     const track = event.track;
@@ -604,6 +600,7 @@ export class PeerSessionMediaController {
       "signalingstatechange",
       () => {
         if (pc.signalingState !== "stable") return;
+        this.syncLocalTracks();
         this.notifyLocalStreamState(this.localStream);
         this.publishRemoteStream();
       },
@@ -704,10 +701,16 @@ export class PeerSessionMediaController {
       this.senderConnection = pc;
     }
     let changed = false;
+    const currentSenders = new Set(pc.getSenders());
     for (const [track, sender] of this.senders) {
-      if (tracks.has(track)) continue;
+      // A polite rollback can retire the browser transceiver that was just
+      // added. Restore the user's current tracks on the surviving connection.
+      const attached =
+        currentSenders.has(sender) &&
+        sender.track === track;
+      if (tracks.has(track) && attached) continue;
       this.encodedVideo.get(sender)?.end();
-      pc.removeTrack(sender);
+      if (attached) pc.removeTrack(sender);
       this.senders.delete(track);
       changed = true;
     }
