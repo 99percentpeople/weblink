@@ -16,17 +16,24 @@ runs:
         "revision=$revision" >> $env:GITHUB_OUTPUT
     - name: Check out private SDK
       uses: actions/checkout@v5
+      env:
+        GIT_CONFIG_COUNT: "1"
+        GIT_CONFIG_KEY_0: lfs.fetchinclude
+        GIT_CONFIG_VALUE_0: webrtc-sys/libwebrtc/prebuilt/webrtc-win-x64-release.zip
       with:
         repository: 99percentpeople/rust-sdks
         ref: ${{ steps.sdk.outputs.revision }}
         ssh-key: ${{ inputs.ssh-key }}
         # Cargo fetches from this local repository; it must not be shallow.
         fetch-depth: 0
+        lfs: true
         path: .tmp/private-sdk
         persist-credentials: false
     - name: Populate Cargo dependencies without retaining credentials
       shell: pwsh
       run: |
+        $archive = (Resolve-Path .tmp/private-sdk/webrtc-sys/libwebrtc/prebuilt/webrtc-win-x64-release.zip).Path
+        "LK_WINDOWS_WEBRTC_ARCHIVE=$archive" >> $env:GITHUB_ENV
         $source = [System.Uri]::new((Resolve-Path .tmp/private-sdk).Path).AbsoluteUri
         $env:CARGO_NET_GIT_FETCH_WITH_CLI = 'true'
         # Limit URL rewriting to this process and this exact SDK repository.

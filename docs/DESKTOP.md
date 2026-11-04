@@ -41,16 +41,18 @@ Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): on
 Windows these include the MSVC 14.44 (Visual Studio 2022 17.14) or newer, Windows SDK 10.0.26100 or newer, Rust and WebView2. Native WebRTC downloads its prebuilt library on the first Cargo build. The root Cargo configuration selects the static MSVC runtime required by that library.
 The repository pins Rust in `rust-toolchain.toml` and Bun in `package.json`.
 Cargo also fetches the patched WebRTC bindings from the
-[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/5acf8d9fc182c0f7c4ec502062c002f3ab6dbdfa),
+[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/bf9999f9314ff677830ee342973f495d20a474ff),
 pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
-No vendored source or separate dependency preparation step is needed.
-The fork is private. Local desktop builders need Git credentials with read access;
-ordinary Web builds and TypeScript checks do not fetch this SDK.
+The fork is private. Local Windows x64 builders need Git read access and
+an authenticated GitHub CLI for the initial native library download. For
+offline builds, set `LK_WINDOWS_WEBRTC_ARCHIVE` to the matching SDK release
+ZIP. The SDK verifies its SHA-256 before extraction. Ordinary Web builds and
+TypeScript checks do not fetch this SDK.
 Official desktop Actions use the repository secret `NATIVE_SDK_READ_KEY`, an SSH
 deploy key with read-only access to this SDK repository alone. Both native crates
-must pin the same full commit. The checkout action removes authentication before
-Cargo fetches that commit from the local checkout, so compilation does not retain
-the private key. Rotating it requires replacing the SDK deploy key and this secret.
+must pin the same full commit. The action retrieves the release ZIP through
+Git LFS and removes authentication before Cargo reads the local checkout.
+Rotating the deploy key requires replacing it in the SDK and updating this secret.
 
 Native CI runs only for the official `public` branch's push/manual builds and
 validated release tags. PRs and forks still run Web/TypeScript checks without SDK
@@ -994,7 +996,7 @@ The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
 encoder bitrate limits, congestion control and retransmission remain active.
 Both options belong to the native screen session's factory, not process-global
 settings. The binding changes and upstream versions are documented in the fork's
-[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/5acf8d9fc182c0f7c4ec502062c002f3ab6dbdfa/WEBLINK.md).
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/bf9999f9314ff677830ee342973f495d20a474ff/WEBLINK.md).
 Update the fork first, then the full Cargo revision and lockfile together; normal
 builds never follow the branch tip. Preserve upstream license notices and verify
 native-to-browser RTP when upgrading the bindings.
