@@ -453,6 +453,7 @@ fn run(
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
     selection.set_preset(options.encoding_preset);
     let mut encoder: Option<backend::Encoder> = None;
+    let mut reopen_for_bitrate = false;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
     let mut waiting_for_budget = false;
@@ -522,8 +523,7 @@ fn run(
                 if next.frame_rate != options.frame_rate || next.max_bitrate != options.max_bitrate
                 {
                     // Frame rate and HRD capacity can be fixed at initialization.
-                    // Reopen only on explicit setting changes, never BWE feedback;
-                    // keep the source, RTP sender and audio alive.
+                    // Reopen the encoder while keeping the source and RTP sender alive.
                     encoder = None;
                     in_flight.clear();
                     statistics
@@ -578,29 +578,36 @@ fn run(
             if bitrate == 0 {
                 keyframe = true;
             } else if let Some(active) = &mut encoder {
-                if let Err(error) = active.set_bitrate(bitrate) {
-                    if !selection.reject_nvenc(&error) {
-                        return Err(error);
+                match active.try_set_bitrate(bitrate) {
+                    Ok(applied) => {
+                        reopen_for_bitrate = !applied;
+                        if applied {
+                            statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate =
+                                Some(bitrate);
+                        }
                     }
-                    encoder = None;
-                    in_flight.clear();
-                    keyframe = true;
-                    damage = Damage::default();
-                    continue;
+                    Err(error) if selection.reject_nvenc(&error) => {
+                        encoder = None;
+                        in_flight.clear();
+                        keyframe = true;
+                        damage = Damage::default();
+                        continue;
+                    }
+                    Err(error) => return Err(error),
                 }
-                // Fixed controls are read once when the transform opens. Avoid
-                // repeated driver queries on the rate-feedback path.
-                statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate = Some(bitrate);
             }
         }
         if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
-            if encoder.as_ref().is_none_or(|encoder| {
-                (encoder.width, encoder.height) != (frame.width, frame.height)
-                    || encoder.device.as_ref() != frame.device()
-            }) {
-                // Driver transforms are recreated on resolution changes; no old packets survive.
+            if reopen_for_bitrate
+                || encoder.as_ref().is_none_or(|encoder| {
+                    (encoder.width, encoder.height) != (frame.width, frame.height)
+                        || encoder.device.as_ref() != frame.device()
+                })
+            {
+                // Reconfigure on a fresh input so an idle sender can still drain earlier output.
                 drop(encoder.take());
                 in_flight.clear();
+                damage = Damage::default();
                 let opened = (|| -> Result<backend::Encoder> {
                     if let Input::Texture(texture) = &frame.input {
                         // Retain the real capture adapter even if GPU conversion fails
@@ -642,6 +649,7 @@ fn run(
                     Err(error) => return Err(error),
                 }
                 let controls = encoder.as_ref().unwrap().control_status();
+                reopen_for_bitrate = false;
                 let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
                 stats.implementation = encoder.as_ref().unwrap().implementation();
                 stats.bitrate = Some(rate_control.current());

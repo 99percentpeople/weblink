@@ -376,16 +376,17 @@ impl Transform {
         }
         controls
     }
-    pub fn set_bitrate(&mut self, bitrate: u32) -> crate::Result<()> {
-        let api = self
-            .controls
-            .as_ref()
-            .ok_or("Hardware encoder has no rate control")?;
-        unsafe { api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bitrate)) }
-            .map_err(|e| format!("Hardware encoder bitrate update failed: {e}"))?;
-        // HRD capacity follows the configured ceiling for this transform's lifetime.
-        // Feedback changes only the target rate; changing the ceiling reopens the MFT.
-        Ok(())
+    pub fn try_set_bitrate(&self, bitrate: u32) -> bool {
+        let Some(api) = &self.controls else {
+            return false;
+        };
+        // Some MFTs report a successful write while retaining the bitrate from
+        // SetOutputType. Only a confirmed live change can reuse this instance.
+        unsafe {
+            let key = &CODECAPI_AVEncCommonMeanBitRate;
+            api.SetValue(key, &VARIANT::from(bitrate)).is_ok()
+                && api.GetValue(key).and_then(|v| u32::try_from(&v)).ok() == Some(bitrate)
+        }
     }
     pub fn request_keyframe(&self) -> crate::Result<()> {
         let api = self

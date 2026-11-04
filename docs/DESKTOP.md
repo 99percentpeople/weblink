@@ -745,8 +745,12 @@ Both controls are optional and their readback remains visible in diagnostics. Lo
 the live bitrate ceiling takes effect immediately; raising it waits for new
 transport feedback. Explicit frame-rate or bitrate-ceiling changes recreate
 only the hardware transform to refresh its fixed media type and buffer budget;
-the RTP session stays connected. Ordinary bandwidth feedback updates the target
-bitrate on the running transform without restarting it.
+the RTP session stays connected. For bandwidth feedback, a Media Foundation
+encoder must confirm its new average bitrate through the codec API. Some
+transforms acknowledge the write but keep encoding at the bitrate negotiated
+in their initial output media type. When a live change cannot be confirmed,
+the worker drains available output while idle and opens a new transform at the
+latest target on its next input, starting with a keyframe on the same RTP sender.
 
 After the first encoded frame binds the source to its sender, transport rate
 feedback reaches the source independently of subsequent frames and wakes the

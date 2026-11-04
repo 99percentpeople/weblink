@@ -283,10 +283,11 @@ impl Encoder {
                 .map_err(|e| e.to_string()),
         }
     }
-    pub fn set_bitrate(&mut self, value: u32) -> Result<()> {
+    /// False means the new rate must be negotiated when the transform opens.
+    pub fn try_set_bitrate(&mut self, value: u32) -> Result<bool> {
         match &mut self.inner {
-            Inner::Nvenc(e) => e.set_bitrate(value),
-            Inner::Mf(e) => e.set_bitrate(value),
+            Inner::Nvenc(e) => e.set_bitrate(value).map(|()| true),
+            Inner::Mf(e) => Ok(e.try_set_bitrate(value)),
         }
     }
     pub fn control_status(&self) -> Vec<CodecControl> {

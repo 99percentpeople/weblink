@@ -47,15 +47,18 @@ struct Image {
 }
 impl Image {
     fn new() -> Self {
+        Self::with_size(320, 180)
+    }
+    fn with_size(width: u32, height: u32) -> Self {
         let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
         let mut texture = None;
-        let pixels = [32u8, 64, 192, 255].repeat(320 * 180);
+        let pixels = [32u8, 64, 192, 255].repeat((width * height) as usize);
         unsafe {
             device
                 .CreateTexture2D(
                     &D3D11_TEXTURE2D_DESC {
-                        Width: 320,
-                        Height: 180,
+                        Width: width,
+                        Height: height,
                         MipLevels: 1,
                         ArraySize: 1,
                         Format: DXGI_FORMAT_B8G8R8A8_UNORM,
@@ -69,7 +72,7 @@ impl Image {
                     },
                     Some(&D3D11_SUBRESOURCE_DATA {
                         pSysMem: pixels.as_ptr().cast(),
-                        SysMemPitch: 1280,
+                        SysMemPitch: width * 4,
                         SysMemSlicePitch: 0,
                     }),
                     Some(&mut texture),
@@ -107,6 +110,77 @@ fn configuration(codec: Codec) -> Configuration {
         bitrate_limit: 2_000_000,
         color: MediaOptions::default().color_space(),
     }
+}
+
+#[test]
+#[ignore = "Requires a Windows MF HEVC encoder; measures synthetic GPU frames"]
+fn mf_worker_applies_live_bitrate_to_encoded_frames() {
+    use super::super::{Encoder as Worker, Frame};
+
+    let info = mf::detect()
+        .unwrap()
+        .into_iter()
+        .find(|e| e.codecs.iter().any(|c| c == "video/h265"))
+        .unwrap();
+    let (width, height) = (1280, 720);
+    let image = Image::with_size(width, height);
+    let options = MediaOptions {
+        max_width: width,
+        max_height: height,
+        frame_rate: 30,
+        max_bitrate: 20_000_000,
+        encoder: info.id.clone(),
+        codec: Some("video/h265".into()),
+        ..Default::default()
+    };
+    // Cycle identical moving blocks at each rate so content complexity is fixed.
+    let mut frames = Vec::new();
+    for phase in 0u32..12 {
+        let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+        for y in 0..height {
+            for x in 0..width {
+                let hash = (x / 8).wrapping_mul(747796405) ^ (y / 8).wrapping_mul(2891336453);
+                let value = (hash.wrapping_mul(phase * 2 + 1) >> 24) as u8;
+                pixels.extend_from_slice(&[value, value, value, 255]);
+            }
+        }
+        unsafe {
+            image.context.UpdateSubresource(
+                &image.texture,
+                0,
+                None,
+                pixels.as_ptr().cast(),
+                width * 4,
+                0,
+            )
+        };
+        frames.push(Arc::new(Frame::from_gpu(image.captured(), &options, None)));
+    }
+    let low = 2_000_000;
+    let worker = Worker::shared(info.id, options, Arc::new(|| {}), Arc::new(|| {}), low).unwrap();
+    let mut means = Vec::new();
+    for rate in [low, 20_000_000, low] {
+        worker.set_bitrate(rate);
+        let mut before = worker.statistics();
+        for i in 0..120 {
+            worker.submit(frames[i % frames.len()].clone());
+            thread::sleep(Duration::from_millis(33));
+            if i == 29 {
+                before = worker.statistics();
+            }
+        }
+        assert!(worker.error().is_none(), "{:?}", worker.error());
+        let after = worker.statistics();
+        assert_eq!(after.bitrate, Some(rate));
+        let count = after.frames - before.frames;
+        assert!(count >= 15, "Only {count} frames at {rate}");
+        means.push((after.encoded_bytes - before.encoded_bytes) / count);
+    }
+    eprintln!(
+        "{} HEVC bytes per frame at low/high/low: {means:?}",
+        info.name
+    );
+    assert!(means[1] > means[0] * 2 && means[1] > means[2] * 2);
 }
 fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i64) -> Packet {
     let started = Instant::now();
@@ -177,7 +251,7 @@ fn nvenc_scene_changes_follow_the_live_bitrate() {
         let mut timestamp = 0;
         let mut peaks = Vec::new();
         for rate in [low, high, low] {
-            encoder.set_bitrate(rate).unwrap();
+            assert!(encoder.try_set_bitrate(rate).unwrap());
             let controls = encoder.control_status();
             let buffer = controls
                 .iter()
@@ -228,7 +302,7 @@ fn nvenc_uses_only_requested_keyframes_across_bitrate_changes() {
         // PLI/recording requests must still produce an immediate recovery IDR.
         for frame in 0..180 {
             if frame == 45 {
-                encoder.set_bitrate(750_000).unwrap();
+                assert!(encoder.try_set_bitrate(750_000).unwrap());
             }
             if frame == 95 {
                 encoder.request_keyframe().unwrap();
@@ -315,7 +389,7 @@ fn nvenc_presets_accept_concurrent_shared_surfaces_and_bitrate_changes() {
             thread::sleep(Duration::from_millis(1));
         }
         for encoder in &mut encoders {
-            encoder.set_bitrate(750_000).unwrap();
+            assert!(encoder.try_set_bitrate(750_000).unwrap());
             encode(encoder, shared.clone(), 160_000);
             encoder.request_keyframe().unwrap();
             assert!(encode(encoder, shared.clone(), 200_000).keyframe);
@@ -367,7 +441,7 @@ fn nvenc_gpu_output_and_same_codec_fallback_preserve_timestamps_and_keyframes() 
         );
         let packet = encode(&mut encoder, surface.clone(), 123_456);
         assert!(packet.keyframe);
-        encoder.set_bitrate(750_000).unwrap();
+        assert!(encoder.try_set_bitrate(750_000).unwrap());
         assert_eq!(encoder.codec, codec.encoded());
         encode(&mut encoder, surface.clone(), 1_000_000);
         encoder.request_keyframe().unwrap();
