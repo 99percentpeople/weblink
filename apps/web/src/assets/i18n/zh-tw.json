@@ -670,6 +670,8 @@
       "play": "播放畫面"
     },
     "statistics": {
+      "low_unavailable": "瀏覽器不支援",
+      "one_percent_low": "1% Low 顯示幀率",
       "show_overlay": "顯示串流統計疊加層",
       "hide_overlay": "隱藏串流統計疊加層",
       "display": "呈現",

@@ -59,6 +59,14 @@ export function VideoStatisticsOverlay(props: {
           .trim();
         const implementation = row.implementation?.trim();
         const fps = fixed(row.fps, "FPS");
+        let lowFps = fixed(row.onePercentLowFps, "FPS");
+        if (
+          row.onePercentLowState === "estimated" &&
+          lowFps
+        )
+          lowFps = "≈ " + lowFps;
+        if (row.onePercentLowState === "unsupported")
+          lowFps = t("video.statistics.low_unavailable");
         const dropped = fixed(row.droppedPerSecond, "/s");
         const fpsLabel =
           row.direction === "send"
@@ -105,6 +113,9 @@ export function VideoStatisticsOverlay(props: {
               ? `${t(`video.statistics.${kind}`)} ${text}`
               : undefined;
           }),
+          lowFps
+            ? `${t("video.statistics.one_percent_low")} ${lowFps}`
+            : undefined,
           [
             dropped
               ? `${t("video.statistics.player_dropped")} ${dropped}`

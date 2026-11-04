@@ -699,6 +699,8 @@
       "play": "播放画面"
     },
     "statistics": {
+      "low_unavailable": "浏览器不支持",
+      "one_percent_low": "1% Low 显示帧率",
       "show_overlay": "显示串流统计叠加层",
       "hide_overlay": "隐藏串流统计叠加层",
       "display": "呈现",

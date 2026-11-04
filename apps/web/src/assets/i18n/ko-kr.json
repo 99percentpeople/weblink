@@ -670,6 +670,8 @@
       "play": "비디오 재생"
     },
     "statistics": {
+      "low_unavailable": "브라우저에서 지원하지 않음",
+      "one_percent_low": "표시 프레임 속도 하위 1%",
       "show_overlay": "스트림 통계 표시",
       "hide_overlay": "스트림 통계 숨기기",
       "display": "표시",

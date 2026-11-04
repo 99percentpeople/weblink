@@ -670,6 +670,8 @@
       "play": "ビデオを再生する"
     },
     "statistics": {
+      "low_unavailable": "ブラウザが未対応",
+      "one_percent_low": "下位 1% の表示フレームレート",
       "show_overlay": "ストリーム統計を表示する",
       "hide_overlay": "ストリーム統計を非表示にする",
       "display": "表示",

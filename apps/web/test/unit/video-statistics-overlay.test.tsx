@@ -66,6 +66,7 @@ vi.mock("@/libs/hooks/video-statistics", () => ({
       direction: "display",
       preview: true,
       fps: 120,
+      onePercentLowFps: 72.4,
       droppedPerSecond: 0,
     },
   ],
@@ -111,6 +112,9 @@ it("copies every peer's complete snapshot without triggering the video action", 
     "video.statistics.display · video.statistics.preview",
   );
   expect(click).not.toHaveBeenCalled();
+  expect(text).toContain(
+    "video.statistics.one_percent_low 72.4 FPS",
+  );
   expect(text).toContain('"captureFrames": 120');
   expect(text).toContain('"rateLimitedInputs": 4');
   expect(text).toContain('"previous"');

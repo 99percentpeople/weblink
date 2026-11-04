@@ -670,6 +670,8 @@
       "play": "Video abspielen"
     },
     "statistics": {
+      "low_unavailable": "Vom Browser nicht unterstützt",
+      "one_percent_low": "Bildrate der langsamsten 1 %",
       "show_overlay": "Stream-Statistiken anzeigen",
       "hide_overlay": "Stream-Statistiken ausblenden",
       "display": "Darstellung",

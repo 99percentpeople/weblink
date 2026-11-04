@@ -670,6 +670,8 @@
       "play": "Reproducir vídeo"
     },
     "statistics": {
+      "low_unavailable": "Navegador no compatible",
+      "one_percent_low": "FPS del 1 % más lento",
       "show_overlay": "Mostrar estadísticas de transmisión",
       "hide_overlay": "Ocultar estadísticas de transmisión",
       "display": "Visualización",

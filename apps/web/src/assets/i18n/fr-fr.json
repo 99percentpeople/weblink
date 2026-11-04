@@ -670,6 +670,8 @@
       "play": "Lire la vidéo"
     },
     "statistics": {
+      "low_unavailable": "Non pris en charge par le navigateur",
+      "one_percent_low": "Débit des 1 % d’images les plus lentes",
       "show_overlay": "Afficher les statistiques du flux",
       "hide_overlay": "Masquer les statistiques du flux",
       "display": "Affichage",

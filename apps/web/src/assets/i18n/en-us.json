@@ -699,6 +699,8 @@
       "play": "Play video"
     },
     "statistics": {
+      "low_unavailable": "Unsupported by browser",
+      "one_percent_low": "Display 1% low",
       "show_overlay": "Show stream statistics",
       "hide_overlay": "Hide stream statistics",
       "display": "Presentation",
