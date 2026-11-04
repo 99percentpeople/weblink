@@ -8,6 +8,7 @@ mod events;
 mod gpu_tests;
 mod output;
 mod preset;
+pub(super) mod rate_change;
 pub(super) mod sample;
 pub(super) mod transform;
 use super::hardware::gpu;

@@ -209,6 +209,7 @@ pub(super) fn has_adapter_codec(device: &ID3D11Device, mime: &str) -> Result<boo
     Ok(!enumerate(codec, Some(&adapter))?.is_empty())
 }
 
+#[derive(Clone)]
 pub(in crate::media::windows) struct Selection {
     requested: String,
     automatic: bool,
@@ -238,6 +239,14 @@ impl Selection {
     }
     pub fn set_preset(&mut self, preset: EncodingPreset) {
         self.preset = preset;
+    }
+    pub fn for_rate_change(&self) -> Self {
+        let mut selection = self.clone();
+        if let Some(report) = &self.report {
+            selection.requested = report.encoder.clone();
+            selection.automatic = false;
+        }
+        selection
     }
     pub fn capture_device(&mut self, device: &ID3D11Device) {
         match Adapter::from_device(device) {

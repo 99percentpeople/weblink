@@ -1,4 +1,4 @@
-//! Windows hardware H.264/HEVC transforms. Every instance stays on its owning MTA thread.
+//! Windows hardware H.264/HEVC transforms. Each instance has a single owner in the COM MTA.
 use super::encoders::Codec;
 use crate::damage::DirtyRect;
 use crate::media::latency::CodecControl;
@@ -17,7 +17,7 @@ use windows::{
 };
 type Result<T> = windows::core::Result<T>;
 
-pub struct Runtime;
+pub struct Runtime(std::marker::PhantomData<std::rc::Rc<()>>);
 impl Runtime {
     pub fn new() -> Result<Self> {
         unsafe {
@@ -27,7 +27,7 @@ impl Runtime {
                 return Err(error);
             }
         }
-        Ok(Self)
+        Ok(Self(std::marker::PhantomData))
     }
 }
 impl Drop for Runtime {

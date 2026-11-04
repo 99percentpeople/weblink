@@ -749,8 +749,11 @@ the RTP session stays connected. For bandwidth feedback, a Media Foundation
 encoder must confirm its new average bitrate through the codec API. Some
 transforms acknowledge the write but keep encoding at the bitrate negotiated
 in their initial output media type. When a live change cannot be confirmed,
-the worker drains available output while idle and opens a new transform at the
-latest target on its next input, starting with a keyframe on the same RTP sender.
+the worker opens a replacement at the new target in the background. The current
+encoder keeps sending frames under the latest network budget until the replacement
+can accept a fresh frame. The switch starts with a keyframe on the same RTP sender.
+A superseded target is discarded. Drivers limited to one concurrent session
+use exclusive renegotiation.
 
 After the first encoded frame binds the source to its sender, transport rate
 feedback reaches the source independently of subsequent frames and wakes the

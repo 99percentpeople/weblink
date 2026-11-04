@@ -162,6 +162,8 @@ impl Selection {
                     self.nvenc_active = true;
                     return Ok(Encoder {
                         inner: Inner::Nvenc(encoder),
+                        config: configuration,
+                        warmup: None,
                         codec: self.codec.encoded(),
                         width,
                         height,
@@ -202,6 +204,8 @@ impl Selection {
             }
         }
         Ok(Encoder {
+            config: configuration,
+            warmup: None,
             codec: encoder.codec,
             width,
             height,
@@ -216,6 +220,8 @@ enum Inner {
 }
 pub(super) struct Encoder {
     inner: Inner,
+    config: Configuration,
+    warmup: Option<mf::rate_change::Warmup>,
     pub codec: EncodedVideoCodec,
     pub width: u32,
     pub height: u32,
@@ -285,10 +291,58 @@ impl Encoder {
     }
     /// False means the new rate must be negotiated when the transform opens.
     pub fn try_set_bitrate(&mut self, value: u32) -> Result<bool> {
-        match &mut self.inner {
+        if value == self.config.bitrate {
+            return Ok(true);
+        }
+        let applied = match &mut self.inner {
             Inner::Nvenc(e) => e.set_bitrate(value).map(|()| true),
             Inner::Mf(e) => Ok(e.try_set_bitrate(value)),
+        }?;
+        if applied {
+            self.config.bitrate = value;
         }
+        Ok(applied)
+    }
+    /// Poll even after feedback returns to the active rate so obsolete warmups
+    /// are released. Maintain at most one candidate for this encoder.
+    pub fn prepare_bitrate(
+        &mut self,
+        target: u32,
+        has_input: bool,
+        selection: &Selection,
+        wake: &Wake,
+        owner: &transform::Runtime,
+    ) -> Result<bool> {
+        let Inner::Mf(active) = &mut self.inner else {
+            return Ok(false);
+        };
+        if let Some(warmup) = &mut self.warmup {
+            if warmup.bitrate == target && !has_input {
+                return Ok(false);
+            }
+            let ready_rate = warmup.bitrate;
+            let Some(candidate) = warmup.take_ready(owner).transpose() else {
+                return Ok(false);
+            };
+            self.warmup = None;
+            if target == ready_rate && target != self.config.bitrate {
+                *active = candidate?;
+                self.config.bitrate = target;
+                return Ok(true);
+            }
+        }
+        if has_input && target != 0 && target != self.config.bitrate {
+            let mut config = self.config;
+            config.bitrate = target;
+            self.warmup = Some(mf::rate_change::Warmup::start(
+                selection.mf.for_rate_change(),
+                config,
+                self.device.clone(),
+                wake.clone(),
+                owner,
+            )?);
+        }
+        Ok(false)
     }
     pub fn control_status(&self) -> Vec<CodecControl> {
         match &self.inner {

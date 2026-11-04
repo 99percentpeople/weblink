@@ -449,11 +449,12 @@ fn run(
     bitrate: Option<u32>,
     outputs: Arc<Mutex<HashMap<u64, (Arc<super::encoding_output::Output>, u64)>>>,
 ) -> Result<()> {
-    let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
+    let runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
     selection.set_preset(options.encoding_preset);
     let mut encoder: Option<backend::Encoder> = None;
     let mut reopen_for_bitrate = false;
+    let mut overlapping_sessions = true;
     let mut converter: Option<gpu::Converter> = None;
     let mut latest: Option<Arc<Frame>> = None;
     let mut waiting_for_budget = false;
@@ -597,13 +598,46 @@ fn run(
                 }
             }
         }
+        // Drivers which latch their rate at initialization can prepare a second
+        // session while the current one continues to consume the live budget.
+        if let Some(active) = encoder.as_mut().filter(|_| overlapping_sessions) {
+            let compatible_input = latest.as_ref().is_some_and(|frame| {
+                (active.width, active.height) == (frame.width, frame.height)
+                    && active.device.as_ref() == frame.device()
+            });
+            match active.prepare_bitrate(
+                rate_control.current(),
+                compatible_input,
+                &selection,
+                &wake,
+                &runtime,
+            ) {
+                Ok(true) => {
+                    reopen_for_bitrate = false;
+                    in_flight.clear();
+                    damage = Damage::default();
+                    keyframe = true;
+                    let controls = active.control_status();
+                    let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                    stats.bitrate = Some(rate_control.current());
+                    stats.controls = controls;
+                    stats.in_flight = 0;
+                }
+                Ok(false) => {}
+                // A driver with only one hardware session still supports rate
+                // changes using exclusive renegotiation on a fresh input.
+                Err(_) => overlapping_sessions = false,
+            }
+        }
         if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
-            if reopen_for_bitrate
-                || encoder.as_ref().is_none_or(|encoder| {
-                    (encoder.width, encoder.height) != (frame.width, frame.height)
-                        || encoder.device.as_ref() != frame.device()
-                })
-            {
+            let format_changed = encoder.as_ref().is_none_or(|encoder| {
+                (encoder.width, encoder.height) != (frame.width, frame.height)
+                    || encoder.device.as_ref() != frame.device()
+            });
+            if format_changed || (!overlapping_sessions && reopen_for_bitrate) {
+                if format_changed {
+                    overlapping_sessions = true;
+                }
                 // Reconfigure on a fresh input so an idle sender can still drain earlier output.
                 drop(encoder.take());
                 in_flight.clear();

@@ -182,6 +182,78 @@ fn mf_worker_applies_live_bitrate_to_encoded_frames() {
     );
     assert!(means[1] > means[0] * 2 && means[1] > means[2] * 2);
 }
+#[test]
+#[ignore = "Requires Windows MF HEVC and two hardware sessions"]
+fn mf_rate_handoff_preserves_the_active_stream_and_discards_stale_targets() {
+    let runtime = transform::Runtime::new().unwrap();
+    let image = Image::new();
+    let mut converter = gpu::Converter::new(&image.device, (320, 180), Arc::new(|| {})).unwrap();
+    let surface = converter
+        .convert(&image.captured(), &MediaOptions::default())
+        .unwrap()
+        .unwrap();
+    let id = mf::detect()
+        .unwrap()
+        .into_iter()
+        .find(|e| e.codecs.iter().any(|c| c == "video/h265"))
+        .unwrap()
+        .id;
+    let mut selection = Selection::new(id, false);
+    let config = configuration(Codec::Hevc);
+    let low = 2_000_000;
+    let high = 6_000_000;
+    let wake: Wake = Arc::new(|| {});
+    let mut active = selection
+        .open(
+            320,
+            180,
+            60,
+            low,
+            high,
+            config.color,
+            wake.clone(),
+            Some(&image.device),
+        )
+        .unwrap();
+    let update = |active: &mut Encoder, rate, has_input| {
+        active.prepare_bitrate(rate, has_input, &selection, &wake, &runtime)
+    };
+    assert!(encode(&mut active, surface.clone(), 0).keyframe);
+    assert!(!update(&mut active, high, true).unwrap());
+    // The original MFT still accepts and emits delta frames while its replacement opens.
+    let mut pts = 16_667;
+    assert!(!encode(&mut active, surface.clone(), pts).keyframe);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while active.warmup.is_some() {
+        assert!(!update(&mut active, low, false).unwrap());
+        assert!(Instant::now() < deadline, "Obsolete session was retained");
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(active.config.bitrate, low);
+    // A failed, superseded request must not disable overlap. A matching failure
+    // asks the caller to retry with the driver's sole session.
+    active.warmup = Some(mf::rate_change::Warmup::unavailable(high));
+    assert!(!update(&mut active, low, false).unwrap());
+    active.warmup = Some(mf::rate_change::Warmup::unavailable(high));
+    assert!(update(&mut active, high, true).is_err());
+    assert!(active.warmup.is_none());
+    assert_eq!(active.config.bitrate, low);
+
+    assert!(!update(&mut active, high, true).unwrap());
+    assert!(!update(&mut active, high, false).unwrap());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !update(&mut active, high, true).unwrap() {
+        pts += 16_667;
+        encode(&mut active, surface.clone(), pts);
+        assert!(
+            Instant::now() < deadline,
+            "Replacement did not become ready"
+        );
+    }
+    assert_eq!(active.config.bitrate, high);
+    active.request_keyframe().unwrap();
+    assert!(encode(&mut active, surface, pts + 16_667).keyframe);
+}
 fn encode(encoder: &mut Encoder, surface: Arc<Lease<gpu::Surface>>, timestamp: i64) -> Packet {
     let started = Instant::now();
     let mut accepted = false;
