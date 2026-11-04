@@ -145,6 +145,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     connection: pc,
                     gathering: Some(gathering.clone()),
                     room_tracks: Vec::new(),
+                    room_budget: None,
                     software_sender: None,
                     preview: false,
                     raw_video: true,

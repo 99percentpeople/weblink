@@ -41,6 +41,10 @@ mod cadence;
 
 // Keep in sync with MAX_NATIVE_FRAME_RATE in @weblink/platform.
 pub const MAX_FRAME_RATE: u32 = 1000;
+pub(crate) const DEFAULT_VIDEO_BITRATE_BPS: u64 = 25 * 1024 * 1024;
+
+#[cfg(windows)]
+pub(crate) const AUDIO_BITRATE_BPS: u64 = 128_000;
 
 // Formats supported by the application's PCM/WebRTC path; Windows probes each pair.
 // Whole 10 ms PCM frames are required by the native WebRTC source.
@@ -141,7 +145,7 @@ impl Default for MediaOptions {
             max_width: 1920,
             max_height: 1080,
             frame_rate: 30,
-            max_bitrate: 25 * 1024 * 1024,
+            max_bitrate: DEFAULT_VIDEO_BITRATE_BPS,
             codec: None,
             encoder: "auto".into(),
             encoding_preset: Default::default(),
@@ -303,8 +307,56 @@ pub struct VideoStats {
 /// start at its selected budget; remote transports still probe conservatively.
 /// Do not set a minimum: congestion control and live ceiling changes must win.
 #[cfg(any(windows, test))]
+const REMOTE_START_BITRATE_BPS: u64 = 1_000_000;
+
+#[cfg(any(windows, test))]
 fn starting_bitrate_sdp(sdp: &str, limit: u64, preview: bool) -> String {
-    let kbps = (if preview { limit } else { limit.min(1_000_000) } / 1000).max(1);
+    with_video_start_rates(sdp, |_| {
+        Some(if preview {
+            limit
+        } else {
+            limit.min(REMOTE_START_BITRATE_BPS)
+        })
+    })
+}
+
+#[cfg(any(windows, test))]
+pub(crate) fn room_starting_bitrate_sdp(
+    sdp: &str,
+    screens: &std::collections::HashMap<String, u64>,
+) -> String {
+    fn receives(line: &str) -> Option<bool> {
+        match line {
+            "a=sendrecv" | "a=recvonly" => Some(true),
+            "a=inactive" | "a=sendonly" => Some(false),
+            _ => None,
+        }
+    }
+    let session_receives = sdp
+        .lines()
+        .take_while(|l| !l.starts_with("m="))
+        .find_map(receives)
+        .unwrap_or(true);
+    with_video_start_rates(sdp, |lines| {
+        // A zero-port bundle-only offer can still accept media over BUNDLE.
+        if (lines[0].split_ascii_whitespace().nth(1) == Some("0")
+            && !lines.iter().any(|l| l == "a=bundle-only"))
+            || !lines
+                .iter()
+                .find_map(|l| receives(l))
+                .unwrap_or(session_receives)
+        {
+            return None;
+        }
+        let mid = lines.iter().find_map(|l| l.strip_prefix("a=mid:"))?;
+        screens
+            .get(mid)
+            .map(|rate| (*rate).min(REMOTE_START_BITRATE_BPS))
+    })
+}
+
+#[cfg(any(windows, test))]
+fn with_video_start_rates(sdp: &str, rate: impl Fn(&[String]) -> Option<u64>) -> String {
     let mut sections = vec![Vec::<String>::new()];
     for line in sdp.lines() {
         if line.starts_with("m=") {
@@ -319,15 +371,19 @@ fn starting_bitrate_sdp(sdp: &str, limit: u64, preview: bool) -> String {
         {
             continue;
         }
-        let payloads: Vec<String> = lines
+        let Some(bps) = rate(lines) else { continue };
+        let kbps = (bps / 1000).max(1);
+        let payloads: std::collections::BTreeSet<u8> = lines
             .iter()
             .filter_map(|line| {
                 let (payload, encoding) = line.strip_prefix("a=rtpmap:")?.split_once(' ')?;
-                matches!(
-                    encoding.split('/').next()?.to_ascii_uppercase().as_str(),
-                    "H264" | "H265" | "VP8" | "VP9" | "AV1"
-                )
-                .then(|| payload.to_string())
+                let pt: u8 = payload.parse().ok()?;
+                (pt < 128
+                    && matches!(
+                        encoding.split('/').next()?.to_ascii_uppercase().as_str(),
+                        "H264" | "H265" | "VP8" | "VP9" | "AV1"
+                    ))
+                .then_some(pt)
             })
             .collect();
         for payload in payloads {
@@ -589,6 +645,36 @@ mod tests {
                 .count(),
             2
         );
+    }
+    #[test]
+    fn room_start_hints_follow_sending_screen_mids_and_remote_direction() {
+        let sections = [
+            ("camera", "9", "a=recvonly", None),
+            ("small", "9", "a=recvonly", Some(350)),
+            ("display", "0", "a=bundle-only\r\na=sendrecv", Some(1000)),
+            ("remote", "9", "a=sendonly", None),
+            ("paused", "9", "a=inactive", None),
+            ("rejected", "0", "a=recvonly", None),
+            ("inherited", "9", "", None),
+        ];
+        let mut sdp = "v=0\r\na=sendonly\r\n".to_owned();
+        let mut expected = sdp.clone();
+        let mut screens = std::collections::HashMap::new();
+        for (mid, port, direction, rate) in sections {
+            let section = format!("m=video {port} RTP/AVPF 96\r\na=mid:{mid}\r\n{direction}\r\na=rtpmap:96 H265/90000\r\n");
+            sdp.push_str(&section);
+            expected.push_str(&section);
+            if mid != "camera" {
+                screens.insert(
+                    mid.to_owned(),
+                    if mid == "small" { 350_000 } else { 8_000_000 },
+                );
+            }
+            if let Some(rate) = rate {
+                expected.push_str(&format!("a=fmtp:96 x-google-start-bitrate={rate}\r\n"));
+            }
+        }
+        assert_eq!(room_starting_bitrate_sdp(&sdp, &screens), expected);
     }
     #[test]
     fn live_video_changes_preserve_session_settings_and_validate_before_commit() {

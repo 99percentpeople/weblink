@@ -241,6 +241,10 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
             .add_capture("camera", &camera, vec!["meeting".into()])
             .unwrap();
         a.peer.set_codecs("camera", &["video/vp8".into()]).unwrap();
+        a.peer
+            .set_limits("camera", Some(2_000_000), None, None, None)
+            .unwrap();
+        assert_eq!(a.peer.bandwidth.applied_maximum(), None);
         let screens = [
             ("text", EncodingPreset::Quality, 30, "[quality]"),
             ("motion", EncodingPreset::Latency, 60, "[latency]"),
@@ -272,6 +276,38 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
         a.negotiate(&b).await;
         tokio::join!(a.candidates(&b), b.candidates(&a));
         let camera_mid = a.peer.mids()["camera"].clone();
+        let screen_mids = a.peer.bandwidth.screen_limits();
+        assert_eq!(screen_mids.len(), 2);
+        let answer = a.peer.pc.current_remote_description().unwrap().to_string();
+        for section in answer.split("m=").filter(|s| s.starts_with("video ")) {
+            let mid = section
+                .lines()
+                .find_map(|line| line.strip_prefix("a=mid:"))
+                .unwrap();
+            assert_eq!(
+                section.contains("x-google-start-bitrate=1000"),
+                screen_mids.contains_key(mid)
+            );
+        }
+        let screen_cap = MediaOptions::default().max_bitrate;
+        assert_eq!(
+            a.peer.bandwidth.applied_maximum(),
+            Some(2 * screen_cap + 2_000_000)
+        );
+        let mic = CaptureSource::audio(1).unwrap();
+        a.peer.add_capture("mic", &mic, vec![]).unwrap();
+        assert_eq!(
+            a.peer.bandwidth.applied_maximum(),
+            Some(2 * screen_cap + 2_128_000)
+        );
+        a.peer
+            .set_limits("mic", Some(64_000), None, None, None)
+            .unwrap();
+        assert_eq!(
+            a.peer.bandwidth.applied_maximum(),
+            Some(2 * screen_cap + 2_064_000)
+        );
+        a.peer.remove_capture("mic").unwrap();
         let camera_key = b.received_key(&camera_mid);
         let camera_frame = vec![128; 160 * 96 * 3 / 2];
         let output_keys = screens.each_ref().map(|(id, _, _)| {
@@ -300,6 +336,7 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
                     )
                     .unwrap();
             }
+            assert_eq!(a.peer.bandwidth.applied_maximum(), Some(4_000_000));
             let mut observed = Vec::new();
             let start = std::time::Instant::now();
             let baseline = output_keys.map(|key| b.peer.output(key).unwrap().decoded_frames());
@@ -354,6 +391,7 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
             "{camera_impl}"
         );
         a.peer.detach_screen("text");
+        assert_eq!(a.peer.bandwidth.applied_maximum(), Some(3_000_000));
         a.negotiate(&b).await;
         assert!(!a
             .peer
@@ -368,6 +406,7 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
         for (_, share, _) in screens {
             share.close();
         }
+        assert_eq!(a.peer.bandwidth.applied_maximum(), None);
         a.peer.close();
         b.peer.close();
     });

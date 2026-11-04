@@ -709,13 +709,18 @@ prove software decoding. Native screen receivers already request zero additional
 audio/video jitter buffering, subject to the browser's loss-recovery and A/V sync
 requirements. Experimental codec flags are not enabled by the application.
 
-Each native peer sets both its video RTP encoding limit and its transport-wide
-maximum. The transport budget follows the configured video maximum plus the
-128 kbps audio allowance when that peer sends audio, on creation and live updates.
-These settings share the existing rollback path. An RTP encoding limit alone does
-not update GoogCC's probe ceiling: without a finite transport maximum, the bundled
-engine defaults bandwidth probes to 5 Mbps. This is a probing limit, not a hard
-media throughput cap. Native screen factories also opt into periodic ALR probes
+Native screen sharing sets a per-viewer RTP video limit and a transport-wide
+maximum for bandwidth probes. On a room connection the maximum sums the live
+limits of all outgoing screens and cameras, plus an allowance for each outgoing
+audio track (128 kbps by default). A camera awaiting its first bitrate setting
+uses the default meeting video budget. Stopping the last screen restores the
+room transport's default. The dedicated screen path budgets its own video and audio.
+
+When applying the remote SDP, the room sender gives only its outgoing screen
+video sections a starting estimate of up to 1 Mbps, bounded by each viewer's
+video limit. Incoming video and camera tracks retain their negotiated parameters.
+Without a finite transport maximum, the bundled engine defaults bandwidth
+probes to 5 Mbps. Native screen factories also opt into periodic ALR probes
 so recovery can continue during low activity, with the engine's default cadence
 and scale. No minimum bitrate is forced and changing the ceiling does not reset
 the starting estimate. Available bandwidth remains an estimate of that peer's

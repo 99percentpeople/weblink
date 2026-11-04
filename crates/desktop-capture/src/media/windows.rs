@@ -1,4 +1,7 @@
-use super::{CandidateHandler, EncoderInfo, IceCandidate, IceServer, MediaOptions, VideoSettings};
+use super::{
+    CandidateHandler, EncoderInfo, IceCandidate, IceServer, MediaOptions, VideoSettings,
+    AUDIO_BITRATE_BPS,
+};
 mod audio;
 mod capture;
 mod compose;
@@ -50,8 +53,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const AUDIO_BITRATE_BPS: u64 = 128_000;
-
 // Capture and matching encoders are shared; every peer retains its own transport.
 // Recording holds its own encoder consumer. Production
 // preview reads raw frames; legacy/test receivers still use independent peers.
@@ -99,6 +100,7 @@ struct MediaPeer {
     connection: PeerConnection,
     gathering: Option<Arc<ice::Gathering>>,
     room_tracks: Vec<libwebrtc::rtp_transceiver::RtpTransceiver>,
+    room_budget: Option<crate::room_peer::bandwidth::SenderBudget>,
     software_sender: Option<libwebrtc::peer_connection_factory::SoftwareSenderProfile>,
     preview: bool,
     raw_video: bool,
@@ -434,7 +436,10 @@ impl MediaSession {
             None => current.clone(),
         };
         let capture_size = current.dimensions(source_size.0, source_size.1);
-        Self::configure_peer(peer, &next, capture_size)?;
+        if let Err(error) = Self::configure_peer(peer, &next, capture_size) {
+            let _ = Self::configure_peer(peer, &previous, capture_size);
+            return Err(error);
+        }
         let encoded = peer.encoded.is_some();
         drop(peers);
         if encoded {
@@ -494,7 +499,9 @@ impl MediaSession {
                 .set_frame_rate(options.frame_rate)
                 .map_err(|error| error.to_string())?;
         }
-        if peer.gathering.is_some() {
+        if let Some(budget) = &peer.room_budget {
+            budget.set_limit(Some(options.max_bitrate)).map(|_| ())
+        } else if peer.gathering.is_some() {
             Self::configure_transport_bitrate(&peer.connection, options)
         } else {
             Ok(())
@@ -1147,6 +1154,7 @@ impl MediaSession {
                         connection: pc.clone(),
                         gathering: Some(gathering.clone()),
                         room_tracks: Vec::new(),
+                        room_budget: None,
                         software_sender: None,
                         preview,
                         raw_video: !pre_encoded,

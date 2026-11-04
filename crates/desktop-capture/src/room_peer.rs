@@ -8,7 +8,7 @@ use libwebrtc::{
     media_stream_track::MediaStreamTrack,
     peer_connection::{AnswerOptions, OfferOptions, PeerConnection, SignalingState, TrackEvent},
     peer_connection_factory::PeerConnectionFactory,
-    rtp_transceiver::RtpTransceiverDirection,
+    rtp_transceiver::{RtpTransceiver, RtpTransceiverDirection},
     session_description::{SdpType, SessionDescription},
 };
 use serde_json::{json, Value};
@@ -20,11 +20,17 @@ use std::{
     },
 };
 
+pub(crate) mod bandwidth;
 mod channels;
 mod source;
 use channels::Channels;
 pub use channels::{ChannelOptions, MessageSink};
 pub use source::CaptureSource;
+
+struct CaptureSender {
+    track: RtpTransceiver,
+    budget: bandwidth::SenderBudget,
+}
 
 struct RemoteTrack {
     track_id: String,
@@ -38,7 +44,8 @@ pub struct RoomPeer {
     channels: Arc<Channels>,
     events: Events,
     incoming: Mutex<HashMap<String, RemoteTrack>>,
-    outgoing: Mutex<HashMap<String, libwebrtc::rtp_transceiver::RtpTransceiver>>,
+    outgoing: Mutex<HashMap<String, CaptureSender>>,
+    bandwidth: Arc<bandwidth::RoomBandwidth>,
     screens: Mutex<HashMap<String, std::sync::Weak<crate::media::MediaSession>>>,
     receive_allowed: AtomicBool,
     next_track: AtomicU32,
@@ -76,6 +83,7 @@ impl RoomPeer {
         }
         let peer = Arc::new(Self {
             channels: Channels::new(events.clone(), messages),
+            bandwidth: bandwidth::RoomBandwidth::new(pc.clone()),
             pc,
             factory,
             events,
@@ -300,7 +308,23 @@ impl RoomPeer {
                 return Err(error.to_string());
             }
         }
-        outgoing.insert(id.to_owned(), transceiver);
+        let budget = match self
+            .bandwidth
+            .capture(matches!(capture, CaptureSource::Video(_)))
+        {
+            Ok(budget) => budget,
+            Err(error) => {
+                let _ = transceiver.stop();
+                return Err(error);
+            }
+        };
+        outgoing.insert(
+            id.to_owned(),
+            CaptureSender {
+                track: transceiver,
+                budget,
+            },
+        );
         Ok(())
     }
     pub fn attach_screen(
@@ -314,7 +338,7 @@ impl RoomPeer {
         if self.closed.load(Ordering::Acquire) || screens.len() >= 16 || screens.contains_key(id) {
             return Err("Room screen limit or duplicate ID".into());
         }
-        media.attach_room(id, &self.factory, &self.pc, codecs, port)?;
+        media.attach_room(id, &self.factory, &self.pc, &self.bandwidth, codecs, port)?;
         screens.insert(id.to_string(), Arc::downgrade(media));
         Ok(())
     }
@@ -342,7 +366,7 @@ impl RoomPeer {
     }
     pub fn set_codecs(&self, id: &str, preferred: &[String]) -> Result<()> {
         let outgoing = self.outgoing.lock().unwrap();
-        let t = outgoing.get(id).ok_or("Room sender removed")?;
+        let t = &outgoing.get(id).ok_or("Room sender removed")?.track;
         let track = t.sender().track().ok_or("Room source removed")?;
         let kind = if matches!(track, MediaStreamTrack::Video(_)) {
             libwebrtc::MediaType::Video
@@ -378,8 +402,10 @@ impl RoomPeer {
         degradation: Option<&str>,
     ) -> Result<()> {
         let outgoing = self.outgoing.lock().unwrap();
-        let sender = outgoing.get(id).ok_or("Room source removed")?.sender();
-        update_sender_parameters(&sender, |params| {
+        let capture = outgoing.get(id).ok_or("Room source removed")?;
+        let sender = capture.track.sender();
+        let previous = capture.budget.set_limit(bitrate)?;
+        let result = update_sender_parameters(&sender, |params| {
             for e in &mut params.encodings {
                 e.max_bitrate = bitrate;
                 e.max_framerate = fps;
@@ -393,12 +419,16 @@ impl RoomPeer {
                     _ => Balanced,
                 });
             }
-        })
+        });
+        if result.is_err() {
+            let _ = capture.budget.set_limit(Some(previous));
+        }
+        result
     }
     pub fn remove_capture(&self, id: &str) -> Result<()> {
         let entry = self.outgoing.lock().unwrap().remove(id);
         if let Some(t) = entry {
-            t.stop().map_err(|e| e.to_string())?;
+            t.track.stop().map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -407,7 +437,7 @@ impl RoomPeer {
             .lock()
             .unwrap()
             .iter()
-            .filter_map(|(id, t)| t.mid().map(|mid| (id.clone(), mid)))
+            .filter_map(|(id, t)| t.track.mid().map(|mid| (id.clone(), mid)))
             .collect()
     }
     pub async fn local_description(&self) -> Result<Value> {
@@ -456,9 +486,10 @@ impl RoomPeer {
         {
             return Err("Native room SDP limit exceeded".into());
         }
-        let desc = SessionDescription::parse(sdp, kind).map_err(|e| e.to_string())?;
         let _guard = self.negotiation.lock().await;
         if kind == SdpType::Offer && self.pc.signaling_state() == SignalingState::HaveLocalOffer {
+            // Validate before giving up our offer. Rollback may unassign its MIDs.
+            SessionDescription::parse(sdp, kind).map_err(|e| e.to_string())?;
             self.pc
                 .set_local_description(
                     SessionDescription::parse("", SdpType::Rollback).map_err(|e| e.to_string())?,
@@ -466,6 +497,11 @@ impl RoomPeer {
                 .await
                 .map_err(|e| e.to_string())?;
         }
+        let screens = self.bandwidth.screen_limits();
+        let adjusted =
+            (!screens.is_empty()).then(|| crate::media::room_starting_bitrate_sdp(sdp, &screens));
+        let desc = SessionDescription::parse(adjusted.as_deref().unwrap_or(sdp), kind)
+            .map_err(|e| e.to_string())?;
         self.pc
             .set_remote_description(desc)
             .await

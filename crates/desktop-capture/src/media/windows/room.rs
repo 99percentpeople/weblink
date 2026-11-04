@@ -1,4 +1,5 @@
 use super::*;
+use crate::room_peer::bandwidth::RoomBandwidth;
 use libwebrtc::rtp_transceiver::RtpTransceiver;
 
 impl MediaSession {
@@ -53,6 +54,7 @@ impl MediaSession {
         id: &str,
         factory: &PeerConnectionFactory,
         pc: &PeerConnection,
+        bandwidth: &Arc<RoomBandwidth>,
         codecs: &super::super::SendCodecs,
         port: Option<Arc<dyn super::super::control::Port>>,
     ) -> Result<()> {
@@ -158,12 +160,13 @@ impl MediaSession {
                     recording_audio = SenderAudioRecording::new(t.sender());
                 }
             }
+            let budget = bandwidth.screen(t, options.max_bitrate, self.audio.is_some())?;
             let control = port
                 .map(|p| control::Channels::connect_named(pc, p, Some(id)))
                 .transpose()?;
-            Ok::<_, String>((recording_audio, control, software_sender))
+            Ok::<_, String>((recording_audio, control, software_sender, budget))
         })();
-        let (recording_audio, control, software_sender) = match result {
+        let (recording_audio, control, software_sender, budget) = match result {
             Ok(ok) => ok,
             Err(error) => {
                 for t in tracks {
@@ -184,6 +187,7 @@ impl MediaSession {
                 connection: pc.clone(),
                 gathering: None,
                 room_tracks: tracks,
+                room_budget: Some(budget),
                 software_sender,
                 preview: false,
                 raw_video: consumer.is_none(),

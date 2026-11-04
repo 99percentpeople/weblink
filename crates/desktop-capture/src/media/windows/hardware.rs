@@ -1221,6 +1221,7 @@ mod tests {
                     connection: connection.clone(),
                     gathering: Some(gathering),
                     room_tracks: Vec::new(),
+                    room_budget: None,
                     software_sender: None,
                     preview: false,
                     raw_video: false,
