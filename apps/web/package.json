@@ -99,7 +99,7 @@
     "@types/qrcode": "^1.5.5",
     "@types/uuid": "^10.0.0",
     "@types/wicg-file-system-access": "^2023.10.6",
-    "@vite-pwa/assets-generator": "^0.2.6",
+    "@vite-pwa/assets-generator": "^2.0.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
     "tailwind-scrollbar": "^4.0.2",
@@ -108,7 +108,7 @@
     "typescript": "^5.6.3",
     "vite": "^6.4.3",
     "vite-plugin-compression2": "^1.4.0",
-    "vite-plugin-pwa": "^0.21.2",
+    "vite-plugin-pwa": "^2.0.0",
     "vite-plugin-solid": "^2.11.8",
     "vite-plugin-solid-svg": "^0.8.1",
     "vitest": "^4.1.12"

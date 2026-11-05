@@ -33,6 +33,11 @@ The combined development command uses Bun's built-in parallel script runner
 The root override also pins the server's npm `bun` dependency to this version,
 so its older standalone runtime cannot shadow workspace commands.
 
+The PWA plugin and asset generator use the compatible **2.x** release lines,
+which support Vite 6 and require Node **20.19+** (CI uses 24). The asset generator
+uses `sharp` with npm-distributed native binaries; keep optional dependencies
+enabled when installing. No root `sharp` override is required.
+
 Git submodules still pin server source revisions and retain independent release
 workflows. Workspace installs use root `bun.lock`; the servers' own lockfiles
 remain unchanged for standalone clones. Dependency changes need both the
