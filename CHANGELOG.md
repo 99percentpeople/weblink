@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.6] - 2026-11-03
+## [1.3.6] - 2026-11-05
 
 Weblink 1.3.6 brings media and data onto one native connection per peer on Windows, adds a custom signaling server setting, reduces web playback latency, and improves screen recordings and room admission.
 
