@@ -15,6 +15,8 @@ import {
 } from "solid-js";
 import { PeerSession } from "../../../src/libs/domain/session";
 import { PeerTrustService } from "../../../src/libs/application/peer-trust";
+import { RtcService } from "../../../src/libs/application/rtc/rtc-service";
+import { P2PProtocol } from "../../../src/libs/domain/protocol/protocol";
 import {
   deviceIdentity,
   verify,
@@ -418,6 +420,54 @@ async function main() {
     keysA,
     keysB,
   );
+  const rtcA = new RtcService(),
+    rtcB = new RtcService();
+  const protocolA = new P2PProtocol(rtcA),
+    protocolB = new P2PProtocol(rtcB);
+  rtcA.bindSession(first.sessionA);
+  rtcB.bindSession(first.sessionB);
+  for (const protocol of [protocolA, protocolB]) {
+    protocol.handle("send-text", () => {});
+    protocol.handle("send-file", ({ message }) => ({
+      fid: message.fid,
+      disposition: "deferred",
+      reason: "user",
+    }));
+  }
+  const checkRequests = async (stage: string) => {
+    for (const [protocol, session] of [
+      [protocolA, first.sessionA],
+      [protocolB, first.sessionB],
+    ] as const) {
+      const text = await protocol.call(
+        session,
+        "send-text",
+        { data: stage },
+      );
+      assert(text.type === "ack", `${stage}: text receipt`);
+      const file = await protocol.call(
+        session,
+        "send-file",
+        {
+          fid: `${stage}-${session.clientId}`,
+          fileName: "recovery.txt",
+          fileSize: 5,
+          chunkSize: 4,
+          fingerprint: {
+            version: 1,
+            algorithm: "blake3-256",
+            digest: "a".repeat(64),
+            size: 5,
+          },
+        },
+      );
+      assert(
+        file.type === "file-offer-result" &&
+          file.disposition === "deferred",
+        `${stage}: file offer response`,
+      );
+    }
+  };
   const canvas = document.createElement("canvas");
   canvas.width = 160;
   canvas.height = 90;
@@ -454,6 +504,7 @@ async function main() {
       first.receiveA[0]() && first.receiveB[0](),
       "first pairing enables reception by default",
     );
+    await checkRequests("before-interruption");
     await first.sessionB.sendMessage(
       createSessionMessage(first.sessionB, "send-text", {
         data: "allowed",
@@ -527,6 +578,24 @@ async function main() {
       () => first.received.includes("restored"),
       "messages restored",
     );
+    await checkRequests("access-restored");
+    for (let cycle = 0; cycle < 2; cycle++) {
+      const previous = first.sessionA.peerConnection;
+      await first.sessionA.reconnect();
+      await until(
+        () =>
+          first.trustA.trusted("b") &&
+          first.trustB.trusted("a") &&
+          first.sessionA.isMessageChannelReady &&
+          first.sessionB.isMessageChannelReady,
+        "trust and message channels restored",
+      );
+      assert(
+        first.sessionA.peerConnection !== previous,
+        "reconnect replaces the transport on the same session",
+      );
+      await checkRequests(`reconnected-${cycle}`);
+    }
     first.sessionB.close();
     await until(
       () => !first.trustA.trusted("b"),
@@ -537,6 +606,10 @@ async function main() {
       "normal disconnect must not quarantine the pin",
     );
   } finally {
+    protocolA.dispose();
+    protocolB.dispose();
+    rtcA.unbindAllSessions();
+    rtcB.unbindAllSessions();
     first.close();
     clearInterval(draw);
     stream.getTracks().forEach((t) => t.stop());
@@ -721,6 +794,8 @@ async function main() {
     keyMismatchQuarantine: true,
     manualRepair: true,
     messageRevocation: true,
+    protocolRequestsAfterAccessRestore: true,
+    textAndFileOffersAfterRepeatedReconnect: true,
     channelRevocation: true,
     mediaRevocationAndRestore: true,
     normalDisconnectPreservesPin: true,

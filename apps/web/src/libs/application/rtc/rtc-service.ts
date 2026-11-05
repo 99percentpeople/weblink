@@ -69,7 +69,11 @@ export class RtcService implements RtcProtocolTransport<PeerSession> {
       ({ detail }) => {
         if (!detail)
           for (const handler of this.closedHandlers)
-            this.runHandler(() => handler(session));
+            // Trust is reverified on reconnect without replacing PeerSession.
+            // Cancel existing work, but keep the handle usable after recovery.
+            this.runHandler(() =>
+              handler(session, { recoverable: true }),
+            );
       },
       { signal: controller.signal },
     );

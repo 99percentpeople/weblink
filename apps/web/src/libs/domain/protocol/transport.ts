@@ -22,7 +22,15 @@ export type ProtocolAnyMessageHandler<
 
 export type ProtocolSessionClosedHandler<
   S extends ProtocolSession = ProtocolSession,
-> = (session: S) => void;
+> = (
+  session: S,
+  options?: ProtocolSessionCloseOptions,
+) => void;
+
+export interface ProtocolSessionCloseOptions {
+  /** Cancel current work while allowing this session to be reused after recovery. */
+  recoverable?: boolean;
+}
 
 export interface ProtocolTransport<
   S extends ProtocolSession = ProtocolSession,
@@ -39,6 +47,7 @@ export interface ProtocolTransport<
 
   onAny(handler: ProtocolAnyMessageHandler<S>): () => void;
 
+  /** Omitted options permanently retire the session object. */
   onSessionClosed(
     handler: ProtocolSessionClosedHandler<S>,
   ): () => void;

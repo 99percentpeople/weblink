@@ -22,6 +22,7 @@ import {
 import type {
   ProtocolMessageContext,
   ProtocolSession,
+  ProtocolSessionCloseOptions,
   ProtocolTransport,
 } from "./transport";
 import {
@@ -103,8 +104,8 @@ export class P2PRequestManager<
           ),
         ),
       ),
-      transport.onSessionClosed((session) =>
-        this.closeSession(session),
+      transport.onSessionClosed((session, options) =>
+        this.closeSession(session, options),
       ),
     ];
   }
@@ -550,10 +551,14 @@ export class P2PRequestManager<
     }
   }
 
-  closeSession(session: S): void {
-    this.retired.add(session);
-    this.sessions.get(session)?.lifetime.abort();
+  closeSession(
+    session: S,
+    options: ProtocolSessionCloseOptions = {},
+  ): void {
+    if (!options.recoverable) this.retired.add(session);
+    const state = this.sessions.get(session);
     this.sessions.delete(session);
+    state?.lifetime.abort();
   }
 
   dispose(): void {

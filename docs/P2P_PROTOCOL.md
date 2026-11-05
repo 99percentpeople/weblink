@@ -42,7 +42,10 @@ interface ProtocolTransport<S extends ProtocolSession> {
   ): () => void;
 
   onSessionClosed(
-    handler: (session: S) => void,
+    handler: (
+      session: S,
+      options?: { recoverable?: boolean },
+    ) => void,
   ): () => void;
 }
 ```
@@ -50,6 +53,13 @@ interface ProtocolTransport<S extends ProtocolSession> {
 `send()` must resolve only after the underlying transport has accepted the
 serialized message for sending. It must not resolve merely because a message was
 placed in a local queue.
+
+`onSessionClosed` cancels pending requests and handler lifetimes. By default it
+permanently retires the session object. Use `{ recoverable: true }` for temporary
+access withdrawal, including trust verification during reconnection, when the
+same session will be reused. New work receives a fresh request lifetime; the
+transport must continue enforcing permissions until access is restored. Late
+handler results from the interrupted lifetime must not send replies.
 
 The generic protocol state machine can then run on any client-specific session
 object:
