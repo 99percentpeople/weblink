@@ -3,9 +3,10 @@ mod backend;
 #[cfg(test)]
 mod color_probe;
 pub(super) mod gpu;
+pub(super) mod stages;
 mod timing;
 use super::super::{
-    bitrate::{BitrateController, FrameBudget},
+    bitrate::{BitrateController, DriverBitrateUpdates, FrameBudget},
     MediaOptions,
 };
 use super::mf::transform;
@@ -206,6 +207,8 @@ pub struct EncodeStatistics {
     pub queue: Distribution,
     pub capture_to_encode: Distribution,
     encode: Distribution,
+    output_interval: Distribution,
+    stages: stages::Stages,
     pub(super) replaced_inputs: u64,
     pub(super) rate_limited_inputs: u64,
     encoded_bytes: u64,
@@ -233,12 +236,15 @@ impl EncodeStatistics {
             queue: self.queue.snapshot(),
             encode: self.encode.snapshot(),
             capture_to_encode: self.capture_to_encode.snapshot(),
+            stages: self.stages.snapshot(),
+            output_interval: self.output_interval.measurement(),
             controls: self.controls.clone(),
         }
     }
 }
 struct InputTiming {
     submitted_at: Instant,
+    accepted_at: Instant,
     ready_at: Instant,
     captured_at: Option<Instant>,
 }
@@ -477,6 +483,7 @@ fn run(
         BitrateController::new(options.max_bitrate as u32)
     };
     let mut frame_budget = FrameBudget::new(rate_control.current());
+    let mut driver_bitrate = DriverBitrateUpdates::new(rate_control.current(), started.elapsed());
     // Each profile admits at its own cap while capture retains the publisher's
     // ceiling. Retain the newest frame until its deadline, including static tails.
     let mut cadence = CaptureCadence::new(
@@ -578,14 +585,10 @@ fn run(
         }
         if let Some(bitrate) = rate_control.poll(started.elapsed()) {
             frame_budget.set_bitrate(bitrate, started.elapsed());
-            // MF requires a positive target; zero pauses admission instead.
+            // Hardware rate controls require a positive target; zero pauses admission instead.
             // Request an IDR on resume if frames in flight were transport-dropped.
             if bitrate == 0 {
                 keyframe = true;
-            } else if let Some(active) = &mut encoder {
-                if active.try_set_bitrate(bitrate) {
-                    statistics.lock().unwrap_or_else(|e| e.into_inner()).bitrate = Some(bitrate);
-                }
             }
         }
         if let Some(frame) = latest.as_ref().filter(|_| rate_control.current() > 0) {
@@ -645,6 +648,8 @@ fn run(
                 }
                 stats.implementation = encoder.as_ref().unwrap().implementation();
                 stats.bitrate = Some(encoder.as_ref().unwrap().bitrate);
+                driver_bitrate =
+                    DriverBitrateUpdates::new(encoder.as_ref().unwrap().bitrate, started.elapsed());
                 stats.selection = selection.report.clone();
                 stats.controls = controls;
                 stats.in_flight = 0;
@@ -676,6 +681,13 @@ fn run(
         if let Some(active) = &mut encoder {
             for packet in packets {
                 if !packet.bytes.is_empty() {
+                    if let Some(interval) = driver_bitrate.output(started.elapsed()) {
+                        statistics
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .output_interval
+                            .record(interval);
+                    }
                     frame_budget.record_output(packet.bytes.len(), started.elapsed());
                     statistics
                         .lock()
@@ -688,6 +700,9 @@ fn run(
                         let encode = now.duration_since(input_at.submitted_at);
                         stats.seconds += encode.as_secs_f64();
                         stats.encode.record(encode);
+                        if let Some(timing) = &packet.timing {
+                            stats.stages.completed(input_at.accepted_at, timing);
+                        }
                         stats
                             .queue
                             .record(input_at.submitted_at.duration_since(input_at.ready_at));
@@ -697,6 +712,7 @@ fn run(
                         stats.in_flight = in_flight.len();
                     }
                     // Each output owns its own feedback state and RTP transport.
+                    let delivery_at = Instant::now();
                     // Use one absolute clock across encoder-group migrations.
                     let consumers: Vec<_> = outputs
                         .lock()
@@ -741,6 +757,38 @@ fn run(
                         },
                         segment: 0,
                     });
+                    let delivery = delivery_at.elapsed();
+                    statistics
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .stages
+                        .delivery
+                        .record(delivery);
+                }
+            }
+            // Deliver all available output before a potentially blocking driver
+            // control write. Admission already follows the latest transport
+            // budget, even while driver updates are being coalesced.
+            driver_bitrate.pressure(
+                rate_control.current(),
+                frame_budget
+                    .next_input_in(started.elapsed())
+                    .unwrap_or_default(),
+                Duration::from_secs_f64(1.0 / options.frame_rate as f64),
+                latest.is_some() || !in_flight.is_empty(),
+            );
+            if driver_bitrate.next_update_in(rate_control.current(), started.elapsed())
+                == Some(Duration::ZERO)
+            {
+                let bitrate = rate_control.current();
+                let update_at = Instant::now();
+                let updated = active.try_set_bitrate(bitrate);
+                let elapsed = update_at.elapsed();
+                driver_bitrate.completed(bitrate, started.elapsed(), elapsed, updated);
+                let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                stats.stages.bitrate_update.record(elapsed);
+                if updated {
+                    stats.bitrate = Some(bitrate);
                 }
             }
             if active.ready() {
@@ -760,6 +808,7 @@ fn run(
                             &work,
                             &rate_control,
                             started,
+                            Some(&driver_bitrate),
                             delay.into_iter().chain(active.watchdog()).min(),
                         );
                         continue;
@@ -773,28 +822,39 @@ fn run(
                     }
                     let timestamp = timeline.timestamp(frame.captured_at, frame.ready_at);
                     let input_at = Instant::now();
+                    let mut prepared_at = input_at;
+                    let mut context_wait = None;
                     let input = match &frame.input {
-                        Input::Memory(buffer) => active.input(
-                            &Frame::nv12(buffer, frame.width, frame.height),
-                            timestamp,
-                            damage.rects(),
-                        ),
+                        Input::Memory(buffer) => {
+                            let bytes = Frame::nv12(buffer, frame.width, frame.height);
+                            prepared_at = Instant::now();
+                            active.input(&bytes, timestamp, damage.rects())
+                        }
                         Input::Texture(texture) => {
                             match converter.as_mut().unwrap().convert(texture, &options) {
                                 Ok(Some(surface)) => {
+                                    context_wait = Some(converter.as_ref().unwrap().context_wait);
+                                    prepared_at = Instant::now();
                                     active.input_gpu(surface, timestamp, damage.rects())
                                 }
                                 Ok(None) => {
                                     // All surfaces are still owned by MF. Keep only the newest
                                     // input and wait for an output or final sample-release wake.
                                     latest = Some(frame);
-                                    continue_wait(&work, &rate_control, started, active.watchdog());
+                                    continue_wait(
+                                        &work,
+                                        &rate_control,
+                                        started,
+                                        Some(&driver_bitrate),
+                                        active.watchdog(),
+                                    );
                                     continue;
                                 }
                                 Err(error) => Err(error.to_string()),
                             }
                         }
                     };
+                    let accepted_at = Instant::now();
                     if let Err(error) = input {
                         if selection.reject_nvenc(&error) {
                             encoder = None;
@@ -822,6 +882,7 @@ fn run(
                             &work,
                             &rate_control,
                             started,
+                            Some(&driver_bitrate),
                             Some(Duration::from_millis(2)),
                         );
                         continue;
@@ -837,6 +898,11 @@ fn run(
                     }
                     {
                         let mut stats = statistics.lock().unwrap_or_else(|e| e.into_inner());
+                        stats.stages.accepted(
+                            prepared_at.duration_since(input_at),
+                            context_wait,
+                            accepted_at.duration_since(prepared_at),
+                        );
                         if frame.device().is_some() {
                             stats.gpu_inputs += 1;
                         } else {
@@ -856,6 +922,7 @@ fn run(
                         timestamp,
                         InputTiming {
                             submitted_at: input_at,
+                            accepted_at,
                             ready_at: frame.ready_at,
                             captured_at: frame.captured_at,
                         },
@@ -872,6 +939,7 @@ fn run(
             &work,
             &rate_control,
             started,
+            encoder.as_ref().map(|_| &driver_bitrate),
             encoder.as_ref().and_then(|e| e.watchdog()),
         );
     }
@@ -882,6 +950,7 @@ fn continue_wait(
     work: &Arc<(Mutex<Pending>, Condvar)>,
     rate_control: &BitrateController,
     started: Instant,
+    driver_updates: Option<&DriverBitrateUpdates>,
     wake_in: Option<Duration>,
 ) {
     // Synchronize the predicate with every producer, including the MFT
@@ -896,11 +965,15 @@ fn continue_wait(
     {
         return;
     }
-    if let Some(delay) = rate_control
-        .next_update_in(started.elapsed())
-        .into_iter()
-        .chain(wake_in)
-        .min()
+    if let Some(delay) =
+        rate_control
+            .next_update_in(started.elapsed())
+            .into_iter()
+            .chain(driver_updates.and_then(|updates| {
+                updates.next_update_in(rate_control.current(), started.elapsed())
+            }))
+            .chain(wake_in)
+            .min()
     {
         drop(
             work.1
@@ -997,6 +1070,7 @@ mod tests {
                 &BitrateController::new(300_000),
                 Instant::now(),
                 None,
+                None,
             );
             send.send(()).unwrap();
         });
@@ -1009,6 +1083,49 @@ mod tests {
             result.is_ok(),
             "A rate update queued before wait must be consumed immediately"
         );
+    }
+
+    #[test]
+    fn deferred_driver_bitrate_update_wakes_without_new_frames() {
+        let work = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+        let worker_work = work.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let started = Instant::now() - Duration::from_millis(4_950);
+            let rate = BitrateController::with_start(8_000_000, 7_984_000);
+            let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+            updates.completed(8_000_000, Duration::ZERO, Duration::from_millis(300), true);
+            continue_wait(&worker_work, &rate, started, Some(&updates), None);
+            send.send(started.elapsed()).unwrap();
+        });
+        let result = receive.recv_timeout(Duration::from_secs(1));
+        work.0.lock().unwrap().stopped = true;
+        work.1.notify_one();
+        worker.join().unwrap();
+        assert!(result.expect("Pending driver update never woke") >= Duration::from_secs(5));
+    }
+
+    #[test]
+    fn output_gap_expedites_a_cut_without_another_capture_notification() {
+        let work = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
+        let worker_work = work.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let ms = Duration::from_millis;
+            let started = Instant::now() - ms(80);
+            let rate = BitrateController::with_start(8_000_000, 4_000_000);
+            let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+            updates.completed(8_000_000, Duration::ZERO, ms(100), true);
+            updates.output(ms(80));
+            updates.pressure(rate.current(), Duration::ZERO, ms(16), true);
+            continue_wait(&worker_work, &rate, started, Some(&updates), None);
+            send.send(started.elapsed()).unwrap();
+        });
+        let result = receive.recv_timeout(Duration::from_secs(1));
+        work.0.lock().unwrap().stopped = true;
+        work.1.notify_one();
+        worker.join().unwrap();
+        assert!(result.expect("Output-gap deadline never woke") >= Duration::from_millis(112));
     }
 
     #[test]

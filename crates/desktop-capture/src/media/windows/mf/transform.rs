@@ -53,6 +53,7 @@ pub struct Packet {
     pub bytes: Vec<u8>,
     pub timestamp_us: i64,
     pub keyframe: bool,
+    pub timing: Option<super::super::hardware::stages::OutputTiming>,
 }
 pub struct Transform {
     pub codec: libwebrtc::video_frame::EncodedVideoCodec,
@@ -499,10 +500,11 @@ impl Transform {
     pub fn poll(&mut self) -> Result<Vec<Packet>> {
         let mut packets = Vec::new();
         for event in self.events.take() {
-            match event? {
+            let (kind, observed_at) = event?;
+            match kind {
                 kind if kind == METransformNeedInput => self.ready = self.ready.saturating_add(1),
                 kind if kind == METransformHaveOutput => {
-                    if let Some(packet) = self.output()? {
+                    if let Some(packet) = self.output(observed_at)? {
                         packets.push(packet);
                     }
                 }
@@ -511,7 +513,8 @@ impl Transform {
         }
         Ok(packets)
     }
-    fn output(&mut self) -> Result<Option<Packet>> {
+    fn output(&mut self, ready: std::time::Instant) -> Result<Option<Packet>> {
+        let started = std::time::Instant::now();
         unsafe {
             let Some(sample) = super::output::read(
                 &self.transform,
@@ -539,6 +542,11 @@ impl Transform {
                 bytes,
                 timestamp_us: sample.GetSampleTime()? / 10,
                 keyframe,
+                timing: Some(super::super::hardware::stages::OutputTiming {
+                    ready,
+                    started,
+                    finished: std::time::Instant::now(),
+                }),
             }))
         }
     }

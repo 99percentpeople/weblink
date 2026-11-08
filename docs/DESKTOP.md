@@ -757,6 +757,27 @@ last confirmed rate. Frame admission can reduce the delivered frame rate on a
 slower link. Statistics report the confirmed encoder setting separately from
 the transport target and actual transmitted bitrate.
 
+MF and NVENC share one driver-update scheduler, separate from this admission
+budget. It learns blocking cost per encoder instance: the current call's cost or
+half the previous estimate, whichever is larger. Changes below 10% of the last
+confirmed rate use twenty times this cost (50 ms to five seconds); larger
+increases use ten times the cost (50 ms to three seconds). Reductions of at least
+10% instead use twice the cost (50–500 ms). With queued input or in-flight work,
+admission debt of at least one configured frame interval, or no delivered output
+for two frame intervals, shortens this to one call's estimated cost (50–250 ms).
+The output-gap deadline also wakes an otherwise sleeping worker; idle capture
+without pending work is not treated as a stall. Debt pressure remains latched
+until the cut completes, is cancelled, or pending work drains. Admission debt is
+never forgiven by a driver update. Cheap drivers therefore
+keep a short 50 ms coalescing window, without a vendor-wide multi-second delay.
+Failed writes retry after five seconds without claiming a confirmed setting.
+Zero pauses admission without a driver write. Output already available is
+delivered before changing the driver rate, and a timer applies pending updates
+even when capture is idle. Reopening an encoder resets the cost estimate and
+confirmed rate. Capture cadence, frame admission, delivery, shutdown and wake
+predicates remain shared; backend readiness, completion events and watchdogs
+retain their backend-specific implementations.
+
 After the first encoded frame binds the source to its sender, transport rate
 feedback reaches the source independently of subsequent frames and wakes the
 hardware worker. The notification holds only a weak worker reference and is
@@ -808,8 +829,8 @@ bandwidth estimate when available. These are budgets, not measured traffic or
 guaranteed capacity. Each receiver has its own encoder and congestion feedback;
 compare its sender row with that same receiver, not another peer's bitrate. A
 receiving browser's outgoing bandwidth estimate describes the reverse path and
-is not displayed as incoming video capacity. Native hardware encode time measures accepted encoder input to output,
-including driver and output-delivery latency, rather than WebRTC's encoded-frame passthrough.
+is not displayed as incoming video capacity. Native hardware encode time measures input preparation through output,
+including conversion, driver and worker latency, rather than WebRTC's encoded-frame passthrough.
 Hardware input wait is measured separately. Capture-to-encoded time starts at
 arrival in the application's capture callback; cached static repeats are excluded.
 Packet-send queue delay uses packet counts, not frame counts. RTT belongs to the
@@ -1049,6 +1070,23 @@ GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
 input/readback dimensions, GPU fallback reason and active peer/encoder counts.
 It also reports capture wait, per-group hardware input wait, input-to-output and
 capture-to-encoded distributions, replaced input counts and in-flight samples.
+Each encoder's `stages` separates CPU preparation (excluding `contextLock`),
+immediate-context lock acquisition, backend `input`, `outputWait` (input return
+to output-event observation), `eventDispatch` (event observation to worker output
+processing), `output` (extraction/copy/bitstream normalization), `delivery` and
+live `bitrateUpdate` calls. Each stage reports cumulative `samples`/`totalSeconds`
+and rolling `meanMs`/`p95Ms`/`maxMs`. Preparation/input count accepted inputs;
+Output stages count matched completed packets for both MF and NVENC. NVENC
+records completion before publishing its ready flag and starts output timing
+before locking the bitstream; its bounded per-slot timestamps use the same Rust
+monotonic clock as input timing. Zero samples means unobserved or unsupported,
+not a measured zero. GPU preparation times measure CPU command submission, not GPU execution.
+`outputWait` also includes GPU dependencies and callback scheduling, so it is not
+pure hardware encode time. The existing aggregate `encode`/`encodeMs` retains
+its conversion-start-to-output semantics. Stages with different sampling windows
+must not be summed into an end-to-end latency estimate.
+`outputInterval` measures intervals between delivered encoder outputs, including
+capture/idle gaps; it is a cadence diagnostic, not an additional encoding stage.
 `hardwareEncoders` counts unique workers. Each entry has a stable `groupId` and
 current `consumers` (peer IDs or `recording:<id>`), so membership changes do not
 look like encoder restarts.
@@ -1062,6 +1100,9 @@ OS frame arrivals and the source-copy path independently of CPU readback and
 preview visibility. A long source interval with a short encode time identifies
 an upstream gap; replaced inputs with a normal source cadence identify encoder
 backpressure. Neither alone proves the user's screen was continuously moving.
+Automation samples `capture.status` explicitly for fresh frame count, FPS and
+frame age even outside detailed mode. Lifecycle subscriptions intentionally omit
+counter ticks; failed diagnostic reads report unavailable instead of stale FPS.
 Hardware controls include the requested value, setter result and driver readback;
 an accepted setter alone does not establish that a low-latency/CBR/buffer request
 was honored. Unsupported optional controls remain diagnostic and do not silently
@@ -1069,14 +1110,25 @@ disable otherwise usable hardware encoders.
 Preparation times measure CPU submission; GPU completion wait appears in Map.
 These diagnostics exclude network transit and presentation latency.
 
-An opt-in synthetic benchmark exercises 1080p GPU readback, hardware H.264,
+An opt-in synthetic benchmark exercises 1080p GPU input, hardware H.264,
 RTP and a native receiver in the same process at 60 and 120 FPS:
 
 ```sh
 cargo test --locked -p weblink-desktop-capture --lib synthetic_native_stream_latency -- --ignored --nocapture
 ```
 
-It requires a working H.264 hardware encoder and prints `LATENCY_PROBE` JSON.
+It requires a working hardware encoder and prints `LATENCY_PROBE` JSON.
+Optional `WEBLINK_PERF_CODEC=video/h265`, `WEBLINK_PERF_FPS=60` (30/60/120), and
+`WEBLINK_PERF_PRESET=latency` select a focused run; defaults remain H.264,
+60/120 FPS, MF and balanced. `WEBLINK_PERF_ENCODER` selects an exact encoder ID
+(for example `nvenc:h265`). In encoder-only mode,
+`WEBLINK_PERF_DYNAMIC_BITRATE=1` supplies small and large target changes at 10 Hz
+and emits a baseline snapshot for interval stage comparisons.
+`offeredFps` exposes producer timer/scheduling shortfalls
+separately from encoded throughput. `WEBLINK_PERF_TIMER_MS=1` requests 1 ms timer
+resolution only for the probe process, for controlled scheduling comparisons.
+`WEBLINK_PERF_ENCODER_ONLY=1` bypasses WebRTC and decoding and prints
+`ENCODER_STAGE_PROBE` using the same synthetic textures and hardware worker.
 Run serially with other GPU workloads idle. The pattern is precomputed, each
 stream warms up for three seconds, and RTP/receiver counters cover the remaining
 seven seconds. Pipeline distributions retain their latest 120 samples. Compare

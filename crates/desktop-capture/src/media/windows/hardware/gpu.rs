@@ -124,6 +124,8 @@ struct ConversionKey {
 const MAX_SHARED_CONVERSIONS: usize = 8;
 pub(in crate::media::windows) struct Converter {
     pub device: ID3D11Device,
+    /// CPU wait for the immediate-context lock on the latest conversion.
+    pub context_wait: std::time::Duration,
     size: (u32, u32),
     vertex: ID3D11VertexShader,
     y: ID3D11PixelShader,
@@ -216,6 +218,7 @@ impl Converter {
             )?;
             let converter = Self {
                 device: device.clone(),
+                context_wait: std::time::Duration::ZERO,
                 size,
                 vertex: vertex.unwrap(),
                 y: y.unwrap(),
@@ -288,6 +291,7 @@ impl Converter {
         frame: &Arc<Captured>,
         options: &MediaOptions,
     ) -> Result<Option<Arc<Lease<Surface>>>> {
+        self.context_wait = std::time::Duration::ZERO;
         if self.device != frame.device {
             return Err(windows::Win32::Foundation::E_INVALIDARG.into());
         }
@@ -375,7 +379,9 @@ impl Converter {
             None
         };
         let context = &frame.context;
+        let lock_at = std::time::Instant::now();
         let _guard = ContextLock::enter(context)?;
+        self.context_wait = lock_at.elapsed();
         unsafe {
             context.UpdateSubresource(&self.constants, 0, None, values.as_ptr().cast(), 0, 0);
             context.IASetInputLayout(None);

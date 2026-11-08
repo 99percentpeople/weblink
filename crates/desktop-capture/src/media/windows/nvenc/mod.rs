@@ -4,6 +4,7 @@ mod compare;
 mod discovery;
 mod ffi;
 mod preset;
+mod timing;
 use super::{
     hardware::gpu,
     mf::{
@@ -40,9 +41,9 @@ pub(super) struct Encoder {
     #[cfg(test)]
     pub fail_output: bool,
     raw: NonNull<c_void>,
-    // The native completion thread only invokes this wake. close joins it before
+    // The native completion thread records timing and wakes us. close joins it before
     // the Box is released; no native callback may outlive its Rust context.
-    _wake: Box<Wake>,
+    notifications: Box<Notifications>,
     inputs: HashMap<i64, Input>,
     blocked_since: Option<Instant>,
     keyframe: Cell<bool>,
@@ -52,10 +53,22 @@ pub(super) struct Encoder {
     preset_fallback: Option<(EncodingPreset, String)>,
 }
 
+struct Notifications {
+    wake: Wake,
+    timings: timing::Timings,
+}
+
 extern "C" fn wake(context: *mut c_void) {
     // Never let a Rust panic cross the C++/driver boundary.
-    let callback = unsafe { &*context.cast::<Wake>() };
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback()));
+    let callback = unsafe { &*context.cast::<Notifications>() };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (callback.wake)()));
+}
+extern "C" fn mark(context: *mut c_void, slot: u32, phase: u32) {
+    let now = Instant::now();
+    let callback = unsafe { &*context.cast::<Notifications>() };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.timings.mark(slot, phase, now)
+    }));
 }
 fn error(message: &[c_char; 512]) -> String {
     unsafe { CStr::from_ptr(message.as_ptr()) }
@@ -113,14 +126,18 @@ impl Encoder {
             spatial_aq: settings.spatial_aq,
             quarter_pass: u32::from(settings.quarter_pass),
         };
-        let mut notify = Box::new(notify);
+        let mut notify = Box::new(Notifications {
+            wake: notify,
+            timings: Default::default(),
+        });
         let mut message = [0; 512];
         let raw = unsafe {
             ffi::weblink_nvenc_open(
                 device.as_raw(),
                 &config,
                 wake,
-                (&mut *notify as *mut Wake).cast(),
+                mark,
+                (&mut *notify as *mut Notifications).cast(),
                 message.as_mut_ptr(),
             )
         };
@@ -129,7 +146,7 @@ impl Encoder {
             #[cfg(test)]
             fail_output: false,
             raw,
-            _wake: notify,
+            notifications: notify,
             inputs: HashMap::new(),
             blocked_since: None,
             keyframe: Cell::new(true),
@@ -200,6 +217,7 @@ impl Encoder {
                 size: 0,
                 keyframe: 0,
                 timestamp: 0,
+                slot: 0,
             };
             let result = unsafe {
                 ffi::weblink_nvenc_poll(self.raw.as_ptr(), &mut packet, message.as_mut_ptr())
@@ -228,6 +246,11 @@ impl Encoder {
                 bytes,
                 timestamp_us: packet.timestamp,
                 keyframe: packet.keyframe != 0,
+                timing: Some(
+                    self.notifications
+                        .timings
+                        .take(packet.slot, Instant::now())?,
+                ),
             });
         }
         if self

@@ -6,6 +6,7 @@ import {
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import { createScreenSharing } from "@/libs/application/screen-sharing";
 import type { PlatformRuntime } from "@weblink/platform";
+import type { CaptureStatus } from "@weblink/platform";
 import type { AutomationDiagnostics } from "@/libs/application/automation/diagnostics";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
 import { parseCall, validate } from "@weblink/automation";
@@ -245,6 +246,113 @@ it("exports receiver error codes without native error strings or file paths", as
     "Decode failed",
   );
 });
+it("samples live native counters without waiting for a lifecycle event or renewing the lease", async () => {
+  const track = {
+    id: "native",
+    readyState: "live",
+    muted: false,
+  } as MediaStreamTrack;
+  fixture.captures.set(track, {
+    sessionId: "capture",
+    state: "running",
+    source: { id: "monitor" },
+  });
+  const status = vi.fn().mockResolvedValue({
+    sessionId: "capture",
+    state: "running",
+    frames: 100,
+    fps: 60,
+    lastFrameAgeMs: 2,
+    error: null,
+  } as CaptureStatus);
+  const renew = vi.fn();
+  const pipelineStats = vi.fn().mockResolvedValue({
+    encoders: [
+      {
+        stages: {
+          eventDispatch: {
+            samples: 5,
+            totalSeconds: 0.1,
+            meanMs: 20,
+            p95Ms: 40,
+            maxMs: 40,
+          },
+        },
+      },
+    ],
+  });
+  const sources = diagnosticSources(
+    {
+      localStream: () => ({
+        getVideoTracks: () => [track],
+      }),
+      runtimeCapabilities: () => ({
+        nativeScreenCapture: true,
+      }),
+    } as unknown as AppStateContextProps,
+    new PresentationDiagnostics(),
+    {
+      capture: { status, renew },
+      screenShare: { pipelineStats },
+    } as unknown as PlatformRuntime,
+  );
+  expect(await sources[0].state(false)).toMatchObject({
+    capture: { frames: 100, fps: 60, lastFrameAgeMs: 2 },
+  });
+  status.mockResolvedValueOnce({
+    sessionId: "capture",
+    state: "running",
+    frames: 130,
+    fps: 30,
+    lastFrameAgeMs: 5,
+  });
+  expect(await sources[0].state(true)).toMatchObject({
+    capture: { frames: 130, fps: 30 },
+    pipeline: {
+      encoders: [
+        {
+          stages: {
+            eventDispatch: {
+              samples: 5,
+              totalSeconds: 0.1,
+              meanMs: 20,
+            },
+          },
+        },
+      ],
+    },
+  });
+  status.mockResolvedValueOnce({
+    sessionId: "capture",
+    state: "running",
+    frames: 130,
+    fps: 0,
+    lastFrameAgeMs: 1005,
+  });
+  expect(await sources[0].state(false)).toMatchObject({
+    capture: { frames: 130, fps: 0, lastFrameAgeMs: 1005 },
+  });
+  status.mockRejectedValueOnce(
+    new Error("capture unavailable"),
+  );
+  expect(await sources[0].state(false)).toMatchObject({
+    capture: { unavailable: true },
+  });
+  status.mockResolvedValueOnce({
+    sessionId: "other",
+    frames: 999,
+  });
+  expect(await sources[0].state(false)).toMatchObject({
+    capture: { unavailable: true },
+  });
+  expect(status).toHaveBeenCalledTimes(5);
+  expect(status).toHaveBeenCalledWith("capture");
+  expect(renew).not.toHaveBeenCalled();
+  expect(pipelineStats).toHaveBeenCalledExactlyOnceWith(
+    "capture",
+  );
+});
+
 function handler(stream?: unknown) {
   const replace = vi.fn((next: MediaStream) => {
     for (const track of (

@@ -364,17 +364,31 @@ export function diagnosticSources(
       id: track.id,
       read: () => sessionService.getVideoStats(track),
       state: async (detailed: boolean) => {
-        const capture = getNativeCaptureStatus(track);
+        // Lifecycle subscriptions intentionally exclude counter ticks. Read the
+        // native snapshot on each diagnostic sample, including non-detail mode.
+        const cached = getNativeCaptureStatus(track);
+        const sessionId = cached?.sessionId;
+        let capture: typeof cached;
+        if (sessionId && platform.capture) {
+          try {
+            const current =
+              await platform.capture.status(sessionId);
+            if (current.sessionId === sessionId)
+              capture = current;
+          } catch {
+            // Never present a stale lifecycle snapshot as current FPS.
+          }
+        }
         let pipeline: Record<string, unknown> | undefined;
         if (
           detailed &&
-          capture?.sessionId &&
+          sessionId &&
           state.runtimeCapabilities()?.nativeScreenCapture
         ) {
           try {
             const raw =
               await platform.screenShare?.pipelineStats?.(
-                capture.sessionId!,
+                sessionId,
               );
             if (raw)
               pipeline = sanitizePipeline(raw) as Record<
@@ -402,7 +416,9 @@ export function diagnosticSources(
                     /0x[0-9a-f]{8}/i,
                   )?.[0] ?? null,
               }
-            : undefined,
+            : cached
+              ? { unavailable: true }
+              : undefined,
         };
       },
     }));

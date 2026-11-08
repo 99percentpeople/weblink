@@ -46,7 +46,34 @@ pub struct EncoderPipelineStats {
     pub queue: StageStats,
     pub encode: StageStats,
     pub capture_to_encode: StageStats,
+    pub stages: EncoderStages,
+    /// Interval between delivered outputs, including idle/capture gaps; not an encode stage.
+    pub output_interval: StageMeasurement,
     pub controls: Vec<CodecControl>,
+}
+
+/// Cumulative counters plus the most recent 120 observations. Zero samples
+/// means unobserved/unsupported, not a measured zero-cost stage.
+#[derive(Clone, Default, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageMeasurement {
+    pub samples: u64,
+    pub total_seconds: f64,
+    #[serde(flatten)]
+    pub latency: StageStats,
+}
+
+#[derive(Clone, Default, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EncoderStages {
+    pub prepare: StageMeasurement,
+    pub context_lock: StageMeasurement,
+    pub input: StageMeasurement,
+    pub output_wait: StageMeasurement,
+    pub event_dispatch: StageMeasurement,
+    pub output: StageMeasurement,
+    pub delivery: StageMeasurement,
+    pub bitrate_update: StageMeasurement,
 }
 
 #[cfg(any(windows, test))]
@@ -68,6 +95,13 @@ impl Distribution {
     }
     pub fn snapshot(&self) -> StageStats {
         StageStats::from_samples(self.samples.iter().copied())
+    }
+    pub fn measurement(&self) -> StageMeasurement {
+        StageMeasurement {
+            samples: self.count,
+            total_seconds: self.seconds,
+            latency: self.snapshot(),
+        }
     }
 }
 

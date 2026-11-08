@@ -89,6 +89,7 @@ struct Session {
     std::thread events;
     bool initialized = false;
     WeblinkNvencWake wake = nullptr;
+    WeblinkNvencMark mark = nullptr;
     void* context = nullptr;
 
     void check(NVENCSTATUS status, const char* operation) {
@@ -109,9 +110,10 @@ struct Session {
         return value;
     }
     void open(ID3D11Device* input_device, const WeblinkNvencConfig& options,
-              WeblinkNvencWake callback, void* callback_context) {
+              WeblinkNvencWake callback, WeblinkNvencMark marker, void* callback_context) {
         device = input_device;
         wake = callback;
+        mark = marker;
         context = callback_context;
         if (!device || (options.codec != 1 && options.codec != 2) || !options.fps ||
             !options.width || !options.height || !options.bitrate || !options.buffer_bits ||
@@ -234,7 +236,10 @@ struct Session {
                     if (wake) wake(context);
                     return;
                 }
-                completed.fetch_or(1u << (index - WAIT_OBJECT_0 - 1), std::memory_order_release);
+                const auto slot = index - WAIT_OBJECT_0 - 1;
+                // Publish the timestamp before making the output visible to poll.
+                if (mark) mark(context, slot, 0);
+                completed.fetch_or(1u << slot, std::memory_order_release);
                 if (wake) wake(context);
             }
         });
@@ -325,6 +330,7 @@ struct Session {
         if (pending.empty()) return 0;
         auto index = pending.front();
         if (!(completed.load(std::memory_order_acquire) & (1u << index))) return 0;
+        if (mark) mark(context, static_cast<uint32_t>(index), 1);
         auto& slot = slots[index];
         NV_ENC_LOCK_BITSTREAM locked{};
         locked.version = NV_ENC_LOCK_BITSTREAM_VER;
@@ -343,6 +349,7 @@ struct Session {
         result.bytes = packet.data();
         result.size = static_cast<uint32_t>(packet.size());
         result.timestamp = static_cast<int64_t>(locked.outputTimeStamp);
+        result.slot = static_cast<uint32_t>(index);
         result.keyframe = locked.pictureType == NV_ENC_PIC_TYPE_IDR;
         check(driver.api.nvEncUnlockBitstream(encoder, slot.output), "Release encoded output");
         check(driver.api.nvEncUnmapInputResource(encoder, slot.input), "Release input texture");
@@ -408,11 +415,11 @@ template<typename F> int32_t guarded(char* error, F operation) noexcept {
 }
 extern "C" {
 void* weblink_nvenc_open(void* device, const WeblinkNvencConfig* config,
-                        WeblinkNvencWake wake, void* context, char* error) {
+                        WeblinkNvencWake wake, WeblinkNvencMark mark, void* context, char* error) {
     std::unique_ptr<Session> session;
     auto ok = guarded(error, [&] {
         session = std::make_unique<Session>();
-        session->open(static_cast<ID3D11Device*>(device), *config, wake, context);
+        session->open(static_cast<ID3D11Device*>(device), *config, wake, mark, context);
         return 1;
     });
     return ok == 1 ? session.release() : nullptr;

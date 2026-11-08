@@ -5,6 +5,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, Weak,
     },
+    time::Instant,
 };
 use windows::{
     core::{implement, AgileReference, IUnknown, IUnknownImpl, Ref, Result},
@@ -16,7 +17,7 @@ use windows::{
 
 struct State {
     generator: AgileReference<IMFMediaEventGenerator>,
-    queue: Mutex<VecDeque<Result<MF_EVENT_TYPE>>>,
+    queue: Mutex<VecDeque<Result<(MF_EVENT_TYPE, Instant)>>>,
     stopped: AtomicBool,
     wake: Arc<dyn Fn() + Send + Sync>,
 }
@@ -43,7 +44,7 @@ impl Events {
         }
         Ok(Self(state))
     }
-    pub fn take(&self) -> VecDeque<Result<MF_EVENT_TYPE>> {
+    pub fn take(&self) -> VecDeque<Result<(MF_EVENT_TYPE, Instant)>> {
         std::mem::take(&mut *self.0.queue.lock().unwrap_or_else(|e| e.into_inner()))
     }
     pub fn stop(&self) {
@@ -88,7 +89,7 @@ impl IMFAsyncCallback_Impl for Callback_Impl {
         let event = unsafe {
             generator.EndGetEvent(result.as_ref()).and_then(|event| {
                 event.GetStatus()?.ok()?;
-                Ok(MF_EVENT_TYPE(event.GetType()? as i32))
+                Ok((MF_EVENT_TYPE(event.GetType()? as i32), Instant::now()))
             })
         };
         let failed = event.is_err();

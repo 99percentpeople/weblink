@@ -11,11 +11,14 @@ struct WeblinkNvencPacket {
     const uint8_t* bytes;
     uint32_t size, keyframe;
     int64_t timestamp;
+    uint32_t slot;
 };
 using WeblinkNvencWake = void (*)(void*);
+// phase 0: completion observed; phase 1: output extraction starts.
+using WeblinkNvencMark = void (*)(void*, uint32_t slot, uint32_t phase);
 extern "C" {
 void* weblink_nvenc_open(void* device, const WeblinkNvencConfig* config,
-                        WeblinkNvencWake wake, void* context, char* error);
+                        WeblinkNvencWake wake, WeblinkNvencMark mark, void* context, char* error);
 void weblink_nvenc_close(void* session);
 uint32_t weblink_nvenc_ready(void* session);
 // 1 = accepted/output, 0 = backpressure/no output, -1 = error.

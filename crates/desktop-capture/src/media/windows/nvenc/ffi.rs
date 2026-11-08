@@ -24,12 +24,14 @@ pub(super) struct Packet {
     pub size: u32,
     pub keyframe: u32,
     pub timestamp: i64,
+    pub slot: u32,
 }
 unsafe extern "C" {
     pub fn weblink_nvenc_open(
         device: *mut c_void,
         config: *const Config,
         wake: extern "C" fn(*mut c_void),
+        mark: extern "C" fn(*mut c_void, u32, u32),
         context: *mut c_void,
         error: *mut c_char,
     ) -> *mut c_void;

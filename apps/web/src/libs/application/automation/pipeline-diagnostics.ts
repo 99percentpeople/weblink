@@ -1,4 +1,12 @@
 const controlNames = new Set([
+  "pipelineLowLatency",
+  "lowLatency",
+  "bFrames",
+  "gopFrames",
+  "rateControl",
+  "maxBitrate",
+  "bufferBytes",
+  "dirtyRegions",
   "encodingPreset",
   "nvencPreset",
   "nvencTuning",

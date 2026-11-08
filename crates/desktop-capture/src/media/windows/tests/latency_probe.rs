@@ -59,11 +59,34 @@ fn synthetic_native_stream_latency() {
 }
 
 async fn run_probe() {
-    let hardware = mf::detect()
+    let codec = std::env::var("WEBLINK_PERF_CODEC").unwrap_or_else(|_| "video/h264".into());
+    assert!(matches!(codec.as_str(), "video/h264" | "video/h265"));
+    let rates = std::env::var("WEBLINK_PERF_FPS").map_or_else(
+        |_| vec![60, 120],
+        |value| {
+            let fps: u32 = value
+                .parse()
+                .expect("WEBLINK_PERF_FPS must be 30, 60 or 120");
+            assert!(matches!(fps, 30 | 60 | 120));
+            vec![fps]
+        },
+    );
+    let preset = std::env::var("WEBLINK_PERF_PRESET")
+        .map(|value| {
+            serde_json::from_value::<crate::media::preset::EncodingPreset>(value.into()).unwrap()
+        })
+        .unwrap_or_default();
+    let requested_encoder = std::env::var("WEBLINK_PERF_ENCODER").ok();
+    let hardware = hardware::detect()
         .unwrap()
         .into_iter()
-        .find(|encoder| encoder.codecs.iter().any(|codec| codec == "video/h264"))
-        .expect("No hardware H.264 encoder available for the latency probe");
+        .find(|encoder| {
+            encoder.codecs.contains(&codec)
+                && requested_encoder
+                    .as_ref()
+                    .map_or_else(|| encoder.id.starts_with("mf:"), |id| &encoder.id == id)
+        })
+        .expect("No hardware encoder available for the requested probe codec");
     let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
     let protection: ID3D11Multithread = context.cast().unwrap();
     unsafe {
@@ -104,18 +127,23 @@ async fn run_probe() {
         unsafe { device.CreateTexture2D(&desc, Some(&data), Some(&mut texture)) }.unwrap();
         textures.push(texture.unwrap());
     }
-    for fps in [60, 120] {
-        let media = MediaSession::new(MediaOptions {
+    for fps in rates {
+        let options = MediaOptions {
             encoder: hardware.id.clone(),
-            codec: Some("video/h264".into()),
+            codec: Some(codec.clone()),
+            encoding_preset: preset,
             max_width: width,
             max_height: height,
             frame_rate: fps,
             max_bitrate: 25_000_000,
             degradation_preference: "maintain-framerate".into(),
             ..Default::default()
-        })
-        .unwrap();
+        };
+        if std::env::var("WEBLINK_PERF_ENCODER_ONLY").as_deref() == Ok("1") {
+            encoder_only(&hardware, options, &device, &context, &textures).await;
+            continue;
+        }
+        let media = MediaSession::new(options).unwrap();
         let receiver = connect(&media, "latency-probe", false).await.unwrap();
         let mut cadence = tokio::time::interval(Duration::from_secs_f64(1.0 / f64::from(fps)));
         cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -161,6 +189,8 @@ async fn run_probe() {
             "measurementSeconds": measured_seconds,
             "pipelineRollingWindow": 120,
             "encoder": hardware.name, "requestedFps": fps,
+            "codec": codec, "preset": preset,
+            "offeredFps": f64::from(fps * 7 - 1) / measured_seconds,
             "decodedFps": f64::from(decoded) / measured_seconds,
             "encodedFps": (after_send.encode_frames - before_send.encode_frames) as f64 / measured_seconds,
             "rtpMbps": (after_send.bytes - before_send.bytes) as f64 * 8.0 / measured_seconds / 1_000_000.0,
@@ -176,6 +206,124 @@ async fn run_probe() {
         });
         println!("LATENCY_PROBE {}", serde_json::to_string(&report).unwrap());
         assert!(decoded > 0, "No synthetic frames decoded");
+        for encoder in &pipeline.encoders {
+            assert!(encoder.stages.input.samples > 0);
+            assert!(encoder.stages.output_wait.samples > 0);
+            assert_eq!(encoder.stages.output.samples, encoder.frames);
+        }
         media.close();
     }
+}
+
+/// Isolate worker timing when ICE/receiver availability would prevent a run.
+async fn encoder_only(
+    hardware: &crate::media::EncoderInfo,
+    options: MediaOptions,
+    device: &ID3D11Device,
+    context: &ID3D11DeviceContext,
+    textures: &[ID3D11Texture2D],
+) {
+    let dynamic = std::env::var("WEBLINK_PERF_DYNAMIC_BITRATE").as_deref() == Ok("1");
+    let worker = hardware::Encoder::shared(
+        hardware.id.clone(),
+        options.clone(),
+        Arc::new(|| {}),
+        Arc::new(|| {}),
+        if dynamic {
+            8_000_000
+        } else {
+            options.max_bitrate as u32
+        },
+    )
+    .unwrap();
+    let frame = |index: usize| TextureFrame {
+        device,
+        context,
+        texture: &textures[index % textures.len()],
+        dirty_regions: None,
+        rotation: Rotation::Identity,
+        cursor: None,
+    };
+    let pool = hardware::gpu::CapturePool::new(&frame(0), Arc::new(|| {}));
+    let fps = options.frame_rate;
+    let mut cadence = tokio::time::interval(Duration::from_secs_f64(1.0 / f64::from(fps)));
+    cadence.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut baseline = 0;
+    let mut baseline_stats = None;
+    let mut measured_at = Instant::now();
+    let mut submitted = 0;
+    for index in 0..fps * 10 {
+        cadence.tick().await;
+        if dynamic && index % (fps / 10).max(1) == 0 {
+            let alternating = index / (fps / 10).max(1) % 2 == 0;
+            let target = if index < fps * 3 {
+                8_000_000
+            } else if index < fps * 6 {
+                if alternating {
+                    7_984_000
+                } else {
+                    8_016_000
+                }
+            } else if index < fps * 8 {
+                if alternating {
+                    4_000_000
+                } else {
+                    16_000_000
+                }
+            } else if alternating {
+                8_000_000
+            } else {
+                8_032_000
+            };
+            worker.set_bitrate(target);
+        }
+        let captured_at = Instant::now();
+        if let Some(captured) = pool.capture(&frame(index as usize), false).unwrap() {
+            worker.submit(Arc::new(hardware::Frame::from_gpu(
+                captured,
+                &options,
+                Some(captured_at),
+            )));
+            submitted += 1;
+        }
+        assert!(worker.error().is_none(), "{:?}", worker.error());
+        if index == fps * 3 {
+            let stats = worker.statistics();
+            baseline = stats.frames;
+            baseline_stats = Some(stats.snapshot("probe".into()));
+            measured_at = Instant::now();
+            submitted = 0;
+        }
+    }
+    let elapsed = measured_at.elapsed().as_secs_f64();
+    let stats = worker.statistics();
+    println!(
+        "ENCODER_STAGE_PROBE {}",
+        json!({
+            "scope": "synthetic GPU to hardware worker; excludes desktop capture, network and decoding",
+            "debugAssertions": cfg!(debug_assertions),
+            "encoder": hardware.name, "codec": options.codec, "preset": options.encoding_preset,
+            "requestedFps": fps, "offeredFps": submitted as f64 / elapsed,
+            "encodedFps": (stats.frames - baseline) as f64 / elapsed,
+            "measurementSeconds": elapsed, "pipeline": stats.snapshot("probe".into()),
+            "baseline": baseline_stats, "dynamicBitrate": dynamic,
+        })
+    );
+    assert!(stats.frames > baseline, "No hardware output");
+    assert_eq!(
+        stats.snapshot("probe".into()).stages.output.samples,
+        stats.frames
+    );
+    assert_eq!(
+        stats.snapshot("probe".into()).stages.output_wait.samples,
+        stats.frames
+    );
+    assert_eq!(
+        stats.snapshot("probe".into()).stages.event_dispatch.samples,
+        stats.frames
+    );
+    if dynamic {
+        assert!(stats.snapshot("probe".into()).stages.bitrate_update.samples > 0);
+    }
+    worker.close();
 }

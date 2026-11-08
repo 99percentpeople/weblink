@@ -1,4 +1,6 @@
 use super::*;
+#[path = "bitrate_probe.rs"]
+mod bitrate_probe;
 #[test]
 fn optional_driver_policy_preserves_manual_mf_and_other_gpus() {
     for requested in [nvenc::H264, nvenc::HEVC, "mf:old"] {

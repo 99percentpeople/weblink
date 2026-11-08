@@ -127,9 +127,326 @@ impl BitrateController {
     }
 }
 
+/// Coalesce control writes independently of raw-frame admission on every backend.
+/// Transport reductions still reach FrameBudget immediately. A delayed driver
+/// write can reduce quality/fps temporarily, but cannot grant extra bandwidth.
+pub(super) struct DriverBitrateUpdates {
+    confirmed: u32,
+    finished: Duration,
+    cost: Duration,
+    failed: bool,
+    last_output: Option<Duration>,
+    output_gap: Option<Duration>,
+    debt_pressure: bool,
+}
+impl DriverBitrateUpdates {
+    const MIN_INTERVAL: Duration = Duration::from_millis(50);
+    const MAX_INTERVAL: Duration = Duration::from_secs(3);
+    const SETTLE_INTERVAL: Duration = Duration::from_secs(5);
+
+    pub fn new(confirmed: u32, now: Duration) -> Self {
+        Self {
+            confirmed,
+            finished: now,
+            cost: Duration::ZERO,
+            failed: false,
+            last_output: None,
+            output_gap: None,
+            debt_pressure: false,
+        }
+    }
+
+    /// Only completed output counts. Static capture without queued work must not
+    /// be mistaken for a stalled encoder. Returns the observed delivery interval.
+    pub fn output(&mut self, now: Duration) -> Option<Duration> {
+        self.last_output
+            .replace(now)
+            .map(|previous| now.saturating_sub(previous))
+    }
+
+    pub fn pressure(
+        &mut self,
+        target: u32,
+        debt_wait: Duration,
+        frame_interval: Duration,
+        busy: bool,
+    ) {
+        let cut = target > 0
+            && target < self.confirmed
+            && u64::from(self.confirmed - target) * 10 >= u64::from(self.confirmed);
+        // Latch debt pressure until the cut is applied/cancelled, so refilling
+        // credit during the cooldown cannot repeatedly postpone the driver cut.
+        self.debt_pressure = cut && busy && (self.debt_pressure || debt_wait >= frame_interval);
+        self.output_gap = (cut && busy)
+            .then(|| {
+                self.last_output
+                    .map(|at| at + frame_interval.saturating_mul(2))
+            })
+            .flatten();
+    }
+
+    pub fn next_update_in(&self, target: u32, now: Duration) -> Option<Duration> {
+        // Zero pauses admission; never pass it to a hardware rate-control API.
+        if target == 0 || target == self.confirmed {
+            return None;
+        }
+        // Compare to the confirmed rate, not the previous feedback sample.
+        let significant =
+            u64::from(target.abs_diff(self.confirmed)) * 10 >= u64::from(self.confirmed);
+        let interval = if self.failed {
+            Self::SETTLE_INTERVAL
+        } else if significant && target < self.confirmed {
+            // Cuts repay admission debt sooner; recovery and tiny fluctuations
+            // retain the original cost-based coalescing policy.
+            self.cost
+                .saturating_mul(2)
+                .clamp(Self::MIN_INTERVAL, Duration::from_millis(500))
+        } else if significant {
+            self.cost
+                .saturating_mul(10)
+                .clamp(Self::MIN_INTERVAL, Self::MAX_INTERVAL)
+        } else {
+            self.cost
+                .saturating_mul(20)
+                .clamp(Self::MIN_INTERVAL, Self::SETTLE_INTERVAL)
+        };
+        let mut due = self.finished + interval;
+        if !self.failed && significant && target < self.confirmed {
+            let cooldown = self.finished
+                + self
+                    .cost
+                    .clamp(Self::MIN_INTERVAL, Duration::from_millis(250));
+            if self.debt_pressure {
+                due = due.min(cooldown);
+            } else if let Some(gap) = self.output_gap {
+                // Wake when the gap becomes significant, even if no more frames
+                // arrive. New output moves this deadline forward on the next loop.
+                due = due.min(cooldown.max(gap));
+            }
+        }
+        Some(due.saturating_sub(now))
+    }
+
+    pub fn completed(&mut self, target: u32, now: Duration, cost: Duration, success: bool) {
+        if success {
+            self.confirmed = target;
+        }
+        self.failed = !success;
+        self.finished = now;
+        self.debt_pressure = false;
+        self.output_gap = None;
+        // React immediately to expensive calls, then recover as successful calls
+        // become cheap. A single fast call cannot erase a recent driver stall.
+        self.cost = cost.max(self.cost / 2);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cheap_driver_small_changes_use_short_window_and_latest_target() {
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        assert_eq!(
+            writes.next_update_in(7_984_000, Duration::from_millis(20)),
+            Some(Duration::from_millis(30))
+        );
+        assert_eq!(
+            writes.next_update_in(8_016_000, Duration::from_millis(50)),
+            Some(Duration::ZERO)
+        );
+        writes.completed(
+            8_016_000,
+            Duration::from_millis(51),
+            Duration::from_micros(40),
+            true,
+        );
+        assert_eq!(
+            writes.next_update_in(8_016_000, Duration::from_secs(1)),
+            None
+        );
+        assert_eq!(
+            writes.next_update_in(8_000_000, Duration::from_millis(52)),
+            Some(Duration::from_millis(49))
+        );
+        assert_eq!(
+            writes.next_update_in(4_000_000, Duration::from_millis(101)),
+            Some(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn expensive_driver_coalesces_small_changes_without_resetting_deadline() {
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(8_000_000, Duration::ZERO, Duration::from_millis(300), true);
+        for ms in (100..5_000).step_by(100) {
+            let target = if ms % 200 == 0 { 7_984_000 } else { 8_016_000 };
+            assert_eq!(
+                writes.next_update_in(target, Duration::from_millis(ms)),
+                Some(Duration::from_millis(5_000 - ms))
+            );
+        }
+        assert_eq!(
+            writes.next_update_in(7_984_000, Duration::from_secs(5)),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            writes.next_update_in(16_000_000, Duration::from_secs(3)),
+            Some(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn adaptive_interval_recovers_from_spikes_and_reopen_resets_cost() {
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(8_000_000, Duration::ZERO, Duration::from_secs(1), true);
+        assert_eq!(
+            writes.next_update_in(16_000_000, Duration::ZERO),
+            Some(Duration::from_secs(3))
+        );
+        for _ in 0..9 {
+            writes.completed(8_000_000, Duration::ZERO, Duration::from_micros(40), true);
+        }
+        assert_eq!(
+            writes.next_update_in(8_016_000, Duration::ZERO),
+            Some(Duration::from_millis(50))
+        );
+        let reopened = DriverBitrateUpdates::new(10_000, Duration::ZERO);
+        assert_eq!(
+            reopened.next_update_in(10_001, Duration::from_millis(50)),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(
+            DriverBitrateUpdates::new(u32::MAX, Duration::ZERO)
+                .next_update_in(1, Duration::from_secs(1)),
+            Some(Duration::ZERO)
+        );
+    }
+
+    #[test]
+    fn deferred_driver_cut_does_not_defer_admission_budget_or_pause() {
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(8_000_000, Duration::ZERO, Duration::from_millis(200), true);
+        let mut rate = BitrateController::with_start(8_000_000, 8_000_000);
+        let mut budget = FrameBudget::new(rate.current());
+        budget.record_output(100_000, Duration::ZERO);
+        rate.observe(1_000_000);
+        let now = Duration::from_millis(1);
+        budget.set_bitrate(rate.poll(now).unwrap(), now);
+        assert!(budget.next_input_in(now).unwrap() > Duration::from_millis(300));
+        writes.pressure(
+            rate.current(),
+            budget.next_input_in(now).unwrap(),
+            Duration::from_millis(16),
+            true,
+        );
+        assert_eq!(
+            writes.next_update_in(rate.current(), now),
+            Some(Duration::from_millis(199))
+        );
+        rate.observe(0);
+        budget.set_bitrate(rate.poll(now).unwrap(), now);
+        assert_eq!(budget.next_input_in(Duration::from_secs(30)), None);
+        assert_eq!(writes.next_update_in(0, Duration::from_secs(30)), None);
+        rate.observe(8_000_000);
+        budget.set_bitrate(
+            rate.poll(Duration::from_secs(30)).unwrap(),
+            Duration::from_secs(30),
+        );
+        assert_eq!(rate.current(), 8_000_000);
+        assert_eq!(
+            writes.next_update_in(rate.current(), Duration::from_secs(30)),
+            None
+        );
+    }
+
+    #[test]
+    fn failed_driver_write_retries_slowly_without_claiming_success() {
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(
+            2_000_000,
+            Duration::from_secs(1),
+            Duration::from_micros(40),
+            false,
+        );
+        writes.pressure(
+            1_000_000,
+            Duration::from_secs(2),
+            Duration::from_millis(16),
+            true,
+        );
+        assert_eq!(
+            writes.next_update_in(8_000_000, Duration::from_secs(2)),
+            None
+        );
+        assert_eq!(
+            writes.next_update_in(1_000_000, Duration::from_secs(2)),
+            Some(Duration::from_secs(4))
+        );
+        assert_eq!(
+            writes.next_update_in(2_000_000, Duration::from_secs(6)),
+            Some(Duration::ZERO)
+        );
+        writes.completed(2_000_000, Duration::from_secs(6), Duration::ZERO, true);
+        assert_eq!(
+            writes.next_update_in(2_000_000, Duration::from_secs(7)),
+            None
+        );
+    }
+
+    #[test]
+    fn slow_driver_cuts_accelerate_without_spending_or_forgiving_budget() {
+        let ms = Duration::from_millis;
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(8_000_000, Duration::ZERO, ms(300), true);
+        // A cut has a shorter bound even before pressure is observed.
+        assert_eq!(writes.next_update_in(4_000_000, ms(100)), Some(ms(400)));
+        writes.pressure(4_000_000, ms(100), ms(16), true);
+        assert_eq!(writes.next_update_in(4_000_000, ms(100)), Some(ms(150)));
+        // Refilling debt and a newer downward target must not reset the deadline.
+        writes.pressure(3_000_000, Duration::ZERO, ms(16), true);
+        assert_eq!(
+            writes.next_update_in(3_000_000, ms(250)),
+            Some(Duration::ZERO)
+        );
+        // A rebound cancels the expedited cut; small changes and rises stay coalesced.
+        writes.pressure(7_984_000, ms(100), ms(16), true);
+        assert_eq!(writes.next_update_in(7_984_000, ms(250)), Some(ms(4750)));
+        assert_eq!(writes.next_update_in(16_000_000, ms(250)), Some(ms(2750)));
+        assert_eq!(writes.next_update_in(0, ms(250)), None);
+        writes.completed(4_000_000, ms(300), ms(40), true);
+        assert_eq!(writes.next_update_in(4_000_000, ms(301)), None);
+        assert_eq!(writes.next_update_in(2_000_000, ms(301)), Some(ms(299)));
+    }
+
+    #[test]
+    fn output_gap_deadline_wakes_for_pending_work_but_not_idle_capture() {
+        let ms = Duration::from_millis;
+        let mut writes = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        writes.completed(8_000_000, Duration::ZERO, ms(100), true);
+        assert_eq!(writes.output(ms(80)), None);
+        writes.pressure(4_000_000, Duration::ZERO, ms(16), true);
+        // Cooldown ends at 100, but two frame intervals do not elapse until 112.
+        assert_eq!(writes.next_update_in(4_000_000, ms(90)), Some(ms(22)));
+        assert_eq!(
+            writes.next_update_in(4_000_000, ms(112)),
+            Some(Duration::ZERO)
+        );
+        assert_eq!(writes.output(ms(110)), Some(ms(30)));
+        writes.pressure(4_000_000, Duration::ZERO, ms(16), true);
+        assert_eq!(writes.next_update_in(4_000_000, ms(112)), Some(ms(30)));
+        // At 30 fps the tolerated output gap is correspondingly larger.
+        writes.pressure(4_000_000, Duration::ZERO, ms(33), true);
+        assert_eq!(writes.next_update_in(4_000_000, ms(112)), Some(ms(64)));
+        writes.pressure(4_000_000, ms(500), ms(16), false);
+        assert_eq!(writes.next_update_in(4_000_000, ms(112)), Some(ms(88)));
+        // No output history on a reopened encoder cannot imply a stalled stream.
+        let mut reopened = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        reopened.completed(8_000_000, Duration::ZERO, ms(100), true);
+        reopened.pressure(4_000_000, Duration::ZERO, ms(16), true);
+        assert_eq!(reopened.next_update_in(4_000_000, ms(112)), Some(ms(88)));
+    }
+
     #[test]
     fn hardware_overshoot_is_limited_before_encoding_and_recovers() {
         let mut budget = FrameBudget::new(8_000_000);
