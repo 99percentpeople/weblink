@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.7] - 2026-11-09
+
+Weblink 1.3.7 improves how Windows screen sharing handles bitrate changes, adds more detailed encoder diagnostics, and restores messaging and file requests after a peer reconnects.
+
+### Windows screen sharing
+
+- **Adaptive bitrate updates.** Media Foundation and NVENC combine small bitrate changes based on how long each driver takes to apply them. Larger cuts apply sooner when the frame budget delays new inputs or pending frames are taking longer to produce output. Lower network budgets limit new input immediately, even while the driver update is pending.
+- **Live capture and encoder diagnostics.** Capture FPS, frame count, and time since the last frame refresh with each diagnostic sample. Detailed reports show how long the encoder spends preparing frames, acquiring the GPU context lock, submitting input, waiting for and handling output, delivering frames, and changing bitrate. They also report the interval between encoded outputs.
+
+### Reconnection
+
+- **Restore messaging and file requests.** Peers can exchange new messages and file requests once they reconnect and trust is verified again.
+
+### Maintenance
+
+- Update the PWA build tools and asset generator to 2.x to avoid CI installation failures caused by the legacy Sharp dependency.
+
 ## [1.3.6] - 2026-11-05
 
 Weblink 1.3.6 brings media and data onto one native connection per peer on Windows, adds a custom signaling server setting, reduces web playback latency, and improves screen recordings and room admission.

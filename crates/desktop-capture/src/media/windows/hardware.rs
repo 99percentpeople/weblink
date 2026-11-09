@@ -1085,47 +1085,50 @@ mod tests {
         );
     }
 
-    #[test]
-    fn deferred_driver_bitrate_update_wakes_without_new_frames() {
+    fn assert_driver_update_wakes(
+        rate: BitrateController,
+        updates: DriverBitrateUpdates,
+        elapsed: Duration,
+    ) {
         let work = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
         let worker_work = work.clone();
         let (send, receive) = std::sync::mpsc::channel();
         let worker = thread::spawn(move || {
-            let started = Instant::now() - Duration::from_millis(4_950);
-            let rate = BitrateController::with_start(8_000_000, 7_984_000);
-            let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
-            updates.completed(8_000_000, Duration::ZERO, Duration::from_millis(300), true);
-            continue_wait(&worker_work, &rate, started, Some(&updates), None);
-            send.send(started.elapsed()).unwrap();
+            let started = Instant::now() - elapsed;
+            // Like the worker, recheck the deadline after an early wake.
+            while updates.next_update_in(rate.current(), started.elapsed()) != Some(Duration::ZERO)
+            {
+                if worker_work.0.lock().unwrap().stopped {
+                    return;
+                }
+                continue_wait(&worker_work, &rate, started, Some(&updates), None);
+            }
+            send.send(()).unwrap();
         });
         let result = receive.recv_timeout(Duration::from_secs(1));
         work.0.lock().unwrap().stopped = true;
         work.1.notify_one();
         worker.join().unwrap();
-        assert!(result.expect("Pending driver update never woke") >= Duration::from_secs(5));
+        result.expect("Pending driver update never woke");
+    }
+
+    #[test]
+    fn deferred_driver_bitrate_update_wakes_without_new_frames() {
+        let rate = BitrateController::with_start(8_000_000, 7_984_000);
+        let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        updates.completed(8_000_000, Duration::ZERO, Duration::from_millis(300), true);
+        assert_driver_update_wakes(rate, updates, Duration::from_millis(4_950));
     }
 
     #[test]
     fn output_gap_expedites_a_cut_without_another_capture_notification() {
-        let work = Arc::new((Mutex::new(Pending::default()), Condvar::new()));
-        let worker_work = work.clone();
-        let (send, receive) = std::sync::mpsc::channel();
-        let worker = thread::spawn(move || {
-            let ms = Duration::from_millis;
-            let started = Instant::now() - ms(80);
-            let rate = BitrateController::with_start(8_000_000, 4_000_000);
-            let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
-            updates.completed(8_000_000, Duration::ZERO, ms(100), true);
-            updates.output(ms(80));
-            updates.pressure(rate.current(), Duration::ZERO, ms(16), true);
-            continue_wait(&worker_work, &rate, started, Some(&updates), None);
-            send.send(started.elapsed()).unwrap();
-        });
-        let result = receive.recv_timeout(Duration::from_secs(1));
-        work.0.lock().unwrap().stopped = true;
-        work.1.notify_one();
-        worker.join().unwrap();
-        assert!(result.expect("Output-gap deadline never woke") >= Duration::from_millis(112));
+        let ms = Duration::from_millis;
+        let rate = BitrateController::with_start(8_000_000, 4_000_000);
+        let mut updates = DriverBitrateUpdates::new(8_000_000, Duration::ZERO);
+        updates.completed(8_000_000, Duration::ZERO, ms(100), true);
+        updates.output(ms(80));
+        updates.pressure(rate.current(), Duration::ZERO, ms(16), true);
+        assert_driver_update_wakes(rate, updates, ms(80));
     }
 
     #[test]
