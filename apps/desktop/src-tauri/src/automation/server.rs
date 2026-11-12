@@ -25,7 +25,7 @@ pub(super) fn endpoint(ip: IpAddr, port: u16) -> String {
 }
 
 /// Advertise the running listener, never settings awaiting the next start.
-/// Re-enumerate interfaces so a network change is reflected in status polling.
+/// Re-enumerate interfaces when preparing an initial or changed status.
 pub(super) fn endpoints(active: Option<&ServerConfig>) -> Vec<String> {
     let Some(active) = active else {
         return Vec::new();
@@ -89,6 +89,7 @@ pub(super) fn activate(s: &mut State, epoch: &str, ip: IpAddr, port: u16) -> Res
         host: ip.to_string(),
         port,
     });
+    s.changes.notify();
     Ok(())
 }
 

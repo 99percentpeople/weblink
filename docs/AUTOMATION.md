@@ -136,12 +136,34 @@ secret. The compact list shows token summaries and actions. The full
 random token is displayed only at creation. Tokens use `sk-` followed by
 43 unpadded Base64url characters encoding 32 bytes from the OS secure random
 source (46 characters total). Only a SHA-256 hash, a short display prefix,
-name, creation time and expiration are stored alongside the desired Host/port in
-the current WebView's `localStorage` entry `mcp_registry`. The native service
+name, creation time, expiration and last-use time are stored alongside the
+desired Host/port in the current WebView's `localStorage` entry `mcp_registry`. The native service
 validates a proposed change; the renderer saves that record before native
 activation and serializes edits to prevent lost updates. A storage failure does
 not activate the change. If activation fails after saving, the page's automation
 session closes and the saved record is restored on the next open.
+The list shows the most recent successful HTTP authentication, including
+initialization and tool discovery, even if the subsequent tool call fails.
+Rejected authentication does not update it. Tokens without a recorded use show
+no usage record; usage before this feature cannot be recovered. Native usage
+notifications update the list and persist the time directly, without polling.
+The token list is read on initialization and after creation, edits or revocation;
+status notifications omit it. Expiration labels use a timer for the next
+deadline. Usage survives restarts and is merged into concurrent token edits and
+late snapshots without moving backwards. Failed metadata writes are retried on
+the next notification, registry edit or explicit close without interrupting MCP
+requests.
+Permissions, approvals, audit entries, command job status, control leases,
+listener state and native errors are pushed over the page's native channel.
+The page reads a snapshot on initialization and after explicit operations; it
+does not poll status or send heartbeats. Session epochs and monotonic revisions
+prevent late snapshots from replacing newer state. Native maintenance sleeps
+until a change or an authority deadline, retaining safety checks only for
+active input leases and recovery of an unavailable emergency listener.
+Windows interface notifications refresh advertised listener addresses. Where
+that observer is unavailable, only wildcard listener addresses are sampled
+every 30 seconds. Diagnostic time-series sampling and explicit command-output
+reads are independent of these settings notifications.
 Clearing this storage resets MCP credentials and listener settings on the next open. The
 list, creation, editing and revocation remain available while MCP is disabled.
 Issuing a token authorizes discovery, diagnostics and forwarding, plus local OS

@@ -1570,6 +1570,8 @@
     "expired": "Abgelaufen",
     "created_at": "Erstellt am",
     "expires_at": "Gültig bis",
+    "last_used_at": "Zuletzt verwendet",
+    "no_usage_record": "Keine Nutzung erfasst",
     "permanent": "Unbegrenzt gültig",
     "custom_expiry": "Eigenes Ablaufdatum",
     "days": "Tage",

@@ -77,8 +77,15 @@ fn output_page(s: &JobState, read: Read) -> Result<Value, String> {
 #[derive(Default)]
 pub struct Jobs {
     entries: Mutex<HashMap<String, Job>>,
+    changes: Arc<super::status::Changes>,
 }
 impl Jobs {
+    pub(super) fn new(changes: Arc<super::status::Changes>) -> Self {
+        Self {
+            entries: Mutex::default(),
+            changes,
+        }
+    }
     pub fn list(&self) -> Vec<Value> {
         self.entries.lock().unwrap().iter().map(|(id,j)| { let s=j.state.lock().unwrap(); json!({"id":id,"principal":j.owner,"status":s.status,"exitCode":s.exit,"truncated":s.output.truncated()}) }).collect()
     }
@@ -131,6 +138,7 @@ impl Jobs {
         }
         if entries.len() >= 32 {
             entries.retain(|_, j| j.state.lock().unwrap().status == "running");
+            self.changes.notify();
         }
         let id = uuid::Uuid::new_v4().to_string();
         let commands = command()?;
@@ -204,6 +212,8 @@ impl Jobs {
             guard: cancel.clone().drop_guard(),
         };
         entries.insert(id, job);
+        self.changes.notify();
+        let changes = self.changes.clone();
         let timeout = Duration::from_millis(args["timeoutMs"].as_u64().unwrap_or(60000));
         tokio::spawn(async move {
             let stdin = child.stdin.take().unwrap();
@@ -215,8 +225,8 @@ impl Jobs {
                     .await;
             });
             let mut readers = tokio::task::JoinSet::new();
-            readers.spawn(drain(stdout, state.clone(), "stdout"));
-            readers.spawn(drain(stderr, state.clone(), "stderr"));
+            readers.spawn(drain(stdout, state.clone(), "stdout", changes.clone()));
+            readers.spawn(drain(stderr, state.clone(), "stderr", changes.clone()));
             let deadline = tokio::time::Instant::now() + timeout;
             let (status, exit) = loop {
                 tokio::select! {
@@ -260,6 +270,7 @@ impl Jobs {
             s.output_incomplete = incomplete;
             s.status = status;
             s.exit = exit;
+            changes.notify();
             done.cancel();
         });
         Ok(started)
@@ -337,6 +348,7 @@ async fn drain(
     mut pipe: impl tokio::io::AsyncRead + Unpin,
     state: Arc<Mutex<JobState>>,
     stream: &'static str,
+    changes: Arc<super::status::Changes>,
 ) -> bool {
     let mut buf = [0u8; 8192];
     loop {
@@ -346,7 +358,14 @@ async fn drain(
         if n == 0 {
             return true;
         }
-        state.lock().unwrap().output.append(&buf[..n], stream);
+        let mut state = state.lock().unwrap();
+        let truncated = state.output.truncated();
+        state.output.append(&buf[..n], stream);
+        // Output bytes are read explicitly by tools; the settings list only
+        // needs a notification when its truncation indicator changes.
+        if truncated != state.output.truncated() {
+            changes.notify();
+        }
     }
 }
 #[cfg(windows)]
@@ -423,6 +442,24 @@ mod tests {
     }
     async fn ended(jobs: &Jobs, id: &str) -> Value {
         ended_within(jobs, id, Duration::from_secs(10)).await
+    }
+    #[tokio::test]
+    async fn job_creation_and_completion_notify_without_status_polling() {
+        let changes = Arc::new(super::super::status::Changes::default());
+        let jobs = Jobs::new(changes.clone());
+        let mut receive = changes.subscribe();
+        let started = start_fixture(&jobs, "hold", json!({})).unwrap();
+        assert!(receive.has_changed().unwrap());
+        receive.borrow_and_update();
+        assert_eq!(jobs.list()[0]["status"], "running");
+        assert!(!receive.has_changed().unwrap());
+        jobs.stop();
+        tokio::time::timeout(Duration::from_secs(10), receive.changed())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(jobs.list()[0]["status"], "running");
+        ended(&jobs, &started.id).await;
     }
     async fn ended_within(jobs: &Jobs, id: &str, timeout: Duration) -> Value {
         let done = jobs.entries.lock().unwrap()[id].done.clone();

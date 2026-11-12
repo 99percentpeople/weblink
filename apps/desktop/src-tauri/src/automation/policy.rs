@@ -53,6 +53,7 @@ impl Service {
                 source: GrantSource::Policy,
             },
         );
+        s.changes.notify();
     }
 
     pub(super) fn revoke_grant(&self, s: &mut State, id: &str) {
@@ -99,6 +100,7 @@ impl Service {
             .peer_policies
             .insert(id.into(), policy.clone())
             .unwrap_or_default();
+        s.changes.notify();
         let changed = |scope: &str| {
             previous.get(scope).copied().unwrap_or_default()
                 != policy.get(scope).copied().unwrap_or_default()

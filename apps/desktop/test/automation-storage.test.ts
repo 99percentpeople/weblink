@@ -27,6 +27,7 @@ const client = {
   prefix: "sk-secret",
   createdAt: 1,
   expiresAt: null,
+  lastUsedAt: null,
 };
 const stored = () => ({ ...empty(), clients: { client } });
 
@@ -35,14 +36,18 @@ describe("MCP localStorage persistence", () => {
   let active = empty();
   let revision = 0;
   const ipc = vi.fn();
+  const receive = vi.fn();
   beforeEach(async () => {
     localStorage.clear();
     revision = 0;
     ipc.mockReset();
+    receive.mockReset();
     ipc.mockImplementation(
       async (command: string, args: any) => {
         if (command === "automation_open") {
-          active = args.registry ?? empty();
+          active = structuredClone(
+            args.registry ?? empty(),
+          );
           return { epoch: "page", registry: active };
         }
         if (command === "automation_registry_apply") {
@@ -52,11 +57,19 @@ describe("MCP localStorage persistence", () => {
               localStorage.getItem(MCP_STORAGE_KEY)!,
             ),
           ).toEqual(args.registry);
-          active = args.registry;
+          active = structuredClone(args.registry);
           revision++;
           return;
         }
         if (command === "automation_close") return;
+        if (command === "automation_snapshot")
+          return args.includeClients === false
+            ? {}
+            : {
+                clients: structuredClone(
+                  Object.values(active.clients),
+                ),
+              };
         let registry = structuredClone(active);
         let result: unknown = null;
         if (command === "automation_client") {
@@ -68,7 +81,7 @@ describe("MCP localStorage persistence", () => {
           };
         } else if (command === "automation_client_update") {
           registry.clients[args.id] = {
-            ...client,
+            ...(registry.clients[args.id] as typeof client),
             label: args.label,
             expiresAt: args.expiresAt,
           };
@@ -84,12 +97,194 @@ describe("MCP localStorage persistence", () => {
       },
     );
     mockIPC(ipc);
-    epoch = await nativeAutomation.open(() => {});
+    epoch = await nativeAutomation.open(receive);
   });
   afterEach(async () => {
     vi.restoreAllMocks();
     await nativeAutomation.close(epoch).catch(() => {});
     clearMocks();
+  });
+  const eventChannel = () =>
+    ipc.mock.calls
+      .filter(([name]) => name === "automation_open")
+      .at(-1)![1].channel;
+  const used = (at: number) => {
+    const record = active.clients.client as {
+      lastUsedAt: number | null;
+    };
+    record.lastUsedAt = Math.max(
+      record.lastUsedAt ?? 0,
+      at,
+    );
+    eventChannel().onmessage({
+      kind: "token-used",
+      epoch,
+      id: "client",
+      lastUsedAt: at,
+    });
+  };
+  const saved = () =>
+    JSON.parse(localStorage.getItem(MCP_STORAGE_KEY)!);
+
+  it("persists usage events immediately and restores the time after reopening", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    used(1000);
+    expect(saved().clients.client.lastUsedAt).toBe(1000);
+    expect(receive).toHaveBeenLastCalledWith({
+      kind: "token-used",
+      epoch,
+      id: "client",
+      lastUsedAt: 1000,
+    });
+    expect(
+      ipc.mock.calls.some(
+        ([name]) => name === "automation_snapshot",
+      ),
+    ).toBe(false);
+    used(900);
+    expect(saved().clients.client.lastUsedAt).toBe(1000);
+    await nativeAutomation.close(epoch);
+    epoch = await nativeAutomation.open(() => {});
+    expect(active.clients.client).toMatchObject({
+      lastUsedAt: 1000,
+    });
+  });
+
+  it("merges a newer usage event into an edit prepared before that event", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    const handler = ipc.getMockImplementation()!;
+    let release!: () => void;
+    ipc.mockImplementation(
+      async (name: string, args: any) => {
+        const result = await handler(name, args);
+        if (name === "automation_client_update")
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        return result;
+      },
+    );
+    const update = nativeAutomation.updateClient(
+      epoch,
+      "client",
+      "Renamed",
+      null,
+    );
+    await vi.waitFor(() =>
+      expect(release).toBeTypeOf("function"),
+    );
+    used(2000);
+    release();
+    await update;
+    expect(saved().clients.client).toMatchObject({
+      label: "Renamed",
+      lastUsedAt: 2000,
+    });
+    expect(active.clients.client).toMatchObject({
+      label: "Renamed",
+      lastUsedAt: 2000,
+    });
+  });
+
+  it("keeps usage received while activation IPC is in flight", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    const handler = ipc.getMockImplementation()!;
+    let release!: () => void;
+    ipc.mockImplementation(
+      async (name: string, args: any) => {
+        const result = await handler(name, args);
+        if (name === "automation_registry_apply")
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        return result;
+      },
+    );
+    const update = nativeAutomation.updateClient(
+      epoch,
+      "client",
+      "Renamed",
+      null,
+    );
+    await vi.waitFor(() =>
+      expect(release).toBeTypeOf("function"),
+    );
+    used(3000);
+    release();
+    await update;
+    expect(saved().clients.client).toMatchObject({
+      label: "Renamed",
+      lastUsedAt: 3000,
+    });
+  });
+
+  it("retries failed metadata writes on notifications without querying native state", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    const write = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementationOnce(() => {
+        throw new DOMException(
+          "full",
+          "QuotaExceededError",
+        );
+      });
+    expect(() => used(4000)).not.toThrow();
+    expect(saved().clients.client.lastUsedAt).toBeNull();
+    used(4000);
+    expect(saved().clients.client.lastUsedAt).toBe(4000);
+    used(5000);
+    expect(saved().clients.client.lastUsedAt).toBe(5000);
+    expect(
+      ipc.mock.calls.some(
+        ([name]) => name === "automation_snapshot",
+      ),
+    ).toBe(false);
+    write.mockRestore();
+  });
+
+  it("does not persist or forward usage for a revoked token", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    used(1000);
+    await nativeAutomation.removeClient(epoch, "client");
+    receive.mockClear();
+    eventChannel().onmessage({
+      kind: "token-used",
+      epoch,
+      id: "client",
+      lastUsedAt: 6000,
+    });
+    expect(saved().clients).toEqual({});
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("ignores usage notifications from an old or closed page", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    used(7000);
+    receive.mockClear();
+    eventChannel().onmessage({
+      kind: "token-used",
+      epoch: "old-page",
+      id: "client",
+      lastUsedAt: 8000,
+    });
+    expect(saved().clients.client.lastUsedAt).toBe(7000);
+    await nativeAutomation.close(epoch);
+    used(9000);
+    expect(saved().clients.client.lastUsedAt).toBe(7000);
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("omits tokens from periodic status queries without persisting a snapshot", async () => {
+    await nativeAutomation.client(epoch, "Agent", null);
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    expect(
+      await nativeAutomation.snapshot(epoch, false),
+    ).toEqual({});
+    expect(ipc).toHaveBeenLastCalledWith(
+      "automation_snapshot",
+      { epoch, includeClients: false },
+    );
+    expect(write).not.toHaveBeenCalled();
   });
   it("stores only hashes and restores tokens and listener settings on the next open", async () => {
     expect(

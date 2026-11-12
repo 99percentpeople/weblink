@@ -113,16 +113,26 @@ export default function McpTokenSettings(props: {
                         {client.prefix}…
                       </code>
                     </div>
-                    <p
+                    <div
                       class="text-muted-foreground @md:col-start-2 @md:row-start-1
                         col-start-1 row-start-2 min-w-0 text-[11px] tabular-nums
                         leading-5"
                       title={`${t("automation.created_at")}: ${new Date(client.createdAt).toLocaleString()}`}
                     >
-                      {client.expiresAt === null
-                        ? t("automation.permanent")
-                        : `${client.expired ? t("automation.expired") : t("automation.expires_at")}: ${new Date(client.expiresAt).toLocaleString()}`}
-                    </p>
+                      <p>
+                        {client.expiresAt === null
+                          ? t("automation.permanent")
+                          : `${client.expired ? t("automation.expired") : t("automation.expires_at")}: ${new Date(client.expiresAt).toLocaleString()}`}
+                      </p>
+                      <p>
+                        {t("automation.last_used_at")}:{" "}
+                        {client.lastUsedAt == null
+                          ? t("automation.no_usage_record")
+                          : new Date(
+                              client.lastUsedAt,
+                            ).toLocaleString()}
+                      </p>
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"

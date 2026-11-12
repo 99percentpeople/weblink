@@ -25,6 +25,7 @@ impl Service {
     }
 
     pub(super) fn configure_locked(&self, s: &mut State, mcp: bool, enabled: bool) {
+        s.changes.notify();
         if mcp {
             s.mcp_enabled = enabled;
             if enabled {

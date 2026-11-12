@@ -24,6 +24,12 @@ pub(super) struct Owner {
     pub(super) host: Mutex<Host>,
     thread: Mutex<Option<JoinHandle<()>>>,
     watch: Mutex<Option<StatusWatch>>,
+    automation_status: Arc<Mutex<AutomationStatus>>,
+}
+#[derive(Default)]
+struct AutomationStatus {
+    previous: Option<Snapshot>,
+    observer: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 struct StatusWatch {
     id: String,
@@ -33,6 +39,17 @@ struct StatusWatch {
 impl Owner {
     // Called under the host lock, keeping snapshots and initial delivery ordered.
     pub(super) fn publish(&self, status: Snapshot) {
+        let mut automation = self
+            .automation_status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if automation.previous.as_ref() != Some(&status) {
+            automation.previous = Some(status.clone());
+            if let Some(observer) = &automation.observer {
+                observer();
+            }
+        }
+        drop(automation);
         let mut slot = self.watch.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(watch) = slot.as_mut() {
             if watch.previous != status {
@@ -56,6 +73,7 @@ impl Owner {
 }
 #[derive(Default)]
 pub struct Service {
+    automation_status: Arc<Mutex<AutomationStatus>>,
     automation_listening: AtomicBool,
     shortcut: Mutex<weblink_desktop_input::shortcut::Shortcut>,
     pub(super) owner: Mutex<Option<Arc<Owner>>>,
@@ -63,6 +81,15 @@ pub struct Service {
     emergency_observer: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 impl Service {
+    /// This observer only wakes automation work; it must never acquire host locks.
+    pub fn observe_automation_status(&self, observer: Arc<dyn Fn() + Send + Sync>) {
+        let mut status = self
+            .automation_status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        status.observer = Some(observer);
+        status.previous = None;
+    }
     /// Keep the shared shortcut available for local automation outside a room.
     pub fn automation_listener(&self, enabled: bool) -> Result<(), String> {
         if !weblink_desktop_input::session::supported() {
@@ -317,6 +344,7 @@ impl Service {
             }),
             thread: Mutex::new(None),
             watch: Mutex::new(None),
+            automation_status: self.automation_status.clone(),
         });
         let weak = Arc::downgrade(&owner);
         let thread = thread::Builder::new()

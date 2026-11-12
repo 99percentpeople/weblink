@@ -62,6 +62,7 @@ fn retire_input_interruption(
 fn sync_input_control(service: &Service, control: &crate::remote_control::Service) {
     service.expire();
     let mut s = service.state.lock().unwrap();
+    let owners = s.input_owners.clone();
     // The host can be replaced by room teardown. Keep the same shortcut available
     // for background commands even when automation holds no native input lease.
     let active = s.enabled || s.mcp_enabled;
@@ -91,6 +92,9 @@ fn sync_input_control(service: &Service, control: &crate::remote_control::Servic
     }
     s.input_owners.retain(|id| allowed.contains(id));
     control.automation_sync(&s.input_owners);
+    if owners != s.input_owners {
+        s.changes.notify();
+    }
 }
 pub async fn action(
     app: tauri::AppHandle,
@@ -221,11 +225,13 @@ pub async fn action(
                 if !s.input_owners.contains(&principal) {
                     s.input_owners.push(principal);
                 }
+                s.changes.notify();
                 Ok(result)
             }
             "control.release" => {
                 control.automation_release(&principal);
                 s.input_owners.retain(|id| id != &principal);
+                s.changes.notify();
                 Ok(json!({"released":true}))
             }
             _ => Err("UNSUPPORTED".into()),

@@ -59,46 +59,9 @@ pub async fn automation_open(
             s.registry_revision = 0;
             s.epoch.clone()
         };
-        let background = service.clone();
-        let emergency = service.state.lock().unwrap().emergency.clone();
-        let app = app.clone();
-        let generation = epoch.clone();
-        tauri::async_runtime::spawn(async move {
-            loop {
-                tokio::select! {
-                    _ = tokio::time::sleep(Duration::from_secs(1)) => {},
-                    _ = emergency.wake.notified() => {},
-                }
-                let app = app.clone();
-                let background = background.clone();
-                let generation = generation.clone();
-                let current = off_thread(move || {
-                    // Run cleanup once even when this page ended, releasing native
-                    // input/listeners before the sampler exits. A replacement page
-                    // is checked against its own current state by sync_input.
-                    native::sync_input(&app, &background);
-                    let s = background.state.lock().unwrap();
-                    Ok(Service::check(&s, &generation).is_ok())
-                })
-                .await
-                .unwrap_or(false);
-                if !current {
-                    break;
-                }
-            }
-        });
+        status::start(app.clone(), service.clone(), epoch.clone());
+        maintenance::start(app, service.clone(), epoch.clone());
         Ok(json!({"epoch":epoch,"registry":registry}))
-    })
-    .await
-}
-#[tauri::command]
-pub async fn automation_heartbeat(
-    window: WebviewWindow,
-    service: State<'_, Shared>,
-    epoch: String,
-) -> Result<(), String> {
-    blocking(window, service, move |_app, service| {
-        Service::check(&service.state.lock().unwrap(), &epoch)
     })
     .await
 }
@@ -196,23 +159,17 @@ pub async fn automation_snapshot(
     window: WebviewWindow,
     service: State<'_, Shared>,
     epoch: String,
+    include_clients: Option<bool>,
 ) -> Result<Value, String> {
     blocking(window, service, move |app, service| {
-    service.expire();
-    let s = service.state.lock().unwrap();
-    Service::check(&s, &epoch)?;
-    let mut snapshot = json!({"activeCalls":s.tickets.keys().collect::<Vec<_>>(),"enabled":s.enabled,"mcpEnabled":s.mcp_enabled,"endpoint":s.endpoint,"server":{"host":s.registry.host,"port":s.registry.port},"serverPending":server::pending(&s),"mcpSuspended":s.mcp_enabled && s.mcp_suspended,"policyGeneration":s.policy_generation,"nativeError":s.native_error,"clients":s.registry.clients.values().map(registry::Client::summary).collect::<Vec<_>>(),"grants":s.grants.values().filter(|g| g.principal.kind == "peer").collect::<Vec<_>>(),"pending":s.pending.iter().map(|(id,p)|json!({"id":id,"principal":p.principal,"scope":p.scope,"tool":p.call.name,"source":p.call.source,"arguments":p.call.arguments,"expiresAt":now()+p.deadline.saturating_duration_since(Instant::now()).as_millis() as u64})).collect::<Vec<_>>(),"audit":s.audit,"jobs":service.jobs.list()});
-    let control = app.state::<crate::remote_control::Shared>();
-    let controller = native::controller(&s, &control);
-    snapshot["screenGrants"] = json!(native::screen_grants(&s, None));
-    snapshot["controlLeaseId"] = json!(controller.as_ref().and_then(|p| control.automation_lease(&p.id).ok()));
-    snapshot["controller"] = json!(controller);
-    let active = s.active_server.clone();
-    drop(s);
-    snapshot["endpoints"] = json!(server::endpoints(active.as_ref()));
-    Ok(snapshot)
-
-    }).await
+        service.expire();
+        service.status_snapshot(
+            &epoch,
+            &app.state::<crate::remote_control::Shared>(),
+            include_clients.unwrap_or(true),
+        )
+    })
+    .await
 }
 #[tauri::command]
 pub async fn automation_client(
@@ -420,6 +377,7 @@ pub async fn automation_finish(
         Service::check(&s, &epoch)?;
         let valid = Service::check_call(&s, &epoch, &id).is_ok();
         let t = s.tickets.remove(&id).ok_or("CANCELLED")?;
+        s.changes.notify();
         let _ = t.answer.send(if valid {
             result
         } else {

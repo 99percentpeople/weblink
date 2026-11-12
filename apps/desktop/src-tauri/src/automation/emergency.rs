@@ -105,7 +105,7 @@ impl Service {
         // generation is checked on policy writes and retained across page reloads.
         if let Some(channel) = &s.channel {
             let _ = channel.send(json!({
-                "kind": "policies-reset", "generation": s.policy_generation,
+                "kind": "policies-reset", "generation": s.policy_generation, "revision": s.changes.revision(),
             }));
         }
     }
@@ -115,6 +115,7 @@ impl Service {
             return;
         }
         s.native_error = error;
+        s.changes.notify();
         if let Some(error) = s.native_error.clone() {
             // An unavailable emergency listener is a runtime failure, not a
             // user revocation. Preserve saved decisions and reject native work.
@@ -125,6 +126,7 @@ impl Service {
     }
 
     fn audit_stop(s: &mut State, reason: &str) {
+        s.changes.notify();
         s.audit.push(json!({
             "id": uuid::Uuid::new_v4().to_string(), "at": now(),
             "principal": "Weblink", "tool": "automation.stop",

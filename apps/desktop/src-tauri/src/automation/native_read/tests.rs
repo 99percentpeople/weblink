@@ -59,6 +59,7 @@ fn fixture(name: &str) -> Shared {
             prefix: "test".into(),
             created_at: now(),
             expires_at: None,
+            last_used_at: None,
         },
     );
     s.grants.insert(

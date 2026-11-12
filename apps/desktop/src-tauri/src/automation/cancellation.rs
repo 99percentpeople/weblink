@@ -6,11 +6,16 @@ impl Service {
         if let Some(signal) = s.accessibility_waits.remove(id) {
             signal.cancel();
         }
-        s.pending.remove(id);
-        s.requests.remove(id);
-        if s.tickets.remove(id).is_some() {
+        let pending = s.pending.remove(id).is_some();
+        let request = s.requests.remove(id).is_some();
+        let ticket = s.tickets.remove(id).is_some();
+        if pending || request || ticket {
+            s.changes.notify();
+        }
+        if ticket {
             if let Some(channel) = &s.channel {
-                let _ = channel.send(json!({"kind":"cancel","id":id}));
+                let _ =
+                    channel.send(json!({"kind":"cancel","id":id,"revision":s.changes.revision()}));
             }
         }
     }
@@ -21,6 +26,9 @@ impl Service {
         let ids: Vec<_> = s.tickets.keys().cloned().collect();
         for id in ids {
             Self::cancel_request(s, &id);
+        }
+        if !s.pending.is_empty() || !s.requests.is_empty() {
+            s.changes.notify();
         }
         s.pending.clear();
         s.requests.clear();

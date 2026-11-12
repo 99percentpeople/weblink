@@ -20,7 +20,10 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import type { AppStateContextProps } from "@/libs/state/app-state-context";
-import type { NativeAutomation } from "@weblink/platform";
+import type {
+  McpTokenSummary,
+  NativeAutomation,
+} from "@weblink/platform";
 import type {
   ToolCall,
   ToolResult,
@@ -137,6 +140,18 @@ const snapshot = () => ({
   audit: [],
   jobs: [],
 });
+let statusRevision = 0;
+const pushStatus = (
+  status: Record<string, unknown> = {},
+  revision = ++statusRevision,
+  epoch = "epoch",
+) => {
+  vi.mocked(fixture.native.open).mock.calls[0][0]({
+    kind: "status",
+    epoch,
+    snapshot: { ...snapshot(), ...status, revision },
+  });
+};
 const mount = () => {
   let runtime!: ReturnType<typeof createAutomation>;
   const view = render(() => {
@@ -145,6 +160,410 @@ const mount = () => {
   });
   return { runtime, ...view };
 };
+const tokenSummary = (): McpTokenSummary => ({
+  id: "saved-token",
+  label: "Agent",
+  prefix: "sk-test",
+  createdAt: 1,
+  expiresAt: null,
+  lastUsedAt: null,
+  expired: false,
+});
+it("updates token usage immediately from notifications without fetching a snapshot", async () => {
+  vi.useFakeTimers();
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async (_epoch, includeClients = true) => ({
+      ...snapshot(),
+      clients: includeClients
+        ? [tokenSummary()]
+        : undefined,
+    }),
+  );
+  const view = mount();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(view.runtime.ready()).toBe(true);
+  const receive = vi.mocked(fixture.native.open).mock
+    .calls[0][0];
+  const requests = vi.mocked(fixture.native.snapshot).mock
+    .calls.length;
+  receive({
+    kind: "token-used",
+    epoch: "epoch",
+    id: "saved-token",
+    lastUsedAt: 2000,
+  });
+  expect(
+    view.runtime.snapshot().clients[0].lastUsedAt,
+  ).toBe(2000);
+  expect(fixture.native.snapshot).toHaveBeenCalledTimes(
+    requests,
+  );
+  receive({
+    kind: "token-used",
+    epoch: "epoch",
+    id: "saved-token",
+    lastUsedAt: 1000,
+  });
+  receive({
+    kind: "token-used",
+    epoch: "old-epoch",
+    id: "saved-token",
+    lastUsedAt: 3000,
+  });
+  expect(
+    view.runtime.snapshot().clients[0].lastUsedAt,
+  ).toBe(2000);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(fixture.native.snapshot).toHaveBeenCalledTimes(
+    requests,
+  );
+  expect(
+    view.runtime.snapshot().clients[0].lastUsedAt,
+  ).toBe(2000);
+  expect(
+    vi
+      .mocked(fixture.native.snapshot)
+      .mock.calls.filter(
+        ([, includeClients]) => includeClients,
+      ).length,
+  ).toBe(1);
+  view.unmount();
+  receive({
+    kind: "token-used",
+    epoch: "epoch",
+    id: "saved-token",
+    lastUsedAt: 4000,
+  });
+  expect(
+    view.runtime.snapshot().clients[0].lastUsedAt,
+  ).toBe(2000);
+});
+it.each([false, true])(
+  "preserves newer usage when an edit snapshot is late (newer status=%s)",
+  async (newerStatus) => {
+    vi.useFakeTimers();
+    vi.mocked(fixture.native.snapshot).mockResolvedValue({
+      ...snapshot(),
+      clients: [tokenSummary()],
+    });
+    fixture.native.updateClient = vi.fn(async () => {});
+    const view = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    let resolveSnapshot!: (value: unknown) => void;
+    vi.mocked(
+      fixture.native.snapshot,
+    ).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        }),
+    );
+    const edit = view.runtime.updateClient(
+      "saved-token",
+      "Renamed",
+      null,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const receive = vi.mocked(fixture.native.open).mock
+      .calls[0][0];
+    receive({
+      kind: "token-used",
+      epoch: "epoch",
+      id: "saved-token",
+      lastUsedAt: 5000,
+    });
+    if (newerStatus) pushStatus();
+    resolveSnapshot({
+      ...snapshot(),
+      clients: [
+        {
+          ...tokenSummary(),
+          label: "Renamed",
+          lastUsedAt: 1000,
+        },
+      ],
+    });
+    await edit;
+    expect(
+      view.runtime.snapshot().clients[0],
+    ).toMatchObject({
+      label: "Renamed",
+      lastUsedAt: 5000,
+    });
+  },
+);
+it("pushes permissions, jobs and runtime state while idle without querying", async () => {
+  vi.useFakeTimers();
+  const view = mount();
+  await vi.advanceTimersByTimeAsync(0);
+  const requests = vi.mocked(fixture.native.snapshot).mock
+    .calls.length;
+  const pending = [
+    {
+      id: "approval",
+      principal: {
+        id: "peer",
+        kind: "peer",
+        label: "Peer",
+      },
+      scope: "shell.execute",
+      tool: "commands.run",
+      arguments: { target: "local" },
+      expiresAt: Date.now() + 30000,
+    },
+  ];
+  const grants = [
+    {
+      id: "grant",
+      principal: pending[0].principal,
+      target: "local",
+      scopes: ["shell.execute"],
+      expiresAt: null,
+    },
+  ];
+  pushStatus({
+    pending,
+    grants,
+    jobs: [
+      {
+        id: "job",
+        principal: "peer",
+        status: "running",
+        exitCode: null,
+      },
+    ],
+    endpoints: ["http://192.0.2.1:32100/mcp"],
+  });
+  expect(view.runtime.snapshot().pending).toEqual(pending);
+  expect(view.runtime.snapshot().grants).toEqual(grants);
+  expect(view.runtime.snapshot().jobs[0].status).toBe(
+    "running",
+  );
+  pushStatus({
+    jobs: [
+      {
+        id: "job",
+        principal: "peer",
+        status: "completed",
+        exitCode: 0,
+      },
+    ],
+    mcpSuspended: true,
+    nativeError: "LISTENER_UNAVAILABLE",
+  });
+  expect(view.runtime.snapshot().pending).toEqual([]);
+  expect(view.runtime.snapshot().grants).toEqual([]);
+  expect(view.runtime.snapshot().jobs[0].status).toBe(
+    "completed",
+  );
+  expect(view.runtime.snapshot().mcpSuspended).toBe(true);
+  expect(view.runtime.error()).toBe("LISTENER_UNAVAILABLE");
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(fixture.native.snapshot).toHaveBeenCalledTimes(
+    requests,
+  );
+});
+it("ignores older status revisions, epochs and a delayed explicit query", async () => {
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  let resolve!: (value: unknown) => void;
+  vi.mocked(fixture.native.snapshot).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const configure = view.runtime.configure(true);
+  await waitFor(() => expect(resolve).toBeDefined());
+  const jobs = [
+    { id: "job", status: "completed", exitCode: 0 },
+  ];
+  pushStatus({ jobs }, 10);
+  pushStatus({ jobs: [] }, 9);
+  pushStatus({ jobs: [] }, 11, "old-epoch");
+  resolve({ ...snapshot(), revision: 8 });
+  await configure;
+  expect(view.runtime.snapshot().jobs).toEqual(jobs);
+  view.unmount();
+  pushStatus({}, 12);
+  expect(view.runtime.snapshot().jobs).toEqual(jobs);
+});
+it.each([false, true])(
+  "closes the native session and ignores late status (during initialization=%s)",
+  async (duringOpen) => {
+    vi.useFakeTimers();
+    if (duringOpen)
+      vi.mocked(fixture.native.open).mockImplementationOnce(
+        async (receive) => {
+          receive({ kind: "closed", epoch: "epoch" });
+          return "epoch";
+        },
+      );
+    const view = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    if (!duringOpen) {
+      expect(view.runtime.ready()).toBe(true);
+      await view.runtime.configure(true);
+      pushStatus({ policyGeneration: "old-generation" });
+      vi.mocked(fixture.native.open).mock.calls[0][0]({
+        kind: "policies-reset",
+        generation: "latest-generation",
+        revision: 2,
+      });
+      vi.mocked(fixture.native.open).mock.calls[0][0]({
+        kind: "closed",
+        epoch: "epoch",
+      });
+      expect(
+        appState.options.automationPolicyGeneration,
+      ).toBe("latest-generation");
+    }
+    pushStatus({
+      nativeError: "late error",
+      pending: [{ id: "late" }],
+    });
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(view.runtime.ready()).toBe(false);
+    expect(view.runtime.enabled()).toBe(false);
+    expect(view.runtime.mcpEnabled()).toBe(false);
+    expect(view.runtime.snapshot().pending).toEqual([]);
+    expect(view.runtime.error()).toBe("SESSION_CLOSED");
+  },
+);
+it("a status captured before dispatch cannot cancel a newer call", async () => {
+  const view = mount();
+  await waitFor(() =>
+    expect(view.runtime.ready()).toBe(true),
+  );
+  let signal!: AbortSignal;
+  let finish!: () => void;
+  fixture.handle.mockImplementationOnce(
+    async (_call, abort) => {
+      signal = abort;
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      abort.throwIfAborted();
+      return {};
+    },
+  );
+  vi.mocked(fixture.native.open).mock.calls[0][0]({
+    kind: "call",
+    id: "new",
+    revision: 20,
+    principal: { id: "token", label: "Agent", kind: "mcp" },
+    call: {
+      name: "diagnostics.snapshot",
+      arguments: { target: "local" },
+    },
+  });
+  await waitFor(() => expect(signal).toBeDefined());
+  try {
+    pushStatus({ activeCalls: [] }, 19);
+    expect(signal.aborted).toBe(false);
+    pushStatus({ activeCalls: ["new"] }, 20);
+    expect(signal.aborted).toBe(false);
+    pushStatus({ activeCalls: [] }, 21);
+    expect(signal.aborted).toBe(true);
+  } finally {
+    finish();
+  }
+  await waitFor(() =>
+    expect(fixture.native.finish).toHaveBeenCalled(),
+  );
+});
+it("does not restore a revoked token from an older edit snapshot or a late notification", async () => {
+  vi.useFakeTimers();
+  vi.mocked(fixture.native.snapshot).mockResolvedValue({
+    ...snapshot(),
+    clients: [tokenSummary()],
+  });
+  fixture.native.updateClient = vi.fn(async () => {});
+  fixture.native.removeClient = vi.fn(async () => {});
+  const view = mount();
+  await vi.advanceTimersByTimeAsync(0);
+  let resolveSnapshot!: (value: unknown) => void;
+  vi.mocked(fixture.native.snapshot).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveSnapshot = resolve;
+      }),
+  );
+  const edit = view.runtime.updateClient(
+    "saved-token",
+    "Renamed",
+    null,
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  vi.mocked(fixture.native.snapshot).mockResolvedValueOnce(
+    snapshot(),
+  );
+  await view.runtime.removeClient("saved-token");
+  resolveSnapshot({
+    ...snapshot(),
+    clients: [tokenSummary()],
+  });
+  await edit;
+  vi.mocked(fixture.native.open).mock.calls[0][0]({
+    kind: "token-used",
+    epoch: "epoch",
+    id: "saved-token",
+    lastUsedAt: 6000,
+  });
+  expect(view.runtime.snapshot().clients).toEqual([]);
+});
+it("updates token expiry at its deadline and reschedules edits without polling tokens", async () => {
+  vi.useFakeTimers();
+  let expiresAt = Date.now() + 2500;
+  fixture.native.updateClient = vi.fn(
+    async (_epoch, _id, _label, at) => {
+      expiresAt = at!;
+    },
+  );
+  vi.mocked(fixture.native.snapshot).mockImplementation(
+    async (_epoch, includeClients = true) => ({
+      ...snapshot(),
+      clients: includeClients
+        ? [{ ...tokenSummary(), expiresAt }]
+        : undefined,
+    }),
+  );
+  const view = mount();
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(view.runtime.snapshot().clients[0].expired).toBe(
+    false,
+  );
+  await view.runtime.updateClient(
+    "saved-token",
+    "Agent",
+    Date.now() + 2500,
+  );
+  await vi.advanceTimersByTimeAsync(500);
+  expect(view.runtime.snapshot().clients[0].expired).toBe(
+    false,
+  );
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(view.runtime.snapshot().clients[0].expired).toBe(
+    true,
+  );
+  expect(
+    vi
+      .mocked(fixture.native.snapshot)
+      .mock.calls.filter(
+        ([, includeClients]) => includeClients,
+      ).length,
+  ).toBe(2);
+  view.unmount();
+  const requests = vi.mocked(fixture.native.snapshot).mock
+    .calls.length;
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(fixture.native.snapshot).toHaveBeenCalledTimes(
+    requests,
+  );
+});
 it("announces the actual OS automation switch independently of the MCP controller switch", async () => {
   const { runtime } = mount();
   await waitFor(() => expect(runtime.ready()).toBe(true));
@@ -208,7 +627,7 @@ it.each(["mcp", "peer"] as const)(
     await view.runtime.configure(true);
     expect(view.runtime.controller()).toBeNull();
     controller = principal;
-    await vi.advanceTimersByTimeAsync(1000);
+    pushStatus({ controller });
     expect(view.runtime.controller()).toEqual(principal);
     expect(fixture.setController).toHaveBeenLastCalledWith(
       kind === "peer"
@@ -216,7 +635,7 @@ it.each(["mcp", "peer"] as const)(
         : null,
     );
     controller = null;
-    await vi.advanceTimersByTimeAsync(1000);
+    pushStatus({ controller });
     expect(view.runtime.controller()).toBeNull();
     expect(fixture.setController).toHaveBeenLastCalledWith(
       null,
@@ -232,20 +651,21 @@ it.each(["mcp", "peer"] as const)(
 );
 it("preserves call rows and text selection when unchanged native snapshots arrive", async () => {
   let status = "ok";
+  const currentStatus = () => ({
+    ...snapshot(),
+    audit: [
+      {
+        id: "call-1",
+        principal: "Peer",
+        at: 1700000000000,
+        tool: "control.text",
+        target: "local",
+        status,
+      },
+    ],
+  });
   vi.mocked(fixture.native.snapshot).mockImplementation(
-    async () => ({
-      ...snapshot(),
-      audit: [
-        {
-          id: "call-1",
-          principal: "Peer",
-          at: 1700000000000,
-          tool: "control.text",
-          target: "local",
-          status,
-        },
-      ],
-    }),
+    async () => currentStatus(),
   );
   let runtime!: ReturnType<typeof createAutomation>;
   const view = render(() => {
@@ -267,17 +687,18 @@ it("preserves call rows and text selection when unchanged native snapshots arriv
   range.selectNodeContents(row);
   selection.removeAllRanges();
   selection.addRange(range);
-  await runtime.configure(true);
+  pushStatus(currentStatus());
   expect(view.getByText("control.text · ok")).toBe(row);
   expect(selection.toString()).toBe("control.text · ok");
   status = "PERMISSION_DENIED";
-  await runtime.configure(true);
+  pushStatus(currentStatus());
   expect(
     view.getByText("control.text · PERMISSION_DENIED"),
   ).toBe(row);
   selection.removeAllRanges();
 });
 beforeEach(() => {
+  statusRevision = 0;
   fixture.configureShortcut.mockReset().mockResolvedValue();
   fixture.generation = "connection-1";
   fixture.events = new EventTarget();
@@ -294,7 +715,6 @@ beforeEach(() => {
   fixture.native = {
     open: vi.fn(async () => "epoch"),
     close: vi.fn(async () => {}),
-    heartbeat: vi.fn(async () => {}),
     snapshot: vi.fn(async () => snapshot()),
     configure: vi.fn(async () => {}),
     configureMcp: vi.fn(async () => {}),
@@ -682,6 +1102,7 @@ it.each([false, true])(
           resolveSnapshot = resolve;
         }),
     );
+    const refresh = view.runtime.configure(true);
     await waitFor(
       () => expect(resolveSnapshot).toBeDefined(),
       { timeout: 2500 },
@@ -698,6 +1119,7 @@ it.each([false, true])(
         activeCalls: [],
         screenGrants: [],
       });
+      await refresh;
       await waitFor(() =>
         expect(signals.get("old")!.aborted).toBe(true),
       );
@@ -758,11 +1180,6 @@ it("uses native screen authority across separate permissions and reconciles owne
     screenGrantId: "screen",
     screenGrantIds: ["screen"],
   };
-  vi.mocked(fixture.native.snapshot).mockResolvedValue({
-    ...snapshot(),
-    screenGrants: ["screen"],
-    controlLeaseId: "lease",
-  });
   const receive = vi.mocked(fixture.native.open).mock
     .calls[0][0];
   receive({
@@ -778,6 +1195,10 @@ it("uses native screen authority across separate permissions and reconciles owne
   await waitFor(() =>
     expect(fixture.native.finish).toHaveBeenCalled(),
   );
+  pushStatus({
+    screenGrants: ["screen"],
+    controlLeaseId: "lease",
+  });
   expect(fixture.handle).toHaveBeenCalledWith(
     expect.anything(),
     expect.any(AbortSignal),

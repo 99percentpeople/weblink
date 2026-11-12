@@ -12,6 +12,8 @@ pub struct Client {
     pub prefix: String,
     pub created_at: u64,
     pub expires_at: Option<u64>,
+    #[serde(default)]
+    pub last_used_at: Option<u64>,
 }
 impl Client {
     pub fn active(&self) -> bool {
@@ -26,7 +28,7 @@ impl Client {
         }
     }
     pub fn summary(&self) -> Value {
-        json!({"id":self.id,"label":self.label,"prefix":self.prefix,"createdAt":self.created_at,"expiresAt":self.expires_at,"expired":!self.active()})
+        json!({"id":self.id,"label":self.label,"prefix":self.prefix,"createdAt":self.created_at,"expiresAt":self.expires_at,"lastUsedAt":self.last_used_at,"expired":!self.active()})
     }
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -81,6 +83,7 @@ pub(super) fn validate(r: &Registry) -> Result<(), String> {
             || !c.token_hash.bytes().all(|v| v.is_ascii_hexdigit())
             || c.prefix.len() > 16
             || c.expires_at.is_some_and(|v| v > 253402300799999)
+            || c.last_used_at.is_some_and(|v| v > 253402300799999)
         {
             return Err("INVALID_AUTOMATION_REGISTRY".into());
         }
@@ -140,6 +143,7 @@ impl Service {
                         prefix: token[..11].into(),
                         created_at: now(),
                         expires_at,
+                        last_used_at: None,
                     },
                 );
                 let endpoint = if Self::current(&s) && !s.endpoint.is_empty() {
@@ -179,7 +183,7 @@ impl Service {
         &self,
         epoch: &str,
         revision: u64,
-        registry: Registry,
+        mut registry: Registry,
     ) -> Result<(), String> {
         validate(&registry)?;
         let mut s = self.state.lock().unwrap();
@@ -200,8 +204,18 @@ impl Service {
             })
             .map(|(id, _)| id.clone())
             .collect();
+        // Authentication can occur after preparation without changing the
+        // credential revision. Never replace that newer usage with an old edit.
+        for (id, client) in &mut registry.clients {
+            if let Some(old) = s.registry.clients.get(id) {
+                if old.token_hash == client.token_hash {
+                    client.last_used_at = client.last_used_at.max(old.last_used_at);
+                }
+            }
+        }
         s.registry = registry;
         s.registry_revision += 1;
+        s.changes.notify();
         for id in revoked {
             self.revoke_client(&mut s, &id);
         }
@@ -305,6 +319,9 @@ impl Service {
         }
     }
 }
+
+#[cfg(test)]
+mod usage_tests;
 
 #[cfg(test)]
 mod tests {
@@ -425,6 +442,7 @@ mod tests {
                 prefix: legacy[..8].into(),
                 created_at: now(),
                 expires_at: None,
+                last_used_at: None,
             },
         );
         let service = Service::default();

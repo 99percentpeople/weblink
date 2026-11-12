@@ -68,6 +68,7 @@ impl Service {
                 source: GrantSource::Token,
             },
         );
+        s.changes.notify();
         Ok(())
     }
 }

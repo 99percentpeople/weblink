@@ -16,13 +16,16 @@ mod input_sequence;
 mod jobs;
 mod keyboard;
 mod lifecycle;
+mod maintenance;
 mod native;
 mod native_read;
+mod network;
 mod peers;
 mod pointer;
 mod policy;
 mod registry;
 mod server;
+mod status;
 mod token_authority;
 pub use commands::*;
 use serde::{Deserialize, Serialize};
@@ -98,6 +101,8 @@ struct Invocation {
 }
 #[derive(Default)]
 struct State {
+    changes: Arc<status::Changes>,
+    status_stop: Option<CancellationToken>,
     emergency: Arc<emergency::Emergency>,
     epoch: String,
     page: lifecycle::Page,
@@ -123,6 +128,7 @@ struct State {
     input_owners: Vec<String>,
 }
 pub struct Service {
+    changes: Arc<status::Changes>,
     state: Mutex<State>,
     page: Mutex<lifecycle::Page>,
     opening: Mutex<()>,
@@ -135,15 +141,18 @@ pub struct Service {
 impl Default for Service {
     fn default() -> Self {
         let page = lifecycle::Page::default();
+        let changes = Arc::new(status::Changes::default());
         Self {
             state: Mutex::new(State {
                 page: page.clone(),
+                changes: changes.clone(),
                 ..Default::default()
             }),
             page: Mutex::new(page),
             opening: Default::default(),
             native_read: Default::default(),
-            jobs: Default::default(),
+            jobs: jobs::Jobs::new(changes.clone()),
+            changes,
             input_queue: Default::default(),
             input_holds: Default::default(),
             accessibility: Default::default(),
@@ -198,6 +207,14 @@ impl Service {
         Ok(())
     }
     fn shutdown_locked(&self, s: &mut State) {
+        if let Some(cancel) = s.status_stop.take() {
+            cancel.cancel();
+        }
+        if !s.epoch.is_empty() {
+            if let Some(channel) = &s.channel {
+                let _ = channel.send(json!({"kind": "closed", "epoch": s.epoch}));
+            }
+        }
         if let Some(cancel) = s.listener.take() {
             cancel.cancel();
         }
@@ -211,10 +228,13 @@ impl Service {
         s.peer_policies.clear();
         s.channel = None;
         s.epoch.clear();
+        s.changes.notify();
         self.jobs.stop();
     }
     fn revoke_locked(&self, s: &mut State, id: &str) {
-        s.grants.remove(id);
+        if s.grants.remove(id).is_some() {
+            s.changes.notify();
+        }
         // A wait may still use an element reference from a different, older read grant.
         // Authority changes wake it directly; no UI polling is needed to detect revocation.
         for signal in s.accessibility_waits.values() {
@@ -270,7 +290,7 @@ impl Service {
         }
     }
     fn authenticate(&self, token: &str) -> Option<Principal> {
-        let s = self.state.lock().unwrap();
+        let mut s = self.state.lock().unwrap();
         if !s.mcp_enabled || !Self::current(&s) {
             return None;
         }
@@ -278,11 +298,20 @@ impl Service {
             return None;
         }
         let digest = registry::digest(token);
-        s.registry
+        let client = s
+            .registry
             .clients
-            .values()
-            .find(|c| c.active() && constant_eq(&c.token_hash, &digest))
-            .map(registry::Client::principal)
+            .values_mut()
+            .find(|c| c.active() && constant_eq(&c.token_hash, &digest))?;
+        let principal = client.principal();
+        let last_used_at = client.last_used_at.unwrap_or_default().max(now());
+        client.last_used_at = Some(last_used_at);
+        // Usage is metadata, not a credential change: do not invalidate pending
+        // registry edits or reject an authenticated request if IPC is unavailable.
+        if let Some(channel) = &s.channel {
+            let _ = channel.send(json!({"kind":"token-used","epoch":s.epoch,"id":principal.id,"lastUsedAt":last_used_at}));
+        }
+        Some(principal)
     }
     async fn invoke(self: Arc<Self>, principal: Principal, id: String, mut call: Call) -> Value {
         if principal.kind == "mcp" {
@@ -345,6 +374,7 @@ impl Service {
         if s.audit.len() > 1000 {
             s.audit.remove(0);
         }
+        s.changes.notify();
         result
     }
     async fn execute(
@@ -432,6 +462,7 @@ impl Service {
                         answer: tx,
                     },
                 );
+                s.changes.notify();
                 Some(rx)
             } else {
                 None
@@ -482,10 +513,11 @@ impl Service {
                     used: false,
                 },
             );
+            s.changes.notify();
             if s.channel
                 .as_ref()
                 .ok_or("APP_NOT_READY")?
-                .send(json!({"kind":"call","id":id,"principal":principal,"grantId":grant,"screenGrantId":screen_grant,"screenGrantIds":screen_grants,"call":call}))
+                .send(json!({"kind":"call","id":id,"revision":s.changes.revision(),"principal":principal,"grantId":grant,"screenGrantId":screen_grant,"screenGrantIds":screen_grants,"call":call}))
                 .is_err()
             {
                 s.tickets.remove(&id);

@@ -137,7 +137,6 @@ pub fn run() {
             receive::receive_close,
 
             automation::automation_open,
-            automation::automation_heartbeat,
             automation::automation_close,
             automation::automation_configure,
             automation::automation_mcp_configure,
@@ -273,6 +272,9 @@ pub fn run() {
         .setup(|app| {
             app.state::<remote_control::Shared>().observe_emergency(
                 app.state::<automation::Shared>().emergency_observer(),
+            );
+            app.state::<remote_control::Shared>().observe_automation_status(
+                app.state::<automation::Shared>().status_observer(),
             );
             if let Err(error) = application::setup(app.handle()) {
                 // Keep the application usable; without a tray no operation may hide it.

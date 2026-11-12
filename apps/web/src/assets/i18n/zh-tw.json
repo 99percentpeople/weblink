@@ -1570,6 +1570,8 @@
     "expired": "已過期",
     "created_at": "建立時間",
     "expires_at": "到期時間",
+    "last_used_at": "上次使用時間",
+    "no_usage_record": "暫無使用記錄",
     "permanent": "永久有效",
     "custom_expiry": "自訂到期時間",
     "days": "天",

@@ -572,6 +572,29 @@ fn replacing_and_unwatching_status_does_not_revoke_input_or_remove_a_new_watcher
     rig.service.end(&rig.owner);
     assert!(receive.try_recv().is_err());
 }
+
+#[test]
+fn automation_observes_host_changes_without_a_ui_watcher() {
+    let rig = Rig::new();
+    let (send, receive) = std::sync::mpsc::channel();
+    rig.service.observe_automation_status(Arc::new(move || {
+        let _ = send.send(());
+    }));
+    let consent = rig.request();
+    receive.recv_timeout(Duration::from_secs(1)).unwrap();
+    rig.service.approve(&rig.owner, &consent, true).unwrap();
+    receive.recv_timeout(Duration::from_secs(1)).unwrap();
+    rig.tick();
+    assert!(
+        receive.try_recv().is_err(),
+        "Unchanged status must not wake automation"
+    );
+    rig.service.revoke(&rig.owner).unwrap();
+    receive.recv_timeout(Duration::from_secs(1)).unwrap();
+    rig.service.end(&rig.owner);
+    receive.recv_timeout(Duration::from_secs(1)).unwrap();
+    assert!(receive.try_recv().is_err());
+}
 impl Rig {
     fn new() -> Self {
         let service = Service::default();

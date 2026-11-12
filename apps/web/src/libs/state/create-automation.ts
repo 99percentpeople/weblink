@@ -44,6 +44,7 @@ import {
 import { platform } from "@/libs/platform/runtime";
 import { DEFAULT_MCP_SERVER } from "@weblink/platform";
 import type {
+  NativeAutomationEvent,
   NativeAutomationPeer,
   NativeAutomationRequest,
   McpTokenSummary,
@@ -66,6 +67,7 @@ import {
 } from "@/libs/application/automation/peer-link";
 import type { AppStateContextProps } from "./app-state-context";
 interface NativeSnapshot {
+  revision?: number;
   enabled: boolean;
   mcpEnabled: boolean;
   endpoint: string;
@@ -117,16 +119,66 @@ export function createAutomation(
   const [revision, setRevision] = createSignal(0);
   const [nativeState, updateNativeState] =
     createStore<NativeSnapshot>(structuredClone(empty));
+  const tokenUsage = new Map<string, number>();
   let policyGeneration = "";
   const applyPolicyGeneration = (generation: string) => {
     resetAutomationPolicies(generation);
     policyGeneration = generation;
+  };
+  const setNativeClients = (clients: McpTokenSummary[]) => {
+    const ids = new Set(clients.map((client) => client.id));
+    for (const id of tokenUsage.keys())
+      if (!ids.has(id)) tokenUsage.delete(id);
+    updateNativeState(
+      "clients",
+      reconcile(
+        clients.map((client) => {
+          // A notification can arrive while an initial/edit snapshot is in flight.
+          const at = Math.max(
+            client.lastUsedAt ?? 0,
+            tokenUsage.get(client.id) ?? 0,
+          );
+          if (at) tokenUsage.set(client.id, at);
+          return { ...client, lastUsedAt: at || null };
+        }),
+        { key: "id" },
+      ),
+    );
   };
   const setNativeState = (snapshot: NativeSnapshot) => {
     if (typeof snapshot.policyGeneration === "string")
       applyPolicyGeneration(snapshot.policyGeneration);
     updateNativeState(reconcile(snapshot, { key: "id" }));
   };
+  createEffect(() => {
+    const deadlines = nativeState.clients.map((client) => ({
+      id: client.id,
+      at: client.expiresAt,
+    }));
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const expire = () => {
+      const now = Date.now();
+      let next = Infinity;
+      for (const { id, at } of deadlines) {
+        updateNativeState(
+          "clients",
+          (client) => client.id === id,
+          "expired",
+          at !== null && at <= now,
+        );
+        if (at !== null && at > now)
+          next = Math.min(next, at);
+      }
+      // A single deadline updates expiration labels without querying native state.
+      if (Number.isFinite(next))
+        timeout = setTimeout(
+          expire,
+          Math.min(next - now, 2_147_483_647),
+        );
+    };
+    untrack(expire);
+    onCleanup(() => clearTimeout(timeout));
+  });
   const [error, setError] = createSignal("");
   const [ready, setReady] = createSignal(false);
   const [runtimeCapabilities, setRuntimeCapabilities] =
@@ -293,8 +345,11 @@ export function createAutomation(
     return authority.pending;
   };
   const calls = new Map<string, AbortController>();
+  const callRevisions = new WeakMap<
+    AbortController,
+    number
+  >();
   let epoch = "",
-    timer: ReturnType<typeof setTimeout> | undefined,
     unregister: (() => void) | undefined;
   const native = platform.automation;
   const webSupported = () => !!webMcpContext(document);
@@ -302,19 +357,29 @@ export function createAutomation(
   const configurationRevision = { automation: 0, mcp: 0 };
   let nativeConfiguration = Promise.resolve();
   let snapshotSequence = 0;
+  let clientSnapshotSequence = 0;
+  let nativeRevision = -1;
+  let nativeSessionClosed = false;
   let shareRevision = 0;
   const shareCalls = new Set<AbortController>();
-  const readNativeSnapshot = async () => {
-    const sequence = ++snapshotSequence;
-    const sharing = shareRevision;
-    const snapshot = (await native!.snapshot(
-      epoch,
-    )) as NativeSnapshot;
+  const applyNativeStatus = (
+    received: Omit<NativeSnapshot, "clients">,
+    sharing = shareRevision,
+    observed?: Map<string, AbortController>,
+  ) => {
     if (
-      sequence !== snapshotSequence ||
-      life.signal.aborted
+      life.signal.aborted ||
+      nativeSessionClosed ||
+      (received.revision !== undefined &&
+        received.revision < nativeRevision)
     )
       return;
+    if (received.revision !== undefined)
+      nativeRevision = received.revision;
+    const snapshot: NativeSnapshot = {
+      ...received,
+      clients: nativeState.clients,
+    };
     setNativeState(snapshot);
     if (
       sharing === shareRevision &&
@@ -322,7 +387,48 @@ export function createAutomation(
       snapshot.screenGrants
     )
       screenShares.synchronize(snapshot.screenGrants);
+    for (const [id, controller] of calls) {
+      const revision = callRevisions.get(controller);
+      // A push may have been captured before a newer call was dispatched.
+      const covered =
+        revision !== undefined &&
+        received.revision !== undefined
+          ? revision <= received.revision
+          : observed?.get(id) === controller;
+      if (
+        covered &&
+        snapshot.activeCalls &&
+        !snapshot.activeCalls.includes(id)
+      )
+        controller.abort(new AutomationError("CANCELLED"));
+    }
     return snapshot;
+  };
+  const readNativeSnapshot = async (
+    includeClients = false,
+  ) => {
+    const sequence = ++snapshotSequence;
+    const clientsSequence = includeClients
+      ? ++clientSnapshotSequence
+      : 0;
+    const sharing = shareRevision;
+    const observed = new Map(calls);
+    const received = (await native!.snapshot(
+      epoch,
+      includeClients,
+    )) as Omit<NativeSnapshot, "clients"> & {
+      clients?: McpTokenSummary[];
+    };
+    if (life.signal.aborted || nativeSessionClosed) return;
+    // An unrelated status query must not discard the only token refresh after
+    // an edit because status notifications intentionally omit clients.
+    if (
+      includeClients &&
+      clientsSequence === clientSnapshotSequence
+    )
+      setNativeClients(received.clients ?? []);
+    if (sequence !== snapshotSequence) return;
+    return applyNativeStatus(received, sharing, observed);
   };
 
   const principal = async (
@@ -567,6 +673,8 @@ export function createAutomation(
       .get(request.id)
       ?.abort(new AutomationError("CANCELLED"));
     calls.set(request.id, controller);
+    if (request.revision !== undefined)
+      callRevisions.set(controller, request.revision);
     const combined = combineAbortSignals([
       controller.signal,
       life.signal,
@@ -624,10 +732,7 @@ export function createAutomation(
     await native!
       .finish(epoch, request.id, result)
       .catch(() => {});
-    // Read after completion; an older in-flight snapshot must not release a
-    // screen just acquired by a concurrent call.
-    if (!life.signal.aborted)
-      await readNativeSnapshot().catch(() => {});
+    // Native completion pushes a revised snapshot after retiring the ticket.
   };
   const canConnect = (session: PeerSession) => {
     const capabilities =
@@ -857,32 +962,34 @@ export function createAutomation(
       }
     }
   };
-  // Refresh native status and cancellation checks. Native session lifetime and
-  // input renewal do not depend on this renderer timer running in the background.
-  const refreshNative = async () => {
-    if (native && epoch)
-      try {
-        await native.heartbeat(epoch);
-        const observed = new Map(calls);
-        const snapshot = await readNativeSnapshot();
-        for (const [id, c] of observed)
-          if (
-            snapshot?.activeCalls &&
-            calls.get(id) === c &&
-            !snapshot.activeCalls.includes(id)
-          )
-            c.abort(new AutomationError("CANCELLED"));
-      } catch (e) {
-        setError(String(e));
-        setEnabled(false);
-        setMcpEnabled(false);
-        setReady(false);
-        sessionService.setAutomationEnabled(false);
-        for (const link of [...links.values()])
-          link.close();
-      }
-    if (!life.signal.aborted)
-      timer = setTimeout(() => void refreshNative(), 1000);
+  const closeNativeSession = () => {
+    nativeSessionClosed = true;
+    ++snapshotSequence;
+    ++clientSnapshotSequence;
+    setError("SESSION_CLOSED");
+    setEnabled(false);
+    setMcpEnabled(false);
+    setReady(false);
+    updateNativeState({
+      enabled: false,
+      mcpEnabled: false,
+      nativeError: null,
+      endpoint: "",
+      endpoints: [],
+      controller: null,
+      controlLeaseId: null,
+      pending: [],
+      grants: [],
+      activeCalls: [],
+      screenGrants: [],
+    });
+    sessionService.setAutomationEnabled(false);
+    for (const controller of calls.values())
+      controller.abort(
+        new AutomationError("SESSION_CLOSED"),
+      );
+    screenShares.synchronize([]);
+    for (const link of [...links.values()]) link.close();
   };
   const configureFeature = async (
     feature: "automation" | "mcp",
@@ -892,6 +999,7 @@ export function createAutomation(
     const revision = ++configurationRevision[feature];
     const current = () =>
       !life.signal.aborted &&
+      !nativeSessionClosed &&
       revision === configurationRevision[feature];
     setError("");
     try {
@@ -1032,9 +1140,48 @@ export function createAutomation(
     void (async () => {
       if (native)
         try {
-          epoch = await native.open((event) => {
-            if (life.signal.aborted) return;
-            if (event.kind === "policies-reset") {
+          const queued: NativeAutomationEvent[] = [];
+          const receive = (
+            event: NativeAutomationEvent,
+          ) => {
+            if (life.signal.aborted || nativeSessionClosed)
+              return;
+            if (!epoch) {
+              queued.push(event);
+              return;
+            }
+            if (event.kind === "status") {
+              if (
+                event.epoch !== epoch ||
+                event.snapshot.revision < nativeRevision
+              )
+                return;
+              ++snapshotSequence;
+              applyNativeStatus(
+                event.snapshot as unknown as NativeSnapshot,
+              );
+            } else if (event.kind === "closed") {
+              if (event.epoch === epoch)
+                closeNativeSession();
+            } else if (event.kind === "token-used") {
+              if (event.epoch !== epoch) return;
+              const at = Math.max(
+                tokenUsage.get(event.id) ?? 0,
+                event.lastUsedAt,
+              );
+              tokenUsage.set(event.id, at);
+              updateNativeState(
+                "clients",
+                (client) => client.id === event.id,
+                "lastUsedAt",
+                at,
+              );
+            } else if (event.kind === "policies-reset") {
+              if (event.revision !== undefined)
+                nativeRevision = Math.max(
+                  nativeRevision,
+                  event.revision,
+                );
               ++snapshotSequence;
               try {
                 applyPolicyGeneration(event.generation);
@@ -1042,22 +1189,36 @@ export function createAutomation(
                 setError(String(e));
               }
             } else if (event.kind === "cancel") {
+              if (event.revision !== undefined)
+                nativeRevision = Math.max(
+                  nativeRevision,
+                  event.revision,
+                );
               calls
                 .get(event.id)
                 ?.abort(new AutomationError("CANCELLED"));
             } else {
+              if (event.revision !== undefined)
+                nativeRevision = Math.max(
+                  nativeRevision,
+                  event.revision,
+                );
               void receiveNative(event);
             }
-          });
+          };
+          epoch = await native.open(receive);
+          queued.forEach(receive);
           if (life.signal.aborted) {
             await native.close(epoch);
             return;
           }
-          await readNativeSnapshot();
+          if (nativeSessionClosed) return;
+          await readNativeSnapshot(true);
         } catch (e) {
           setError(String(e));
         }
-      if (life.signal.aborted) return;
+      if (life.signal.aborted || nativeSessionClosed)
+        return;
       if (
         native &&
         epoch &&
@@ -1069,7 +1230,8 @@ export function createAutomation(
           /* Keep the saved preference for the next startup. */
         }
       }
-      if (life.signal.aborted) return;
+      if (life.signal.aborted || nativeSessionClosed)
+        return;
       if (
         (native ? epoch : webSupported()) &&
         appState.options.mcpEnabled
@@ -1080,14 +1242,13 @@ export function createAutomation(
           /* Keep the independent MCP preference for the next startup. */
         }
       }
-      if (life.signal.aborted) return;
+      if (life.signal.aborted || nativeSessionClosed)
+        return;
       setReady(!native || !!epoch);
-      if (native) void refreshNative();
     })();
   });
   onCleanup(() => {
     life.abort();
-    clearTimeout(timer);
     webRegistration?.abort();
     unregister?.();
     diagnostics.dispose();
@@ -1290,7 +1451,7 @@ export function createAutomation(
         label,
         expiresAt,
       );
-      await readNativeSnapshot();
+      await readNativeSnapshot(true);
       return result;
     },
     updateClient: async (
@@ -1304,11 +1465,11 @@ export function createAutomation(
         label,
         expiresAt,
       );
-      await readNativeSnapshot();
+      await readNativeSnapshot(true);
     },
     removeClient: async (id: string) => {
       await native!.removeClient(epoch, id);
-      await readNativeSnapshot();
+      await readNativeSnapshot(true);
     },
     export: () => {
       const samples: unknown[] = [];

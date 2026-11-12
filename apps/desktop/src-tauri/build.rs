@@ -32,7 +32,6 @@ fn main() {
             "receive_visible",
             "receive_close",
             "automation_open",
-            "automation_heartbeat",
             "automation_close",
             "automation_configure",
             "automation_mcp_configure",

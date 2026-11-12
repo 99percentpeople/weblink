@@ -16,7 +16,12 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
             let tauri::ipc::InvokeResponseBody::Json(body) = body else {
                 panic!("expected JSON")
             };
-            let _ = sent.send(serde_json::from_str(&body).unwrap());
+            let event: Value = serde_json::from_str(&body).unwrap();
+            // The desktop adapter consumes usage metadata before dispatching
+            // automation requests to the application.
+            if event["kind"] != "token-used" {
+                let _ = sent.send(event);
+            }
             Ok(())
         }));
     }
@@ -164,7 +169,9 @@ async fn modern_http_carries_principal_structured_images_and_disconnect_cancella
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(cancelled, json!({"kind":"cancel","id":event["id"]}));
+    assert_eq!(cancelled["kind"], "cancel");
+    assert_eq!(cancelled["id"], event["id"]);
+    assert!(cancelled["revision"].as_u64().unwrap() > event["revision"].as_u64().unwrap());
     service.shutdown();
 }
 fn grant(p: &Principal) -> Grant {
@@ -314,7 +321,7 @@ async fn revocation_and_dropped_invocations_immediately_cancel_ui_work() {
     service.revoke_locked(&mut service.state.lock().unwrap(), "grant");
     assert_eq!(
         events.lock().unwrap()[1],
-        json!({"kind":"cancel","id":"request"})
+        json!({"kind":"cancel","id":"request","revision":service.changes.revision()})
     );
     assert!(Service::check_call(&service.state.lock().unwrap(), "epoch", "request").is_err());
     assert_eq!(task.await.unwrap()["error"]["code"], "CANCELLED");
@@ -338,7 +345,7 @@ async fn revocation_and_dropped_invocations_immediately_cancel_ui_work() {
     assert!(task.await.is_err());
     assert_eq!(
         events.lock().unwrap().last().unwrap(),
-        &json!({"kind":"cancel","id":"dropped"})
+        &json!({"kind":"cancel","id":"dropped","revision":service.changes.revision()})
     );
     assert!(service.state.lock().unwrap().tickets.is_empty());
     assert!(service.state.lock().unwrap().requests.is_empty());
@@ -417,6 +424,7 @@ pub(super) fn fixture() -> (Shared, Principal) {
                 prefix: "test".into(),
                 created_at: now(),
                 expires_at: None,
+                last_used_at: None,
             },
         );
     }
@@ -624,6 +632,8 @@ async fn check_http_authorization(legacy: bool, bearer: bool) {
             .status(),
         403
     );
+    assert!(service.stored_registry().clients[id].last_used_at.is_none());
+    let before = now();
     let response = client
         .post(&url)
         .header("Authorization", &authorization)
@@ -633,6 +643,8 @@ async fn check_http_authorization(legacy: bool, bearer: bool) {
         .await
         .unwrap();
     assert!(response.status().is_success());
+    let last_used_at = service.stored_registry().clients[id].last_used_at.unwrap();
+    assert!((before..=now()).contains(&last_used_at));
     let list = json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}});
     let response = client
         .post(&url)

@@ -92,6 +92,7 @@ pub(super) fn abort_lease(
     // owner alone. The shared emergency observer fences permissions separately.
     if control.automation_revoke_lease(principal, lease) {
         state.input_owners.retain(|owner| owner != principal);
+        state.changes.notify();
     }
     service
         .input_holds

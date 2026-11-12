@@ -1570,6 +1570,8 @@
     "expired": "만료됨",
     "created_at": "생성 일시",
     "expires_at": "만료 일시",
+    "last_used_at": "마지막 사용",
+    "no_usage_record": "사용 기록 없음",
     "permanent": "무기한",
     "custom_expiry": "만료일 직접 지정",
     "days": "일",

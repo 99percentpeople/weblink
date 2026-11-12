@@ -30,7 +30,6 @@
     "allow-receive-close",
 
     "allow-automation-open",
-    "allow-automation-heartbeat",
     "allow-automation-close",
     "allow-automation-configure",
     "allow-automation-mcp-configure",

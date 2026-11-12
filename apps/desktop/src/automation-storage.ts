@@ -1,17 +1,24 @@
 import { AutomationError } from "@weblink/automation";
+import type { NativeMcpTokenUsedEvent } from "@weblink/platform";
 
 export const MCP_STORAGE_KEY = "mcp_registry";
 type Invoke = <T>(
   command: string,
   args: Record<string, unknown>,
 ) => Promise<T>;
+interface Registry extends Record<string, unknown> {
+  clients: Record<
+    string,
+    Record<string, unknown> & { lastUsedAt?: number | null }
+  >;
+}
 interface Opened {
   epoch: string;
-  registry: Record<string, unknown>;
+  registry: Registry;
 }
 interface Prepared<T> {
   revision: number;
-  registry: Record<string, unknown>;
+  registry: Registry;
   result: T;
 }
 
@@ -26,6 +33,9 @@ export function createAutomationStorage(
   let current = "";
   let generation = 0;
   let queue = Promise.resolve();
+  let savedRegistry: Registry | undefined;
+  const usage = new Map<string, number>();
+  let usageDirty = false;
   const serial = <T>(
     work: () => Promise<T>,
   ): Promise<T> => {
@@ -66,7 +76,26 @@ export function createAutomationStorage(
       );
     }
   };
-  const save = (registry: Record<string, unknown>) => {
+  const save = (candidate: Registry): Registry => {
+    // A prepared edit may predate a token-used event. Merge metadata only;
+    // never restore clients or configuration from an older registry.
+    const registry: Registry = {
+      ...candidate,
+      clients: Object.fromEntries(
+        Object.entries(candidate.clients).map(
+          ([id, client]) => {
+            const at = usage.get(id);
+            return [
+              id,
+              at !== undefined &&
+              at > (client.lastUsedAt ?? 0)
+                ? { ...client, lastUsedAt: at }
+                : client,
+            ];
+          },
+        ),
+      ),
+    };
     try {
       storage().setItem(
         MCP_STORAGE_KEY,
@@ -77,9 +106,40 @@ export function createAutomationStorage(
         "AUTOMATION_STORAGE_UNAVAILABLE",
       );
     }
+    savedRegistry = registry;
+    usageDirty = false;
+    for (const id of usage.keys())
+      if (!Object.hasOwn(registry.clients, id))
+        usage.delete(id);
+    return registry;
+  };
+  const recordUsage = (id: string, at: number | null) => {
+    const client = savedRegistry?.clients[id];
+    if (
+      !client ||
+      at === null ||
+      !Number.isSafeInteger(at) ||
+      at < 0 ||
+      at > 253402300799999 ||
+      at <=
+        Math.max(usage.get(id) ?? 0, client.lastUsedAt ?? 0)
+    )
+      return;
+    usage.set(id, at);
+    usageDirty = true;
+  };
+  const flushUsage = () => {
+    if (!usageDirty || !savedRegistry) return;
+    try {
+      save(savedRegistry);
+    } catch {
+      // Usage metadata must not interrupt authenticated calls. Keep it dirty
+      // and retry on the next notification, registry edit or explicit close.
+    }
   };
   const close = (epoch: string) => {
     if (current === epoch) {
+      flushUsage();
       current = "";
       generation++;
     }
@@ -102,6 +162,8 @@ export function createAutomationStorage(
         try {
           if (opening !== generation)
             throw new AutomationError("SESSION_CLOSED");
+          usage.clear();
+          usageDirty = false;
           save(opened.registry);
           current = opened.epoch;
           return current;
@@ -112,6 +174,18 @@ export function createAutomationStorage(
       });
     },
     close,
+    used(event: NativeMcpTokenUsedEvent): boolean {
+      if (
+        !current ||
+        event.epoch !== current ||
+        !savedRegistry ||
+        !Object.hasOwn(savedRegistry.clients, event.id)
+      )
+        return false;
+      recordUsage(event.id, event.lastUsedAt);
+      flushUsage();
+      return true;
+    },
     change<T>(
       command: string,
       args: Record<string, unknown> & { epoch: string },
@@ -125,12 +199,12 @@ export function createAutomationStorage(
         check(args.epoch);
         // Persist the hashes/configuration before native credentials become active.
         // A failed write leaves both the stored and active registry unchanged.
-        save(prepared.registry);
+        const registry = save(prepared.registry);
         try {
           await invoke<void>("automation_registry_apply", {
             epoch: args.epoch,
             revision: prepared.revision,
-            registry: prepared.registry,
+            registry,
           });
         } catch (error) {
           // The saved state is authoritative on the next open. Do not roll it

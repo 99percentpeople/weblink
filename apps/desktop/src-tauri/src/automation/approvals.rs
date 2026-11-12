@@ -17,6 +17,7 @@ impl Service {
         let mut s = self.state.lock().unwrap();
         Self::check(&s, epoch)?;
         let p = s.pending.remove(id).ok_or("REQUEST_EXPIRED")?;
+        s.changes.notify();
         let group = catalog::permission_scopes(&p.scope);
         if remember {
             if p.principal.kind != "peer"

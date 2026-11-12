@@ -46,6 +46,7 @@ const fixture = vi.hoisted(() => ({
   configure: vi.fn(async (_enabled: boolean) => {}),
   configureMcp: vi.fn(async (_enabled: boolean) => {}),
   expiresAt: null as number | null,
+  lastUsedAt: () => null as number | null,
   endpoints: () => ["http://127.0.0.1:123/mcp"],
   server: () => ({
     host: "127.0.0.1",
@@ -139,6 +140,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
             prefix: "12345678",
             createdAt: 1700000000000,
             expiresAt: fixture.expiresAt,
+            lastUsedAt: fixture.lastUsedAt(),
             expired: false,
           },
         ],
@@ -176,6 +178,7 @@ afterEach(async () => {
   await Promise.resolve();
   fixture.scope = "shell.execute";
   fixture.expiresAt = null;
+  fixture.lastUsedAt = () => null;
   fixture.updateClient.mockReset();
   fixture.desktop = true;
   fixture.webSupported = true;
@@ -189,6 +192,30 @@ afterEach(async () => {
   animationStyle.remove();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+it("updates the token's last use when its snapshot changes", () => {
+  const [lastUsedAt, setLastUsedAt] = createSignal<
+    number | null
+  >(null);
+  fixture.lastUsedAt = lastUsedAt;
+  render(() => <AutomationSettings />);
+  expect(
+    screen.getByText(
+      "automation.last_used_at: automation.no_usage_record",
+    ),
+  ).toBeVisible();
+  const at = 1730000000000;
+  setLastUsedAt(at);
+  expect(
+    screen.getByText(
+      `automation.last_used_at: ${new Date(at).toLocaleString()}`,
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByText(
+      "automation.last_used_at: automation.no_usage_record",
+    ),
+  ).not.toBeInTheDocument();
 });
 it.each([false, true])(
   "keeps unsupported WebMCP off and disabled with saved preference %s",

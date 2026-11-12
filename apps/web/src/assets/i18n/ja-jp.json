@@ -1570,6 +1570,8 @@
     "expired": "期限切れ",
     "created_at": "作成日時",
     "expires_at": "有効期限",
+    "last_used_at": "最終使用日時",
+    "no_usage_record": "使用記録なし",
     "permanent": "無期限",
     "custom_expiry": "有効期限を指定",
     "days": "日",

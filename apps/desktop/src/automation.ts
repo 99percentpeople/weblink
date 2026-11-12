@@ -28,11 +28,16 @@ const storage = createAutomationStorage(invoke);
 export const nativeAutomation: NativeAutomation = {
   open: (onRequest) => {
     const channel = new Channel<NativeAutomationEvent>();
-    channel.onmessage = onRequest;
+    channel.onmessage = (event) => {
+      if (
+        event.kind === "token-used" &&
+        !storage.used(event)
+      )
+        return;
+      onRequest(event);
+    };
     return storage.open({ channel });
   },
-  heartbeat: (epoch) =>
-    invoke("automation_heartbeat", { epoch }),
   close: (epoch) => storage.close(epoch),
   configure: (epoch, enabled) =>
     invoke("automation_configure", { epoch, enabled }),
@@ -43,8 +48,11 @@ export const nativeAutomation: NativeAutomation = {
       epoch,
       config,
     }),
-  snapshot: (epoch) =>
-    invoke("automation_snapshot", { epoch }),
+  snapshot: (epoch, includeClients = true) =>
+    invoke("automation_snapshot", {
+      epoch,
+      includeClients,
+    }),
   client: (epoch, label, expiresAt) =>
     storage.change("automation_client", {
       epoch,

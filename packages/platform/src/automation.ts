@@ -13,12 +13,22 @@ export interface McpTokenSummary {
   prefix: string;
   createdAt: number;
   expiresAt: number | null;
+  /** Most recent successful HTTP authentication, in Unix milliseconds. */
+  lastUsedAt: number | null;
   expired: boolean;
+}
+export interface NativeMcpTokenUsedEvent {
+  kind: "token-used";
+  epoch: string;
+  id: string;
+  lastUsedAt: number;
 }
 /** Opaque native call tickets never cross MCP/P2P transports. */
 export interface NativeAutomationRequest {
   kind: "call";
   id: string;
+  /** Native status revision at dispatch; fences earlier status notifications. */
+  revision?: number;
   /** Trusted local permission lifetime; never supplied by MCP/P2P arguments. */
   grantId?: string;
   /** Live screen permissions for this verified caller at dispatch time. */
@@ -40,8 +50,21 @@ export interface NativeAutomationRequest {
 }
 export type NativeAutomationEvent =
   | NativeAutomationRequest
-  | { kind: "cancel"; id: string }
-  | { kind: "policies-reset"; generation: string };
+  | NativeMcpTokenUsedEvent
+  | {
+      kind: "status";
+      epoch: string;
+      snapshot: Record<string, unknown> & {
+        revision: number;
+      };
+    }
+  | { kind: "closed"; epoch: string }
+  | { kind: "cancel"; id: string; revision?: number }
+  | {
+      kind: "policies-reset";
+      generation: string;
+      revision?: number;
+    };
 /** Verified device identity and the shared connection generation. */
 export interface NativeAutomationPeer {
   id: string;
@@ -51,8 +74,6 @@ export interface NativeAutomation {
   open(
     onRequest: (request: NativeAutomationEvent) => void,
   ): Promise<string>;
-  /** Check the native page session; delayed renderer timers do not expire it. */
-  heartbeat(epoch: string): Promise<void>;
   close(epoch: string): Promise<void>;
   /** Accept automation of this machine from MCP clients and remote peers. */
   configure(epoch: string, enabled: boolean): Promise<void>;
@@ -65,7 +86,11 @@ export interface NativeAutomation {
     epoch: string,
     config: McpServerConfig,
   ): Promise<void>;
-  snapshot(epoch: string): Promise<unknown>;
+  /** Read on initialization or explicit operations; subsequent status is pushed. */
+  snapshot(
+    epoch: string,
+    includeClients?: boolean,
+  ): Promise<unknown>;
   client(
     epoch: string,
     label: string,
