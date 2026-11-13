@@ -46,6 +46,9 @@ PR 只检查和构建，推送到 `public` 才发布。无需修改应用版本�
    首次发布若 Pages 域名尚不可访问，勾选 `force` 跳过发布前检查；后续保持默认即可。
 5. 在 Pages 项目的自定义域名中绑定 `docs.webl.ink`，按提示配置 DNS，等证书生效后访问英文根路径与 `/zh/`。
    绑定步骤见 [Cloudflare 自定义域名说明](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
+   也可手动运行 **Pages domain setup** 工作流并选择 `docs`：它绑定域名，并仅在 DNS 记录缺失时创建 CNAME。
+   这一步需要 Token 同时具有该域名的 DNS 编辑权限；权限不足时在控制台完成即可，不影响后续仅需 Pages 编辑权限的站点发布。
+   已存在且指向不同目标的 DNS 记录会要求人工处理，不会自动覆盖。
 
 正常情况下，有修改就推送到 `public`，工作流会自行判断并发布对应站点。
 只改 GitHub Variables 时手动运行对应工作流，无需修改源码来触发。
