@@ -14,7 +14,7 @@ import {
 } from "@solidjs/testing-library";
 import { toast, Toaster } from "solid-sonner";
 import { StorageMigrationToast } from "@/components/files/storage-migration-toast";
-import type { FileStorageService } from "@/libs/application/file-storage-service";
+import type { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
@@ -52,14 +52,19 @@ function fixture(current?: StorageMigrationProgress) {
   const dispose = vi.fn();
   const storage = {
     dispose,
-    onMigrationProgress(
-      listener: (state: StorageMigrationProgress) => void,
-    ) {
-      listeners.add(listener);
-      if (current) listener(current);
-      return () => {
-        listeners.delete(listener);
-      };
+    get migrationProgress() {
+      return current;
+    },
+    events: {
+      subscribe(
+        _topic: "migration",
+        listener: (state: StorageMigrationProgress) => void,
+      ) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
     },
   } as unknown as FileStorageService;
   const view = render(() => (

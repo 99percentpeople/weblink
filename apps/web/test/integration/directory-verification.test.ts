@@ -10,7 +10,7 @@ import {
   vi,
 } from "vitest";
 import { FileCacheFactory } from "@/libs/application/cache-service";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
 import {

@@ -1,5 +1,5 @@
 import { platform } from "@/libs/platform/runtime";
-import { FileStorageService } from "./file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import type { FileStorage } from "@/libs/domain/file-storage";
 import type { StoredFile } from "@weblink/platform";
 import type {
@@ -19,8 +19,10 @@ import {
 } from "@/libs/state/app-state";
 
 import { FileCatalogIndex } from "./file-catalog-index";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 
 export class FileCacheFactory {
+  private readonly subscriptions = new SubscriptionScope();
   constructor(
     readonly storage: FileStorage = new FileStorageService(
       platform.filesystem,
@@ -102,8 +104,10 @@ export class FileCacheFactory {
     setAppState("cache", "status", "loading");
     setAppState("cache", "error", undefined);
     this.stopLibraryWatch?.();
-    this.stopLibraryWatch = this.library.onChange(() =>
-      this.hideOwnedStorage(),
+    this.stopLibraryWatch = this.subscriptions.add(
+      this.library.events.subscribe("changed", () =>
+        this.hideOwnedStorage(),
+      ),
     );
     try {
       await this.storage.initialize();
@@ -159,16 +163,18 @@ export class FileCacheFactory {
       console.error(e);
     } finally {
       this.stopStorageWatch?.();
-      this.stopStorageWatch = this.storage.onChange(() => {
-        if (this.disposed || this.storageRefreshTimer)
-          return;
-        this.storageRefreshTimer = setTimeout(() => {
-          this.storageRefreshTimer = undefined;
-          void this.refreshStorage().catch((error) => {
-            if (!this.disposed) console.error(error);
-          });
-        }, 300);
-      });
+      this.stopStorageWatch = this.subscriptions.add(
+        this.storage.events.subscribe("changed", () => {
+          if (this.disposed || this.storageRefreshTimer)
+            return;
+          this.storageRefreshTimer = setTimeout(() => {
+            this.storageRefreshTimer = undefined;
+            void this.refreshStorage().catch((error) => {
+              if (!this.disposed) console.error(error);
+            });
+          }, 300);
+        }),
+      );
       await this.refreshStorage().catch((error) => {
         if (!this.disposed) console.error(error);
       });
@@ -202,11 +208,12 @@ export class FileCacheFactory {
       .then(async (cache) => {
         this.storageCaches.add(cache);
         this.attachVerification(cache);
-        cache.addEventListener(
+        cache.events.subscribe(
           "cleanup",
           () =>
             this.rawCaches.get(id) === pending &&
             this.rawCaches.delete(id),
+          { once: true, signal: this.subscriptions.signal },
         );
         await cache.initialize();
         return cache;
@@ -221,35 +228,43 @@ export class FileCacheFactory {
 
   private observe(cache: ChunkCache): void {
     const id = cache.id;
-    cache.addEventListener("update", (ev) => {
-      if (this.disposed || this.caches[id] !== cache)
-        return;
-      // Fingerprinted receives are not previewable/advertised until verification.
-      const info =
-        ev.detail?.fingerprint &&
-        !ev.detail.contentKey &&
-        ev.detail.file
-          ? {
-              ...ev.detail,
-              file: undefined,
-              isComplete: false,
-              isMerging: true,
-            }
-          : ev.detail;
-      this.catalog.update(id, info);
-      if (info) {
-        setAppState("cache", "cacheInfo", id, info);
-      } else
-        setAppState("cache", "cacheInfo", id, undefined!);
-    });
+    cache.events.subscribe(
+      "update",
+      (detail) => {
+        if (this.disposed || this.caches[id] !== cache)
+          return;
+        // Fingerprinted receives are not previewable/advertised until verification.
+        const info =
+          detail?.fingerprint &&
+          !detail.contentKey &&
+          detail.file
+            ? {
+                ...detail,
+                file: undefined,
+                isComplete: false,
+                isMerging: true,
+              }
+            : detail;
+        this.catalog.update(id, info);
+        if (info) {
+          setAppState("cache", "cacheInfo", id, info);
+        } else
+          setAppState("cache", "cacheInfo", id, undefined!);
+      },
+      { signal: this.subscriptions.signal },
+    );
 
-    cache.addEventListener("cleanup", () => {
-      if (this.disposed || this.caches[id] !== cache)
-        return;
-      this.catalog.update(id, null);
-      setAppState("cache", "cacheInfo", id, undefined!);
-      setAppState("cache", "caches", id, undefined!);
-    });
+    cache.events.subscribe(
+      "cleanup",
+      () => {
+        if (this.disposed || this.caches[id] !== cache)
+          return;
+        this.catalog.update(id, null);
+        setAppState("cache", "cacheInfo", id, undefined!);
+        setAppState("cache", "caches", id, undefined!);
+      },
+      { once: true, signal: this.subscriptions.signal },
+    );
   }
 
   private async addCache(id: FileID, cache: ChunkCache) {
@@ -289,9 +304,14 @@ export class FileCacheFactory {
 
   private attachVerification(cache: ChunkCache): void {
     let verified: Promise<StoredFile | null> | undefined;
-    cache.addEventListener("update", ({ detail }) => {
-      if (detail?.storageUnavailable) verified = undefined;
-    });
+    cache.events.subscribe(
+      "update",
+      (detail) => {
+        if (detail?.storageUnavailable)
+          verified = undefined;
+      },
+      { signal: this.subscriptions.signal },
+    );
     cache.verifyFile = (signal) =>
       (verified ??= (async () => {
         const file = await this.library.verifyReceived(
@@ -397,15 +417,16 @@ export class FileCacheFactory {
   }
 
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    this.subscriptions.dispose();
     clearTimeout(this.retirementTimer);
     clearTimeout(this.storageRefreshTimer);
-    this.stopStorageWatch?.();
-    this.stopLibraryWatch?.();
     for (const cache of this.rawCaches.values())
       void cache.then((value) => value.dispose?.());
     this.storage.dispose();
     this.library.dispose();
+    this.catalog.dispose();
   }
 
   async createCache(id?: FileID): Promise<ChunkCache> {

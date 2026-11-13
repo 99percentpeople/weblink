@@ -86,25 +86,25 @@ export class PeerProfileService {
     const controller = new AbortController();
     this.bindings.set(clientId, { session, controller });
 
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
       (event) => {
-        if (event.detail !== "ready") return;
+        if (event !== "ready") return;
         this.sendProfile(session);
       },
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "accesschange",
-      ({ detail }) => {
+      (detail) => {
         if (detail) this.sendProfile(session);
       },
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "statuschange",
       (event) => {
-        if (event.detail !== "closed") return;
+        if (event !== "closed") return;
         this.unbindSession(clientId);
       },
       { signal: controller.signal },

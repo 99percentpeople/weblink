@@ -412,7 +412,10 @@ it("prepares a directory recording without scanning unrelated files and still re
   });
   expect(list).not.toHaveBeenCalled();
   const changed = vi.fn();
-  const stop = f.storage.onChange(changed);
+  const stop = f.storage.events.subscribe(
+    "changed",
+    changed,
+  );
   const stat = vi.spyOn(f.volume, "stat");
   try {
     await session.write(bytes("first"));

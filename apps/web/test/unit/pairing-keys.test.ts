@@ -26,7 +26,7 @@ import type {
   DevicePin,
 } from "@/libs/infrastructure/identity/device-identity-store";
 import type { PeerSession } from "@/libs/domain/session";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 
 class Channel extends EventTarget {
   readyState = "open";
@@ -149,8 +149,8 @@ async function connect(
       { quarantine: resetB, paired: pairedB },
       b.store,
     );
-  const events = new MultiEventEmitter<any>();
-  const eventsA = new MultiEventEmitter<any>();
+  const events = new EventBus<any>("test.events");
+  const eventsA = new EventBus<any>("test.events");
   const sdp = `a=fingerprint:sha-256 ${Array(32).fill("ab").join(":")}`;
   const common = {
     isMessageChannelReady: true,
@@ -182,7 +182,7 @@ async function connect(
       remote.filter =
         (fromA ? filterB : filterA) ?? ((v) => v);
       onAvailable?.(local as unknown as RTCDataChannel);
-      (fromA ? events : eventsA).dispatchEvent(
+      (fromA ? events : eventsA).emit(
         "channel",
         remote as unknown as RTCDataChannel,
       );
@@ -192,15 +192,14 @@ async function connect(
     ...common,
     clientId: "b",
     targetClientId: "a",
-    addEventListener: events.addEventListener.bind(events),
+    events: events.events,
     createChannel: create(false),
   } as unknown as PeerSession;
   const sessionA = {
     ...common,
     clientId: "a",
     targetClientId: "b",
-    addEventListener:
-      eventsA.addEventListener.bind(eventsA),
+    events: eventsA.events,
     createChannel: create(true),
   } as unknown as PeerSession;
   const offB = trustB.bind(sessionB);
@@ -981,7 +980,7 @@ it("disconnect removes approval actions and a duplicate ID cannot replace a real
     "DUPLICATE_DEVICE_ID",
   );
   expect(h.trustB.pairing("a")?.id).toBe(stale);
-  h.eventsB.dispatchEvent("messagechannelchange", "closed");
+  h.eventsB.emit("messagechannelchange", "closed");
   expect(h.trustB.pairing("a")).toBeUndefined();
   expect(h.trustB.respondPairing("a", stale, true)).toBe(
     false,
@@ -1121,11 +1120,11 @@ it("simultaneous requests cannot replace each other's pending approval or grant 
   ]);
   const idA = h.trustA.pairing("b")!.id,
     idB = h.trustB.pairing("a")!.id;
-  h.eventsA.dispatchEvent(
+  h.eventsA.emit(
     "channel",
     remoteA as unknown as RTCDataChannel,
   );
-  h.eventsB.dispatchEvent(
+  h.eventsB.emit(
     "channel",
     remoteB as unknown as RTCDataChannel,
   );
@@ -1157,7 +1156,7 @@ it("ignores an extra pairing channel after a successful confirmation without dis
   const keys = structuredClone(a.keys);
   const extra = new Channel();
   extra.label = extra.protocol = PAIRING_CHANNEL;
-  h.eventsA.dispatchEvent(
+  h.eventsA.emit(
     "channel",
     extra as unknown as RTCDataChannel,
   );

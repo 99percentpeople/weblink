@@ -1,7 +1,7 @@
 import { RemoteControlHost } from "@/libs/application/remote-control-host";
 import { PeerCapabilitiesService } from "@/libs/application/peer-capabilities";
 import { createEffect, createRoot } from "solid-js";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type {
   PeerSession,
   PeerSessionEventMap,
@@ -69,8 +69,9 @@ export async function remoteScreenRequestCheck() {
     local: () => PeerCapabilities,
     native: NativeScreenSession,
   ) => {
-    const events =
-      new MultiEventEmitter<PeerSessionEventMap>();
+    const events = new EventBus<PeerSessionEventMap>(
+      "test.events",
+    );
     const lifetime = new AbortController();
     const session = {
       clientId,
@@ -78,8 +79,7 @@ export async function remoteScreenRequestCheck() {
       get isMessageChannelReady() {
         return channel.readyState === "open";
       },
-      addEventListener:
-        events.addEventListener.bind(events),
+      events: events.events,
       sendMessage: async (message: SessionMessage) =>
         channel.send(JSON.stringify(message)),
     } as unknown as PeerSession;
@@ -87,7 +87,7 @@ export async function remoteScreenRequestCheck() {
     channel.addEventListener(
       "message",
       (event) =>
-        events.dispatchEvent(
+        events.emit(
           "message",
           validateSessionMessage(JSON.parse(event.data)),
         ),
@@ -95,11 +95,7 @@ export async function remoteScreenRequestCheck() {
     );
     channel.addEventListener(
       "open",
-      () =>
-        events.dispatchEvent(
-          "messagechannelchange",
-          "ready",
-        ),
+      () => events.emit("messagechannelchange", "ready"),
       { signal: lifetime.signal },
     );
     const unbind = service.bind(session, (services) =>

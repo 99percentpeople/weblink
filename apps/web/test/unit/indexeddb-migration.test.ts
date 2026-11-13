@@ -17,7 +17,7 @@ import { openLegacySource } from "@/libs/infrastructure/storage/legacy-indexeddb
 import { requestResult } from "@/libs/infrastructure/storage/indexeddb-helpers";
 import { legacyDatabase } from "../helpers/legacy-indexeddb";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { FileLibraryService } from "@/libs/application/file-library-service";
 import { IndexedDbFileLibrary } from "@/libs/infrastructure/storage/indexeddb-file-library";
 import { fingerprintBlob } from "@/libs/infrastructure/storage/fingerprint";
@@ -492,7 +492,7 @@ describe("verified legacy IndexedDB migration", () => {
     expect(await names()).not.toContain(`file-${id}`);
   });
 
-  it("runs automatically before exposing caches and replays progress to a late UI subscriber", async () => {
+  it("runs automatically before exposing caches and retains progress for a late UI subscriber", async () => {
     const id = await old();
     const storage = new FileStorageService(
       undefined,
@@ -502,9 +502,12 @@ describe("verified legacy IndexedDB migration", () => {
     await storage.initialize();
     expect(await storage.list()).toEqual([id]);
     const states: StorageMigrationProgress[] = [];
-    const stop = storage.onMigrationProgress((state) =>
-      states.push(state),
+    const stop = storage.events.subscribe(
+      "migration",
+      (state) => states.push(state),
     );
+    if (storage.migrationProgress)
+      states.push(storage.migrationProgress);
     expect(states[0].phase).toBe("completed");
     stop();
     const value = await storage.createCache(id, {

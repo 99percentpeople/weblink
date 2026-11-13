@@ -17,7 +17,7 @@ import type {
   PeerSession,
   PeerSessionEventMap,
 } from "@/libs/domain/session";
-import type { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import type { EventBus } from "@weblink/platform/events";
 import type { ClientService } from "@/libs/domain/client";
 import type { SignalingService } from "@/libs/domain/signaling";
 import {
@@ -149,18 +149,18 @@ it("applies saved receive defaults to new peers and broadcasts edits to existing
     false,
   );
   service.setClientService({
+    events: { subscribe: () => () => {} },
     info: { clientId: "local", createdAt: 1 },
     createSender: (targetClientId: string) => ({
       clientId: "local",
       targetClientId,
       status: "connected",
       sendSignal: async () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
+      events: { subscribe: () => () => {} },
       close: () => {},
     }),
     removeSender: vi.fn(),
-    addEventListener: vi.fn(),
+
     close: vi.fn(),
   } as unknown as ClientService);
   class Channel extends EventTarget {
@@ -210,13 +210,10 @@ it("applies saved receive defaults to new peers and broadcasts edits to existing
     const channel = new Channel();
     (
       session as unknown as Pick<
-        MultiEventEmitter<PeerSessionEventMap>,
-        "dispatchEvent"
+        EventBus<PeerSessionEventMap>,
+        "emit"
       >
-    ).dispatchEvent(
-      "channel",
-      channel as unknown as RTCDataChannel,
-    );
+    ).emit("channel", channel as unknown as RTCDataChannel);
     channel.advertise();
     return channel;
   };
@@ -274,12 +271,12 @@ describe("remote media presentation across peer recovery", () => {
     "keeps new and removed remote videos reactive after recovery (local offer rejected=%s)",
     async (rejectLocalOffer) => {
       const sender = {
+        events: { subscribe: () => () => {} },
         clientId: "local",
         targetClientId: "remote",
         status: "connected",
         sendSignal: vi.fn(async () => {}),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
+
         close: vi.fn(),
       } satisfies SignalingService;
       const service = new SessionService({
@@ -289,10 +286,11 @@ describe("remote media presentation across peer recovery", () => {
       // is covered by peer-trust and the real WebRTC device-trust fixture.
       vi.spyOn(service, "canReceive").mockReturnValue(true);
       service.setClientService({
+        events: { subscribe: () => () => {} },
         info: { clientId: "local", createdAt: 1 },
         createSender: () => sender,
         removeSender: vi.fn(),
-        addEventListener: vi.fn(),
+
         close: vi.fn(),
       } as unknown as ClientService);
       let dispose = () => {};
@@ -439,19 +437,20 @@ it("enforces device trust, the single receive gate and outgoing screen permissio
     identity: { receiveContent: true },
   });
   const sender = {
+    events: { subscribe: () => () => {} },
     clientId: "local",
     targetClientId: "policy-peer",
     status: "connected",
     sendSignal: vi.fn(async () => {}),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
+
     close: vi.fn(),
   } satisfies SignalingService;
   service.setClientService({
+    events: { subscribe: () => () => {} },
     info: { clientId: "local", createdAt: 1 },
     createSender: () => sender,
     removeSender: vi.fn(),
-    addEventListener: vi.fn(),
+
     close: vi.fn(),
   } as unknown as ClientService);
   const session = await service.addClient({

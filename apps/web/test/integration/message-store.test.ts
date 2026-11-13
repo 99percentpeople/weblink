@@ -38,7 +38,10 @@ describe("MessageStores persistence boundary", () => {
       createRepository({ putMessage }),
     );
     const listener = vi.fn();
-    const unsubscribe = store.onMessageStored(listener);
+    const unsubscribe = store.events.subscribe(
+      "stored",
+      listener,
+    );
     await store.initialize();
     expect(listener).not.toHaveBeenCalled();
     const message = {

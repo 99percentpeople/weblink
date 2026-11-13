@@ -1,6 +1,5 @@
 import {
   createEffect,
-  createMemo,
   on,
   onCleanup,
   untrack,
@@ -117,7 +116,8 @@ export function SystemNotificationBridge(
     visible,
     notifications: service,
   });
-  const unsubscribe = messageStores.onMessageStored(
+  const unsubscribe = messageStores.events.subscribe(
+    "stored",
     (message) => {
       const localId = appState.profile.clientId;
       const conversationId = message.conversationId;

@@ -121,9 +121,11 @@ function setup({
     const dialog = createPreviewDialog();
     createRecordingFeedback({
       recording: {
-        onSaved: (listener) => {
-          saved = listener;
-          return unsubscribe;
+        events: {
+          subscribe: (_topic, listener) => {
+            saved = listener;
+            return unsubscribe;
+          },
         },
       },
       notifications: service,

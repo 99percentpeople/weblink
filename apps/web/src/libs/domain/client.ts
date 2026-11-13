@@ -1,4 +1,4 @@
-import type { EventHandler } from "@/libs/utils/event-emitter";
+import type { EventSource } from "@weblink/platform/events";
 import type { SignalingService } from "./signaling";
 import type { ClientID, RoomID } from "./ids";
 
@@ -33,6 +33,8 @@ export interface UpdateClientOptions {
 
 export type ClientServiceEventMap = {
   statuschange: "connected" | "connecting" | "disconnected";
+  join: TransferClient;
+  leave: TransferClient;
 };
 
 export interface ClientServiceInitOptions {
@@ -54,32 +56,12 @@ export interface ClientJoinOptions {
 }
 
 export interface ClientService {
+  readonly events: EventSource<ClientServiceEventMap>;
   readonly websocketUrl?: string;
   get info(): TransferClient;
 
-  addEventListener<K extends keyof ClientServiceEventMap>(
-    event: K,
-    callback: EventHandler<ClientServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void;
-
-  removeEventListener<
-    K extends keyof ClientServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<ClientServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void;
-
   createSender(target: ClientID): SignalingService | null;
   removeSender(target: ClientID): void;
-
-  listenForJoin(
-    callback: (client: TransferClient) => void,
-  ): void;
-  listenForLeave(
-    callback: (client: TransferClient) => void,
-  ): void;
 
   /** Resolves only after the server accepts and acknowledges room membership. */
   createClient(options?: ClientJoinOptions): Promise<void>;

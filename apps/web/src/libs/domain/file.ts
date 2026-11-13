@@ -1,5 +1,6 @@
 import type { ClientID, FileID } from "./ids";
-import type { EventHandler } from "@/libs/utils/event-emitter";
+import type { EventSource } from "@weblink/platform/events";
+
 import type { ChunkRange } from "@/libs/utils/range";
 import type { FileFingerprint } from "./protocol/file-fingerprint";
 import type { StoredFile } from "@weblink/platform";
@@ -74,6 +75,7 @@ export interface FileWriteOptions {
 }
 
 export interface ChunkCache {
+  readonly events: EventSource<ChunkCacheEventMap>;
   readonly id: FileID;
   /** Durable local identity after completion; transfer/reference IDs stay unchanged. */
   storageIdentity?(): Promise<string>;
@@ -81,18 +83,6 @@ export interface ChunkCache {
   storageInfo?(): Promise<FileStorageInfo | null>;
   /** Reveal the current source, including an unfinished file, without exposing paths. */
   reveal?(): Promise<void>;
-
-  addEventListener<K extends keyof ChunkCacheEventMap>(
-    eventName: K,
-    handler: EventHandler<ChunkCacheEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void;
-
-  removeEventListener<K extends keyof ChunkCacheEventMap>(
-    eventName: K,
-    handler: EventHandler<ChunkCacheEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void;
 
   initialize(): Promise<void>;
   storeChunk(

@@ -5,7 +5,7 @@ import type {
   ClientServiceInitOptions,
   TransferClient,
 } from "@/libs/domain/client";
-import type { PeerSession } from "@/libs/domain/session";
+
 import { catchError } from "@/libs/catch";
 import {
   appState,
@@ -16,6 +16,7 @@ import type { PeerProfileService } from "./peer-profile-service";
 import type { RtcService } from "./rtc/rtc-service";
 import type { SessionService } from "./session-service";
 import { createAnonymousPeerProfile } from "@/libs/domain/profile";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 
 type SessionCoordinator = Pick<
   SessionService,
@@ -62,6 +63,7 @@ function abortError(message: string): DOMException {
 }
 
 export class RoomService {
+  private subscriptions = new SubscriptionScope();
   private generation = 0;
   private pendingJoin: Promise<void> | null = null;
   private boundService: ClientService | null = null;
@@ -102,28 +104,42 @@ export class RoomService {
 
     this.boundService = service;
     this.boundGeneration = generation;
+    this.subscriptions.dispose();
+    this.subscriptions = new SubscriptionScope();
 
-    service.listenForJoin((client) => {
-      void this.handleClientJoin(
-        service,
-        generation,
-        roomId,
-        client,
-      );
-    });
+    service.events.subscribe(
+      "join",
+      (client) => {
+        return this.handleClientJoin(
+          service,
+          generation,
+          roomId,
+          client,
+        );
+      },
+      { signal: this.subscriptions.signal },
+    );
 
-    service.listenForLeave((client) => {
-      if (!this.isServiceCurrent(service, generation)) {
-        return;
-      }
+    service.events.subscribe(
+      "leave",
+      (client) => {
+        if (!this.isServiceCurrent(service, generation)) {
+          return;
+        }
 
-      console.debug("[RoomService] peer left", {
-        peerId: client.clientId,
-      });
-      this.options.profiles.unbindSession(client.clientId);
-      this.options.sessions.removeSession(client.clientId);
-      this.options.rtc.unbindSession(client.clientId);
-    });
+        console.debug("[RoomService] peer left", {
+          peerId: client.clientId,
+        });
+        this.options.profiles.unbindSession(
+          client.clientId,
+        );
+        this.options.sessions.removeSession(
+          client.clientId,
+        );
+        this.options.rtc.unbindSession(client.clientId);
+      },
+      { signal: this.subscriptions.signal },
+    );
   }
 
   private async handleClientJoin(
@@ -326,6 +342,7 @@ export class RoomService {
 
   leave(): void {
     this.generation++;
+    this.subscriptions.dispose();
     this.pendingJoin = null;
     this.boundService = null;
     this.boundGeneration = -1;

@@ -18,11 +18,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { createSignal } from "solid-js";
 import { reconcile } from "solid-js/store";
-import {
-  MemoryRouter,
-  Route,
-  createMemoryHistory,
-} from "@solidjs/router";
+
 import { SharedFilesPanel } from "@/components/files/shared-files-panel";
 import { useAppState } from "@/libs/state/app-state-context";
 import {
@@ -90,8 +86,7 @@ function side(client: string, target: string) {
     getSessions: () => [session],
     isReady: () => true,
     canList: () => allowed,
-    onSessionClosed: (handler) =>
-      transport.onSessionClosed(handler),
+    sessionEvents: transport.events,
   });
   catalog.syncSharing();
   return {

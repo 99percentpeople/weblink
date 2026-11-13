@@ -11,7 +11,7 @@ import { contentKey } from "@/libs/domain/protocol/file-fingerprint";
 import { IndexedDbFileLibrary } from "@/libs/infrastructure/storage/indexeddb-file-library";
 import { requestResult } from "@/libs/infrastructure/storage/indexeddb-helpers";
 import { migrateLegacyIndexedDb } from "@/libs/infrastructure/storage/indexeddb-migration";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import { IndexedDbVolume } from "@/libs/infrastructure/vfs/indexeddb-volume";
 import { legacyDatabase } from "../../helpers/legacy-indexeddb";

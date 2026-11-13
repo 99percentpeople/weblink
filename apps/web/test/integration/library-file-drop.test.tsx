@@ -63,7 +63,7 @@ vi.mock("@/libs/application/cache-service", () => ({
           canOpen: false,
         },
       ],
-      onChange: () => () => {},
+      events: { subscribe: () => () => {} },
     },
     library: { importFile: vi.fn(), setShared: vi.fn() },
   },

@@ -325,7 +325,7 @@ it("announces the final file only after library verification succeeds", async ()
     }),
   );
   const saved = vi.fn();
-  recording.onSaved(saved);
+  recording.events.subscribe("saved", saved);
   const completed = f.complete!(result);
   await Promise.resolve();
   expect(f.createCache).toHaveBeenCalledWith("saved");
@@ -348,7 +348,7 @@ it.each([null, new Error("Verification failed")])(
       f.verifyReceived.mockRejectedValue(failure);
     else f.verifyReceived.mockResolvedValue(null);
     const saved = vi.fn();
-    recording.onSaved(saved);
+    recording.events.subscribe("saved", saved);
     await expect(f.complete!(result)).rejects.toThrow();
     expect(saved).not.toHaveBeenCalled();
   },
@@ -359,12 +359,12 @@ it("removes completion subscribers and isolates notification failures from a sav
   f.verifyReceived.mockResolvedValue(file);
   vi.spyOn(console, "warn").mockImplementation(() => {});
   const removed = vi.fn();
-  recording.onSaved(removed)();
-  recording.onSaved(() => {
+  recording.events.subscribe("saved", removed)();
+  recording.events.subscribe("saved", () => {
     throw new Error("Notice failed");
   });
   const saved = vi.fn();
-  recording.onSaved(saved);
+  recording.events.subscribe("saved", saved);
   await expect(
     f.complete!(result),
   ).resolves.toBeUndefined();

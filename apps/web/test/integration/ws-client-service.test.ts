@@ -250,10 +250,10 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const status = vi.fn();
     const joined = vi.fn();
     const left = vi.fn();
-    peer.addEventListener("peeravailable", available);
-    peer.addEventListener("statuschange", status);
-    service.listenForJoin(joined);
-    service.listenForLeave(left);
+    peer.events.subscribe("peeravailable", available);
+    peer.events.subscribe("statuschange", status);
+    service.events.subscribe("join", joined);
+    service.events.subscribe("leave", left);
     const notice = (
       clientId = "remote",
       connectionId = "socket-2",
@@ -282,7 +282,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const old = await connectService(service);
     const peer = service.createSender("remote")!;
     const available = vi.fn();
-    peer.addEventListener("peeravailable", available);
+    peer.events.subscribe("peeravailable", available);
     FakeWebSocket.acknowledgeJoins = false;
     old.serverClose();
     await flushMicrotasks();
@@ -729,8 +729,8 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const first = await connectService(service);
     const sender = service.createSender("remote")!;
     let sent: Promise<void> | undefined;
-    sender.addEventListener("statuschange", (event) => {
-      if (event.detail === "connected")
+    sender.events.subscribe("statuschange", (event) => {
+      if (event === "connected")
         sent = sender.sendSignal({
           type: "candidate",
           data: "candidate",
@@ -887,7 +887,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const first = await connectService(service);
     const sender = service.createSender("remote")!;
     const onSignal = vi.fn();
-    sender.addEventListener("signal", onSignal);
+    sender.events.subscribe("signal", onSignal);
     FakeWebSocket.acknowledgeJoins = false;
 
     first.serverClose();
@@ -914,7 +914,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     await flushMicrotasks();
 
     expect(onSignal).toHaveBeenCalledTimes(1);
-    expect(onSignal.mock.calls[0][0].detail).toMatchObject({
+    expect(onSignal.mock.calls[0][0]).toMatchObject({
       type: "offer",
       data: { sdp: "cached-offer" },
     });
@@ -946,14 +946,51 @@ describe("WebSocketClientService reconnect lifecycle", () => {
 
     const sender = service.createSender("remote")!;
     const onSignal = vi.fn();
-    sender.addEventListener("signal", onSignal);
+    sender.events.subscribe("signal", onSignal);
     await flushMicrotasks();
 
     expect(onSignal).toHaveBeenCalledTimes(1);
-    expect(onSignal.mock.calls[0][0].detail).toMatchObject({
+    expect(onSignal.mock.calls[0][0]).toMatchObject({
       type: "candidate",
       data: { candidate: "candidate-a" },
     });
+  });
+
+  it("replays queued signals through payload subscriptions and ignores pre-aborted listeners", async () => {
+    const service = createService();
+    const socket = await connectService(service);
+    const sender = service.createSender("remote")!;
+    for (const candidate of ["first", "second"]) {
+      socket.receive({
+        type: "message",
+        data: {
+          type: "candidate",
+          clientId: "remote",
+          targetClientId: "local",
+          data: JSON.stringify({ candidate }),
+        },
+      });
+    }
+    await flushMicrotasks();
+    const abort = new AbortController();
+    abort.abort();
+    const ignored = vi.fn();
+    sender.events.subscribe("signal", ignored, {
+      signal: abort.signal,
+    });
+    const candidates: string[] = [];
+    sender.events.subscribe("signal", (signal) =>
+      candidates.push(signal.data.candidate),
+    );
+    expect(candidates).toEqual(["first", "second"]);
+    expect(ignored).not.toHaveBeenCalled();
+    const statuses: string[] = [];
+    sender.events.subscribe("statuschange", (status) =>
+      statuses.push(status),
+    );
+    sender.close();
+    sender.close();
+    expect(statuses).toEqual(["closed"]);
   });
 
   it.each([false, true])(
@@ -972,7 +1009,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
       await flushMicrotasks();
       const errors: unknown[] = [];
       const senders: unknown[] = [];
-      service.listenForJoin((client) => {
+      service.events.subscribe("join", (client) => {
         try {
           senders.push(
             service.createSender(client.clientId),
@@ -1009,7 +1046,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const onLeave = vi.fn(() =>
       service.removeSender("remote"),
     );
-    service.listenForLeave(onLeave);
+    service.events.subscribe("leave", onLeave);
     first.serverClose();
     FakeWebSocket.acknowledgeJoins = false;
     await flushMicrotasks();
@@ -1026,7 +1063,7 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const onJoin = vi.fn((client) =>
       service.createSender(client.clientId),
     );
-    service.listenForJoin(onJoin);
+    service.events.subscribe("join", onJoin);
     second.receive({ type: "join", data: peer });
     expect(onJoin).toHaveBeenCalledOnce();
     expect(onJoin.mock.results[0].value).toMatchObject({
@@ -1040,10 +1077,10 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     const service = createService();
     const status = vi.fn();
     const onJoin = vi.fn();
-    service.addEventListener("statuschange", (event) =>
-      status(event.detail),
+    service.events.subscribe("statuschange", (event) =>
+      status(event),
     );
-    service.listenForJoin(onJoin);
+    service.events.subscribe("join", onJoin);
     const connected = service.createClient();
     const failed = expect(connected).rejects.toThrow(
       "join acknowledgement timeout",
@@ -1084,8 +1121,8 @@ describe("WebSocketClientService reconnect lifecycle", () => {
     );
     const service = createService({ password: "wrong" });
     const status = vi.fn();
-    service.addEventListener("statuschange", (event) =>
-      status(event.detail),
+    service.events.subscribe("statuschange", (event) =>
+      status(event),
     );
     const joining = service.createClient();
     const failed = expect(joining).rejects.toThrow(

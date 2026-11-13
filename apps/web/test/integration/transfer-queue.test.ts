@@ -160,7 +160,7 @@ describe("queued file runs", () => {
       "unordered",
       (transfers, channels) => {
         channels[1].reorderStart = true;
-        transfers[0].addEventListener("ready", () => {
+        transfers[0].events.subscribe("ready", () => {
           expect(transfers[1].channel).toBe(channels[1]);
         });
       },

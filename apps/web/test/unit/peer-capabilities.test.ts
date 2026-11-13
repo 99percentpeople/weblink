@@ -17,7 +17,7 @@ import type {
   PeerSession,
   PeerSessionEventMap,
 } from "@/libs/domain/session";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import {
   deferred,
   flushRtc,
@@ -135,8 +135,9 @@ function setup(
     files: { content: true, shared: true },
   },
 ) {
-  const events =
-    new MultiEventEmitter<PeerSessionEventMap>();
+  const events = new EventBus<PeerSessionEventMap>(
+    "test.events",
+  );
   let local = initial;
   const service = new PeerCapabilitiesService(() => local);
   const send = vi.fn(
@@ -149,7 +150,7 @@ function setup(
     clientId: "viewer",
     targetClientId: "host",
     isMessageChannelReady: true,
-    addEventListener: events.addEventListener.bind(events),
+    events: events.events,
     sendMessage: send,
   } as unknown as PeerSession;
   const changed = vi.fn();
@@ -159,7 +160,7 @@ function setup(
     update: CapabilityUpdate,
     target = "viewer",
   ) => {
-    events.dispatchEvent(
+    events.emit(
       "message",
       createSessionMessage(
         { clientId: "host", targetClientId: target },
@@ -245,9 +246,9 @@ it("exchanges one snapshot, ignores stale revisions and scopes it to the current
   await flushRtc();
   s.service.refresh(s.session);
   expect(s.send).toHaveBeenCalledOnce();
-  s.events.dispatchEvent("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "closed");
   expect(s.service.get(s.session)).toBeUndefined();
-  s.events.dispatchEvent("messagechannelchange", "ready");
+  s.events.emit("messagechannelchange", "ready");
   s.receive(1, {}, "new-generation");
   expect(s.service.get(s.session)).toEqual({});
   await flushRtc();
@@ -318,8 +319,8 @@ it("publishes only changed service entries, including extension additions and wi
       services: { "acme.whiteboard/1": null },
     },
   });
-  s.events.dispatchEvent("messagechannelchange", "closed");
-  s.events.dispatchEvent("messagechannelchange", "ready");
+  s.events.emit("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "ready");
   await flushRtc();
   expect(s.send.mock.calls.at(-1)![0]).toMatchObject({
     update: {
@@ -421,7 +422,7 @@ it("rejects discovery waiters and aborts queued sends on disconnect or disposal"
     s.service.whenReady(s.session),
   ).rejects.toThrow("interrupted");
   const signal = s.send.mock.calls[0][1]!.signal!;
-  s.events.dispatchEvent("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "closed");
   await first;
   expect(signal.aborted).toBe(true);
   const lifetime = new AbortController();
@@ -469,7 +470,7 @@ it("disables only unmatched features and applies versioned withdrawals without a
 it("settles discovery as unavailable for an unknown sync version and resets on reconnect", async () => {
   const s = setup();
   const ready = s.service.whenReady(s.session);
-  s.events.dispatchEvent("message", {
+  s.events.emit("message", {
     ...createSessionMessage(
       { clientId: "host", targetClientId: "viewer" },
       "peer-capabilities",
@@ -484,8 +485,8 @@ it("settles discovery as unavailable for an unknown sync version and resets on r
   ).rejects.toMatchObject({ code: "unsupported-protocol" });
   s.receive(1, { files: { content: true, shared: true } });
   expect(s.service.get(s.session)).toEqual({});
-  s.events.dispatchEvent("messagechannelchange", "closed");
-  s.events.dispatchEvent("messagechannelchange", "ready");
+  s.events.emit("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "ready");
   s.receive(1, { files: { content: true, shared: true } });
   await expect(
     s.service.require(s.session, ["files"]),
@@ -512,8 +513,8 @@ it("exposes the selected extension handler and never downgrades it within a conn
     s.service.protocol(s.session, "acme.board"),
   ).toBeUndefined();
   expect(s.service.get(s.session)).toEqual({});
-  s.events.dispatchEvent("messagechannelchange", "closed");
-  s.events.dispatchEvent("messagechannelchange", "ready");
+  s.events.emit("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "ready");
   s.receive(1, { "acme.board/1": {} });
   expect(s.service.protocol(s.session, "acme.board")).toBe(
     "acme.board/1",
@@ -657,11 +658,11 @@ it("shares a stable connection generation until the main channel resets", async 
   s.local({ automation: {} });
   expect(s.service.generation(s.session)).toBe(first);
   await flushRtc();
-  s.events.dispatchEvent("messagechannelchange", "closed");
+  s.events.emit("messagechannelchange", "closed");
   const second = s.service.generation(s.session);
   expect(second).toBeTruthy();
   expect(second).not.toBe(first);
-  s.events.dispatchEvent("messagechannelchange", "ready");
+  s.events.emit("messagechannelchange", "ready");
   expect(s.service.generation(s.session)).toBe(second);
   await flushRtc();
   expect(s.send.mock.calls.at(-1)?.[0]).toMatchObject({

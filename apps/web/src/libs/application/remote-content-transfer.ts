@@ -100,9 +100,9 @@ export async function transferRemoteContent(
     incomingChannel: !!file,
     lifecycle: {
       bind: (entry, signal) =>
-        entry.transferer.addEventListener(
+        entry.transferer.events.subscribe(
           "progress",
-          ({ detail }) => {
+          (detail) => {
             try {
               options.check();
               options.update({
@@ -154,7 +154,7 @@ export async function transferRemoteContent(
     { once: true },
   );
   if (file)
-    run.transferer.addEventListener(
+    run.transferer.events.subscribe(
       "ready",
       () => {
         void (run.transferer as FileSender)

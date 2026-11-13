@@ -13,11 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "../ui/badge";
-import {
-  IconAddCircle,
-  IconCheck,
-  IconClose,
-} from "../icons";
+import { IconAddCircle, IconCheck } from "../icons";
 import { Button } from "../ui/button";
 import {
   Command,

@@ -1,32 +1,50 @@
 import type { PeerSession } from "@/libs/domain/session";
 import type { ClientID } from "@/libs/domain/ids";
-import type { SessionMessage } from "@/libs/domain/protocol/messages";
-import type { MessageSendOptions } from "@/libs/domain/protocol/errors";
+import { EventBus } from "@weblink/platform/events";
 import type {
-  RtcAnyMessageHandler,
-  RtcProtocolTransport,
-  RtcSessionClosedHandler,
+  ProtocolMessageContext,
+  ProtocolSessionCloseOptions,
+  ProtocolTransport,
 } from "@/libs/domain/protocol/transport";
 
-export type RtcChannelHandler = (context: {
-  session: PeerSession;
-  channel: RTCDataChannel;
-}) => void | Promise<void>;
+export interface RtcServiceEventMap {
+  message: ProtocolMessageContext<PeerSession>;
+  channel: {
+    session: PeerSession;
+    channel: RTCDataChannel;
+  };
+  sessionclosed: {
+    session: PeerSession;
+    options?: ProtocolSessionCloseOptions;
+  };
+}
 
-/** Session event routing only. Protocol state belongs to RtcProtocol. */
-export class RtcService implements RtcProtocolTransport<PeerSession> {
+/** Session event routing only. The portable protocol owns its request state. */
+export class RtcService {
   private readonly bindings = new Map<
     ClientID,
     { session: PeerSession; controller: AbortController }
   >();
-  private readonly messageHandlers = new Set<
-    RtcAnyMessageHandler<PeerSession>
-  >();
-  private readonly channelHandlers =
-    new Set<RtcChannelHandler>();
-  private readonly closedHandlers = new Set<
-    RtcSessionClosedHandler<PeerSession>
-  >();
+  private readonly bus = new EventBus<RtcServiceEventMap>(
+    "rtc",
+    (error) => console.error(error),
+  );
+  readonly events = this.bus.events;
+  /** Adapt application events to the self-contained protocol contract. */
+  readonly transport: ProtocolTransport<PeerSession> = {
+    send: (session, message, options) =>
+      session.sendMessage(message, options),
+    onAny: (handler) =>
+      this.events.subscribe("message", handler),
+    onSessionClosed: (handler) =>
+      this.events.subscribe(
+        "sessionclosed",
+        ({ session, options }) =>
+          options
+            ? handler(session, options)
+            : handler(session),
+      ),
+  };
 
   bindSession(session: PeerSession): void {
     const key = session.targetClientId;
@@ -39,48 +57,38 @@ export class RtcService implements RtcProtocolTransport<PeerSession> {
       () => {
         if (this.bindings.get(key)?.session === session)
           this.bindings.delete(key);
-        for (const handler of this.closedHandlers)
-          this.runHandler(() => handler(session));
+        this.bus.emit("sessionclosed", { session });
       },
       { once: true },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "message",
-      (event) => {
-        for (const handler of this.messageHandlers)
-          this.runHandler(() =>
-            handler({ session, message: event.detail }),
-          );
-      },
+      (message) =>
+        this.bus.emit("message", { session, message }),
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "channel",
-      (event) => {
-        for (const handler of this.channelHandlers)
-          this.runHandler(() =>
-            handler({ session, channel: event.detail }),
-          );
-      },
+      (channel) =>
+        this.bus.emit("channel", { session, channel }),
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "accesschange",
-      ({ detail }) => {
-        if (!detail)
-          for (const handler of this.closedHandlers)
-            // Trust is reverified on reconnect without replacing PeerSession.
-            // Cancel existing work, but keep the handle usable after recovery.
-            this.runHandler(() =>
-              handler(session, { recoverable: true }),
-            );
+      (allowed) => {
+        // Cancel work during trust reverification; the session remains reusable.
+        if (!allowed)
+          this.bus.emit("sessionclosed", {
+            session,
+            options: { recoverable: true },
+          });
       },
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "statuschange",
-      (event) => {
-        if (event.detail === "closed") controller.abort();
+      (status) => {
+        if (status === "closed") controller.abort();
       },
       { signal: controller.signal },
     );
@@ -93,49 +101,6 @@ export class RtcService implements RtcProtocolTransport<PeerSession> {
   unbindAllSessions(): void {
     for (const binding of [...this.bindings.values()])
       binding.controller.abort();
-  }
-
-  send(
-    session: PeerSession,
-    message: SessionMessage,
-    options?: MessageSendOptions,
-  ): Promise<void> {
-    return session.sendMessage(message, options);
-  }
-
-  onAny(
-    handler: RtcAnyMessageHandler<PeerSession>,
-  ): () => void {
-    this.messageHandlers.add(handler);
-    return () => {
-      this.messageHandlers.delete(handler);
-    };
-  }
-
-  onSessionClosed(
-    handler: RtcSessionClosedHandler<PeerSession>,
-  ): () => void {
-    this.closedHandlers.add(handler);
-    return () => {
-      this.closedHandlers.delete(handler);
-    };
-  }
-
-  onChannel(handler: RtcChannelHandler): () => void {
-    this.channelHandlers.add(handler);
-    return () => {
-      this.channelHandlers.delete(handler);
-    };
-  }
-
-  private runHandler(handler: () => unknown): void {
-    try {
-      Promise.resolve(handler()).catch((error) =>
-        console.error(error),
-      );
-    } catch (error) {
-      console.error(error);
-    }
   }
 }
 

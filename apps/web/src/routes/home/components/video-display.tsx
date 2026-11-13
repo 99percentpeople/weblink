@@ -12,7 +12,6 @@ import { cn } from "@/libs/cn";
 import { createCheckVolume } from "@/libs/hooks/check-volume";
 import {
   ParentProps,
-  Accessor,
   createEffect,
   createMemo,
   Show,

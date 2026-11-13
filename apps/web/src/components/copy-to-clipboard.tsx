@@ -6,11 +6,7 @@ import {
   splitProps,
 } from "solid-js";
 import { Button } from "./ui/button";
-import {
-  IconContentCopy,
-  IconContentPaste,
-  IconInventory,
-} from "./icons";
+import { IconContentPaste, IconInventory } from "./icons";
 import { cn } from "@/libs/cn";
 
 export const CopyToClipboard: Component<

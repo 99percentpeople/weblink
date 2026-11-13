@@ -13,7 +13,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  type Accessor,
   onCleanup,
   onMount,
   untrack,
@@ -24,7 +23,7 @@ import type {
 } from "@/libs/domain/file";
 import type { PeerSession } from "@/libs/domain/session";
 import type { ClientID, FileID } from "@/libs/domain/ids";
-import type { RoomStatus } from "@/libs/state/app-state";
+
 import { cacheManager } from "@/libs/application/cache-service";
 import { transferManager } from "@/libs/application/transfer/transfer-service";
 import {
@@ -38,19 +37,14 @@ import {
   getRoomAutoDownloadLimit,
 } from "@/libs/state/app-options";
 import { createRtcService } from "@/libs/application/rtc/rtc-service";
-import {
-  createRtcProtocol,
-  type SendClipboardMessage,
-} from "@/libs/application/rtc/rtc-protocol";
+import { createRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { type SendClipboardMessage } from "@/libs/domain/protocol";
 import { sessionService } from "@/libs/application/session-service";
 import { PeerProfileService } from "@/libs/application/peer-profile-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { toast } from "solid-sonner";
-import type {
-  FileTransferMessage,
-  StoreMessage,
-} from "@/libs/domain/message";
+import type { StoreMessage } from "@/libs/domain/message";
 import { messageStores } from "@/libs/application/messaging/message-store";
 import { ConversationHistoryService } from "@/libs/application/messaging/conversation-history-service";
 import { catchError } from "@/libs/catch";
@@ -60,10 +54,7 @@ import {
   type SpeedTestState,
 } from "@/libs/application/speed-test-service";
 import type { SpeedTestApprovalController } from "@/components/speed-test-approval";
-import {
-  createTaskService,
-  type TaskService,
-} from "@/libs/application/task-service";
+import { createTaskService } from "@/libs/application/task-service";
 import {
   createClientService,
   waitForRoomAvailability,
@@ -470,8 +461,7 @@ export function createAppState(
       sessionService.capabilities.get(session)?.files
         ?.shared === true,
     canList: canShareFiles,
-    onSessionClosed: (handler) =>
-      rtc.onSessionClosed(handler),
+    sessionEvents: rtc.events,
   });
   createEffect(() => catalog.syncSharing());
   onCleanup(() => catalog.dispose());
@@ -737,7 +727,7 @@ export function createAppState(
       .then(() => {
         toast.success(data);
       })
-      .catch((err) => {
+      .catch((_err) => {
         toast.error(t("common.notification.copy_failed"));
       })
       .finally(() => {
@@ -799,7 +789,8 @@ export function createAppState(
       },
     );
 
-    const offSpeedTestChannel = rtc.onChannel(
+    const offSpeedTestChannel = rtc.events.subscribe(
+      "channel",
       ({ session, channel }) => {
         speedTests.handleChannel(
           session.targetClientId,

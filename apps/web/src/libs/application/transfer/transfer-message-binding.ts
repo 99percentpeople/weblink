@@ -108,7 +108,7 @@ export function bindTransferMessage(
     },
   );
   const transfer = entry.transferer;
-  transfer.addEventListener(
+  transfer.events.subscribe(
     "ready",
     () =>
       update((state) => {
@@ -117,9 +117,9 @@ export function bindTransferMessage(
       }),
     { signal },
   );
-  transfer.addEventListener(
+  transfer.events.subscribe(
     "progress",
-    ({ detail }) =>
+    (detail) =>
       update((state) => {
         state.progress = {
           total: detail.total,
@@ -129,7 +129,7 @@ export function bindTransferMessage(
       }),
     { signal },
   );
-  transfer.addEventListener(
+  transfer.events.subscribe(
     "complete",
     () => {
       if (transfer.mode !== TransferMode.Send) return;
@@ -141,7 +141,7 @@ export function bindTransferMessage(
     },
     { signal },
   );
-  transfer.addEventListener(
+  transfer.events.subscribe(
     "close",
     () =>
       update((state) => {
@@ -153,9 +153,9 @@ export function bindTransferMessage(
       }),
     { signal },
   );
-  transfer.addEventListener(
+  transfer.events.subscribe(
     "error",
-    ({ detail }) =>
+    (detail) =>
       update((state) => {
         state.status = "error";
         state.error = detail.message;

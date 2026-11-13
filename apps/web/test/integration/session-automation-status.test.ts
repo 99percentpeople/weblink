@@ -12,7 +12,7 @@ import type {
 } from "@/libs/domain/session";
 import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import { validCapabilityUpdate } from "@/libs/domain/protocol/capabilities";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { flushRtc } from "../support/rtc-transport";
 
 const disposers: (() => void)[] = [];
@@ -28,8 +28,9 @@ it("publishes actual input ownership only to its trusted peer on the current con
     allowed,
   );
   const bind = (id: string) => {
-    const events =
-      new MultiEventEmitter<PeerSessionEventMap>();
+    const events = new EventBus<PeerSessionEventMap>(
+      "test.events",
+    );
     const send = vi.fn(
       async (_message: SessionMessage) => {},
     );
@@ -38,8 +39,7 @@ it("publishes actual input ownership only to its trusted peer on the current con
       targetClientId: id,
       isMessageChannelReady: true,
       sendMessage: send,
-      addEventListener:
-        events.addEventListener.bind(events),
+      events: events.events,
     } as unknown as PeerSession;
     const stop = service.capabilities.bind(
       session,
@@ -121,14 +121,8 @@ it("publishes actual input ownership only to its trusted peer on the current con
     controlActive: true,
   });
 
-  controller.events.dispatchEvent(
-    "messagechannelchange",
-    "closed",
-  );
-  controller.events.dispatchEvent(
-    "messagechannelchange",
-    "ready",
-  );
+  controller.events.emit("messagechannelchange", "closed");
+  controller.events.emit("messagechannelchange", "ready");
   await flushRtc();
   expect(
     service.capabilities.generation(controller.session),

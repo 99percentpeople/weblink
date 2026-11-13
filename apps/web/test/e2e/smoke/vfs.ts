@@ -1,4 +1,4 @@
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { FileCacheFactory } from "@/libs/application/cache-service";
 import { DirectoryVolume } from "@/libs/infrastructure/vfs/directory-volume";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";

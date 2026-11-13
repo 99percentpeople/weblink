@@ -8,7 +8,7 @@ import type { FileStorage } from "@/libs/domain/file-storage";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
 import { formatBtyeSize } from "@/libs/utils/format-filesize";
 
-/** App lifetime, independent of file dialogs; subscription replays startup progress. */
+/** App lifetime, independent of file dialogs; includes the current startup progress. */
 export function StorageMigrationToast(props: {
   storage?: FileStorage;
 }) {
@@ -51,7 +51,7 @@ export function StorageMigrationToast(props: {
           ),
         );
   };
-  const stop = storage.onMigrationProgress((state) => {
+  const receive = (state: StorageMigrationProgress) => {
     setProgress(state);
     if (visible && !finished()) return;
     visible = true;
@@ -135,7 +135,13 @@ export function StorageMigrationToast(props: {
         closeButton: finished(),
       },
     );
-  });
+  };
+  const stop = storage.events.subscribe(
+    "migration",
+    receive,
+  );
+  if (storage.migrationProgress)
+    receive(storage.migrationProgress);
   onCleanup(() => {
     stop();
     if (visible) toast.dismiss(id);

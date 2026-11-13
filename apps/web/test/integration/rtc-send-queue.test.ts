@@ -8,10 +8,8 @@ import {
 } from "vitest";
 import { MessageSendQueue } from "@/libs/domain/session-send-queue";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
-import {
-  RtcProtocol,
-  type WebRtcProtocol,
-} from "@/libs/application/rtc/rtc-protocol";
+import { type WebRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import {
   FakeRtcTransport,
   makeSession,
@@ -185,7 +183,7 @@ describe("cancel-safe message queue", () => {
     const transport = new FakeRtcTransport();
     transport.sendImpl = (_session, data, options) =>
       queue.send(data, options);
-    const protocol = new RtcProtocol(transport);
+    const protocol = new P2PProtocol(transport);
     protocols.push(protocol);
     const pending = watch(
       protocol.call(
@@ -213,7 +211,7 @@ describe("cancel-safe message queue", () => {
     const transport = new FakeRtcTransport();
     transport.sendImpl = (_session, data, options) =>
       queue.send(data, options);
-    const protocol = new RtcProtocol(transport);
+    const protocol = new P2PProtocol(transport);
     protocols.push(protocol);
     const pending = watch(
       protocol.call(session, "send-text", {

@@ -124,8 +124,3 @@ export class P2PProtocol<
     this.requests.dispose();
   }
 }
-
-// Current Weblink naming compatibility.
-export { P2PProtocol as RtcProtocol };
-export type RtcCallOptions<T extends RequestType> =
-  ProtocolCallOptions<T>;

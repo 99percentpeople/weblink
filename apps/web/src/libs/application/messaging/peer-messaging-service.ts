@@ -10,7 +10,7 @@ import {
 } from "@/libs/domain/protocol/messages";
 import {
   type RequestOptions,
-  RtcProtocolError,
+  P2PProtocolError,
 } from "@/libs/domain/protocol/errors";
 import type { WebRtcProtocol } from "../rtc/rtc-protocol";
 
@@ -98,7 +98,7 @@ export class PeerMessagingService {
       return { message: prepared!, ackMessage };
     } catch (error) {
       if (
-        error instanceof RtcProtocolError &&
+        error instanceof P2PProtocolError &&
         error.code === "already-pending"
       ) {
         if (options.throwOnError) throw error;

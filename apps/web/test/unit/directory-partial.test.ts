@@ -9,7 +9,7 @@ import {
   vi,
 } from "vitest";
 import type { VfsVolume } from "@weblink/platform";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "@/libs/infrastructure/vfs/database";
 import { IndexedDbVolume } from "@/libs/infrastructure/vfs/indexeddb-volume";
 import {

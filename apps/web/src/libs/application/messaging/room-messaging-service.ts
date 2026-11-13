@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createUuid } from "@/libs/domain/ids";
 import { normalizeChatText } from "@/libs/domain/protocol/chat-text";
 import type { OnMessageAccepted } from "./message-submission";
@@ -102,7 +103,7 @@ type Recipient = {
 /** Online-only fan-out. One stored message owns a fixed recipient snapshot. */
 export class RoomMessagingService {
   private readonly bindings = new Map<string, Binding>();
-  private readonly unsubscribe: (() => void)[];
+  private readonly subscriptions = new SubscriptionScope();
   private readonly retries = new Set<string>();
   private scopeKey: string | null = null;
   private scopeRevision = 0;
@@ -118,7 +119,7 @@ export class RoomMessagingService {
     private readonly protocol: WebRtcProtocol,
     private readonly options: RoomMessagingServiceOptions,
   ) {
-    this.unsubscribe = [
+    this.subscriptions.add(
       protocol.handle(
         "room-capabilities",
         ({ session, message }) => {
@@ -153,6 +154,8 @@ export class RoomMessagingService {
             this.startHandshake(binding);
         },
       ),
+    );
+    this.subscriptions.add(
       protocol.handle(
         "send-room-text",
         async ({ session, message, signal }) => {
@@ -198,6 +201,8 @@ export class RoomMessagingService {
             );
         },
       ),
+    );
+    this.subscriptions.add(
       protocol.handle(
         "send-room-file",
         async ({ session, message, signal }) => {
@@ -262,7 +267,7 @@ export class RoomMessagingService {
             };
         },
       ),
-    ];
+    );
   }
 
   get currentScopeKey(): string | null {
@@ -484,9 +489,9 @@ export class RoomMessagingService {
       retryDelay: 1_000,
     };
     this.bindings.set(session.targetClientId, binding);
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
-      ({ detail }) => {
+      (detail) => {
         if (!this.isCurrent(binding)) return;
         if (detail === "ready")
           this.startHandshake(binding);
@@ -494,9 +499,9 @@ export class RoomMessagingService {
       },
       { signal: binding.lifetime.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "statuschange",
-      ({ detail }) => {
+      (detail) => {
         if (
           detail !== "closed" ||
           this.bindings.get(session.targetClientId) !==
@@ -1028,7 +1033,7 @@ export class RoomMessagingService {
     this.scopeLifetime.abort();
     if (this.disposed) return;
     this.disposed = true;
-    for (const off of this.unsubscribe) off();
+    this.subscriptions.dispose();
     for (const binding of this.bindings.values())
       this.retire(binding);
     this.bindings.clear();

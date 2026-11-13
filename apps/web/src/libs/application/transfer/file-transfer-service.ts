@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createUuid } from "@/libs/domain/ids";
 import type { OnMessageAccepted } from "../messaging/message-submission";
 import { FileContentReceives } from "./file-content-receives";
@@ -44,7 +45,7 @@ import { finishReceivedFile } from "./transfer-message-binding";
 
 export interface FileTransferServiceOptions {
   protocol: Pick<WebRtcProtocol, "call" | "handle">;
-  rtc: Pick<RtcService, "onChannel" | "onSessionClosed">;
+  rtc: Pick<RtcService, "events">;
   registry: TransferRegistry;
   caches: Pick<
     FileCacheFactory,
@@ -83,7 +84,7 @@ import {
 /** File workflows have application lifetime, independent of dialogs and routes. */
 export class FileTransferService {
   private readonly operations = new Set<Operation>();
-  private readonly unsubscribe: Array<() => void>;
+  private readonly subscriptions = new SubscriptionScope();
   private disposed = false;
   private readonly offers: FileOfferTransfers;
   readonly contentReceives: FileContentReceives;
@@ -112,20 +113,22 @@ export class FileTransferService {
       openChannel: (op, cache) =>
         this.openChannel(op, cache),
     });
-    this.unsubscribe = [
-      ...(deps.caches.library
-        ? [
-            deps.caches.library.onRemove((ids) => {
-              for (const id of ids) {
-                this.contentReceives.cancel(id);
-                for (const op of this.operations)
-                  if (op.fileId === id)
-                    op.controller.abort();
-                deps.registry.destroyFile(id);
-              }
-            }),
-          ]
-        : []),
+    if (deps.caches.library) {
+      this.subscriptions.add(
+        deps.caches.library.events.subscribe(
+          "removed",
+          (ids) => {
+            for (const id of ids) {
+              this.contentReceives.cancel(id);
+              for (const op of this.operations)
+                if (op.fileId === id) op.controller.abort();
+              deps.registry.destroyFile(id);
+            }
+          },
+        ),
+      );
+    }
+    this.subscriptions.add(
       deps.protocol.handle(
         "file-content-ready",
         async ({ session, message, signal }) => {
@@ -178,12 +181,18 @@ export class FileTransferService {
               ?.cleanup();
         },
       ),
+    );
+    this.subscriptions.add(
       deps.protocol.handle("send-file", (ctx) =>
         this.receiveFile(ctx),
       ),
+    );
+    this.subscriptions.add(
       deps.protocol.handle("request-file", (ctx) =>
         this.serveFile(ctx),
       ),
+    );
+    this.subscriptions.add(
       deps.protocol.handle(
         "resume-file",
         async ({ session, message, signal }) => {
@@ -219,44 +228,52 @@ export class FileTransferService {
           });
         },
       ),
-      deps.rtc.onChannel(({ session, channel }) => {
-        if (
-          channel.protocol !==
-          FILE_TRANSFER_CHANNEL_PROTOCOL
-        )
-          return;
-        if (
-          this.disposed ||
-          deps.getSession(session.targetClientId) !==
-            session
-        ) {
-          channel.close();
-          return;
-        }
-        // Keep the established single-channel label, with the historical prefix accepted at the boundary.
-        let label = channel.label;
-        if (!label.endsWith("-0")) {
-          channel.close();
-          return;
-        }
-        let fileId = label.slice(0, -2);
-        if (
-          !deps.registry.get(session, fileId) &&
-          fileId.startsWith(TRANSFER_CHANNEL_PREFIX)
-        )
-          fileId = fileId.slice(
-            TRANSFER_CHANNEL_PREFIX.length,
+    );
+    this.subscriptions.add(
+      deps.rtc.events.subscribe(
+        "channel",
+        ({ session, channel }) => {
+          if (
+            channel.protocol !==
+            FILE_TRANSFER_CHANNEL_PROTOCOL
+          )
+            return;
+          if (
+            this.disposed ||
+            deps.getSession(session.targetClientId) !==
+              session
+          ) {
+            channel.close();
+            return;
+          }
+          // Keep the established single-channel label, with the historical prefix accepted at the boundary.
+          let label = channel.label;
+          if (!label.endsWith("-0")) {
+            channel.close();
+            return;
+          }
+          let fileId = label.slice(0, -2);
+          if (
+            !deps.registry.get(session, fileId) &&
+            fileId.startsWith(TRANSFER_CHANNEL_PREFIX)
+          )
+            fileId = fileId.slice(
+              TRANSFER_CHANNEL_PREFIX.length,
+            );
+          deps.registry.acceptChannel(
+            session,
+            fileId,
+            channel,
           );
-        deps.registry.acceptChannel(
-          session,
-          fileId,
-          channel,
-        );
-      }),
-      deps.rtc.onSessionClosed((session) =>
-        this.closeSession(session),
+        },
       ),
-    ];
+    );
+    this.subscriptions.add(
+      deps.rtc.events.subscribe(
+        "sessionclosed",
+        ({ session }) => this.closeSession(session),
+      ),
+    );
   }
 
   private valid(op: Operation): boolean {
@@ -434,7 +451,7 @@ export class FileTransferService {
     run: TransferRun,
     ranges?: ChunkRange[],
   ): void {
-    run.transferer.addEventListener(
+    run.transferer.events.subscribe(
       "ready",
       () => {
         if (!this.deps.registry.isCurrent(run)) return;
@@ -1546,7 +1563,7 @@ export class FileTransferService {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.unsubscribe.forEach((off) => off());
+    this.subscriptions.dispose();
     this.cancelAll();
   }
 }

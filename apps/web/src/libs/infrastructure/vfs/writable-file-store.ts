@@ -1,5 +1,4 @@
 import type {
-  StoredFile,
   VfsVolume,
   VfsStat,
   VfsWrite,

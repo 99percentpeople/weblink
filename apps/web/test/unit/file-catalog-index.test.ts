@@ -133,7 +133,7 @@ describe("file catalog metadata index", () => {
   it("emits once for visible changes but not chunk progress or unchanged metadata", () => {
     const index = new FileCatalogIndex();
     const changed = vi.fn();
-    const stop = index.onChange(changed);
+    const stop = index.events.subscribe("changed", changed);
     index.update(
       "a",
       file("a", { isComplete: false, chunkCount: 1 }),
@@ -155,6 +155,25 @@ describe("file catalog metadata index", () => {
     expect(changed).toHaveBeenCalledTimes(3);
   });
 
+  it("releases independent payload subscriptions on disposal", () => {
+    const index = new FileCatalogIndex();
+    const first = vi.fn();
+    const receive = vi.fn();
+    index.events.subscribe("changed", first);
+    index.events.subscribe("changed", receive);
+    index.update("a", file("a"));
+    expect(first).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+    );
+    expect(receive).toHaveBeenCalledExactlyOnceWith(
+      undefined,
+    );
+    index.dispose();
+    index.update("a", null);
+    expect(first).toHaveBeenCalledOnce();
+    expect(receive).toHaveBeenCalledOnce();
+  });
+
   it("returns no catalog metadata or counts when sharing is disabled", () => {
     const index = new FileCatalogIndex();
     index.update("a", file("a"));
@@ -172,7 +191,7 @@ describe("file catalog metadata index", () => {
   it("lists only independent shared references, including content sourced from room attachments", () => {
     const index = new FileCatalogIndex();
     const changed = vi.fn();
-    index.onChange(changed);
+    index.events.subscribe("changed", changed);
     const attachment = file("room", {
       sharedReference: false,
       roomAttachment: true,

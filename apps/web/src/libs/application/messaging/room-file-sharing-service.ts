@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createUuid } from "@/libs/domain/ids";
 import type { OnMessageAccepted } from "./message-submission";
 import type {
@@ -41,7 +42,7 @@ export interface RoomFileSharingOptions {
 
 /** Room metadata fan-out and explicitly requested, peer-specific binary runs. */
 export class RoomFileSharingService {
-  private readonly unsubscribe: () => void;
+  private readonly subscriptions = new SubscriptionScope();
   private readonly pending = new Set<string>();
   private readonly preparing = new Set<AbortController>();
 
@@ -49,56 +50,58 @@ export class RoomFileSharingService {
     private readonly protocol: WebRtcProtocol,
     private readonly options: RoomFileSharingOptions,
   ) {
-    this.unsubscribe = protocol.handle(
-      "request-room-file",
-      async ({ session, message, signal }) => {
-        const binding = options.rooms.validateFileBinding(
-          session,
-          message,
-        );
-        const offer = this.getOffer(message.offerId);
-        if (
-          offer.client !== session.clientId ||
-          offer.fid !== message.fid ||
-          offer.conversationId !==
-            binding.room.conversationId ||
-          offer.room?.roomId !== binding.room.roomId ||
-          !Object.hasOwn(
-            offer.deliveries ?? {},
-            session.targetClientId,
-          ) ||
-          offer.deliveries?.[session.targetClientId] ===
-            "unsupported"
-        )
-          throw new Error(
-            "This file was not offered to this room participant",
+    this.subscriptions.add(
+      protocol.handle(
+        "request-room-file",
+        async ({ session, message, signal }) => {
+          const binding = options.rooms.validateFileBinding(
+            session,
+            message,
           );
-        const chunks = Math.ceil(
-          offer.fileSize / offer.chunkSize,
-        );
-        for (const range of message.ranges ?? []) {
-          const [start, end] =
-            typeof range === "number"
-              ? [range, range]
-              : range;
-          if (start < 0 || end < start || end >= chunks)
+          const offer = this.getOffer(message.offerId);
+          if (
+            offer.client !== session.clientId ||
+            offer.fid !== message.fid ||
+            offer.conversationId !==
+              binding.room.conversationId ||
+            offer.room?.roomId !== binding.room.roomId ||
+            !Object.hasOwn(
+              offer.deliveries ?? {},
+              session.targetClientId,
+            ) ||
+            offer.deliveries?.[session.targetClientId] ===
+              "unsupported"
+          )
             throw new Error(
-              "Requested chunks are outside the offered file",
+              "This file was not offered to this room participant",
             );
-        }
-        if (signal.aborted)
-          throw new Error("Room file session closed");
-        await options.files.serveFileOffer(session, {
-          queue: message.queue,
-          fid: message.fid,
-          messageId: offer.id,
-          ranges: message.ranges,
-          resume: message.resume,
-          info: this.metadata(offer),
-          signal: binding.signal,
-        });
-        binding.assertCurrent();
-      },
+          const chunks = Math.ceil(
+            offer.fileSize / offer.chunkSize,
+          );
+          for (const range of message.ranges ?? []) {
+            const [start, end] =
+              typeof range === "number"
+                ? [range, range]
+                : range;
+            if (start < 0 || end < start || end >= chunks)
+              throw new Error(
+                "Requested chunks are outside the offered file",
+              );
+          }
+          if (signal.aborted)
+            throw new Error("Room file session closed");
+          await options.files.serveFileOffer(session, {
+            queue: message.queue,
+            fid: message.fid,
+            messageId: offer.id,
+            ranges: message.ranges,
+            resume: message.resume,
+            info: this.metadata(offer),
+            signal: binding.signal,
+          });
+          binding.assertCurrent();
+        },
+      ),
     );
   }
 
@@ -295,6 +298,6 @@ export class RoomFileSharingService {
   dispose(): void {
     for (const controller of this.preparing)
       controller.abort();
-    this.unsubscribe();
+    this.subscriptions.dispose();
   }
 }

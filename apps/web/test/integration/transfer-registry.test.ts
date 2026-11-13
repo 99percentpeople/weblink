@@ -45,12 +45,12 @@ describe("session-owned file transfers", () => {
     fixture.registry.setChannel(run, fakeChannel());
     await vi.advanceTimersByTimeAsync(30_000);
     expect(cache.flush).not.toHaveBeenCalled();
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       total: 2048,
       received: 256,
     });
     await vi.advanceTimersByTimeAsync(500);
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       total: 2048,
       received: 512,
     });
@@ -72,12 +72,12 @@ describe("session-owned file transfers", () => {
     );
     await fixture.registry.initialize(run);
     fixture.registry.setChannel(run, fakeChannel());
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       total: 2048,
       received: 256,
     });
     await vi.advanceTimersByTimeAsync(1000);
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       total: 2048,
       received: 512,
     });
@@ -376,7 +376,7 @@ describe("session-owned file transfers", () => {
     );
     await fixture.registry.initialize(run);
     fixture.registry.setChannel(run, fakeChannel());
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       total: 2048,
       received: 1024,
     });
@@ -402,7 +402,7 @@ describe("session-owned file transfers", () => {
     );
     await fixture.registry.initialize(run);
     fixture.messages.messages.splice(0, 1);
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       received: 256,
       total: 2048,
     });
@@ -413,7 +413,7 @@ describe("session-owned file transfers", () => {
       fixture.messages.messages[1].progress,
     ).toBeUndefined();
     fixture.messages.messages.splice(0, 1);
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       received: 512,
       total: 2048,
     });
@@ -425,7 +425,7 @@ describe("session-owned file transfers", () => {
     fixture.messages.messages = [fileMessage()];
     const run = fixture.register();
     fixture.registry.destroy(run);
-    fixture.created[0].dispatchEvent("progress", {
+    fixture.created[0].emit("progress", {
       received: 500,
       total: 2048,
     });

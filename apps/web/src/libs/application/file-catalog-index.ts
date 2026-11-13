@@ -1,3 +1,4 @@
+import { EventBus } from "@weblink/platform/events";
 import type { FileMetaData } from "@/libs/domain/file";
 import type {
   ProtocolFileMetadata,
@@ -35,7 +36,10 @@ export class FileCatalogIndex {
     string,
     ProtocolFileMetadata
   >();
-  private readonly listeners = new Set<() => void>();
+  private readonly bus = new EventBus<{ changed: void }>(
+    "files.catalog",
+  );
+  readonly events = this.bus.events;
 
   update(id: string, info: FileMetaData | null): void {
     const previous = this.entries.get(id);
@@ -50,14 +54,11 @@ export class FileCatalogIndex {
       return;
     if (next) this.entries.set(id, next);
     else this.entries.delete(id);
-    for (const listener of this.listeners) listener();
+    this.bus.emit("changed", undefined);
   }
 
-  onChange(listener: () => void): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+  dispose(): void {
+    this.bus.dispose();
   }
 
   /** Input is validated at the protocol boundary. ID is the stable final tie-breaker. */

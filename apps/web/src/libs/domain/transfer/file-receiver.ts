@@ -56,7 +56,7 @@ export class FileReceiver extends FileTransferBase {
       );
       return;
     }
-    this.dispatchEvent("progress", {
+    this.emit("progress", {
       total: info.fileSize,
       received: this.receivedData.receiveBytes,
     });
@@ -105,7 +105,7 @@ export class FileReceiver extends FileTransferBase {
         .catch((storeError) => {
           console.error(storeError);
           if (storeError instanceof Error) {
-            this.dispatchEvent("error", storeError);
+            this.emit("error", storeError);
           }
         })
         .finally(() =>
@@ -130,7 +130,7 @@ export class FileReceiver extends FileTransferBase {
 
     this.updateProgress();
     if (this.channel?.readyState === "open") {
-      this.dispatchEvent("ready", undefined);
+      this.emit("ready", undefined);
     }
   }
 
@@ -296,7 +296,7 @@ export class FileReceiver extends FileTransferBase {
       if (!this.closed) {
         console.error(error);
         if (error instanceof Error) {
-          this.dispatchEvent("error", error);
+          this.emit("error", error);
         }
       }
     } finally {
@@ -347,10 +347,10 @@ export class FileReceiver extends FileTransferBase {
         })
         .then(() => {
           this.isComplete = true;
-          this.dispatchEvent("complete", undefined);
+          this.emit("complete", undefined);
         })
         .catch((err) => {
-          this.dispatchEvent("error", err);
+          this.emit("error", err);
           this.close();
         });
     }
@@ -388,7 +388,7 @@ export class FileReceiver extends FileTransferBase {
       this.startChecking(10000);
     } catch (error) {
       if (error instanceof Error)
-        this.dispatchEvent("error", error as Error);
+        this.emit("error", error as Error);
       console.error(error);
     }
   }

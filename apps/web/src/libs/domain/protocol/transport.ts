@@ -52,18 +52,3 @@ export interface ProtocolTransport<
     handler: ProtocolSessionClosedHandler<S>,
   ): () => void;
 }
-
-// WebRTC-era aliases retained for current Weblink callers.
-export type RtcMessageContext<
-  T extends SessionMessage = SessionMessage,
-  S extends ProtocolSession = ProtocolSession,
-> = ProtocolMessageContext<S, T>;
-export type RtcAnyMessageHandler<
-  S extends ProtocolSession = ProtocolSession,
-> = ProtocolAnyMessageHandler<S>;
-export type RtcSessionClosedHandler<
-  S extends ProtocolSession = ProtocolSession,
-> = ProtocolSessionClosedHandler<S>;
-export type RtcProtocolTransport<
-  S extends ProtocolSession = ProtocolSession,
-> = ProtocolTransport<S>;

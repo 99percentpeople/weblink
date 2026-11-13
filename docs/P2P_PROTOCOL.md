@@ -741,9 +741,8 @@ session cannot settle a replacement session.
 
 ## Errors
 
-Portable code should use `P2PProtocolError` and
-`P2PProtocolErrorCode`. Weblink still exports the historical
-`RtcProtocolError` aliases for compatibility.
+Protocol errors use `P2PProtocolError` and `P2PProtocolErrorCode`,
+exported from the portable protocol module.
 
 Codes:
 

@@ -10,7 +10,7 @@ import {
   PeerSessionLifecycleController,
   type PeerSessionStatus,
 } from "@/libs/domain/session-lifecycle";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type {
   SignalingService,
   SignalingServiceEventMap,
@@ -27,8 +27,9 @@ function harness(
   negotiated = true,
   polite = false,
 ) {
-  const events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
+  const events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
+  );
   let signalStatus: SignalingServiceStatus = "disconnected";
   let status: PeerSessionStatus = connected
     ? "connected"
@@ -40,6 +41,7 @@ function harness(
       } as RTCPeerConnection)
     : null;
   const sender: SignalingService = {
+    events: events.events,
     clientId: "local",
     targetClientId: "remote",
     get status() {
@@ -47,9 +49,6 @@ function harness(
     },
     sendSignal: vi.fn(),
     close: vi.fn(),
-    addEventListener: events.addEventListener.bind(events),
-    removeEventListener:
-      events.removeEventListener.bind(events),
   };
   const disconnect = vi.fn(() => {
     pc = null;
@@ -96,10 +95,10 @@ function harness(
     },
     signal(next: Exclude<SignalingServiceStatus, "init">) {
       signalStatus = next;
-      events.dispatchEvent("statuschange", next);
+      events.emit("statuschange", next);
     },
     peerOnline: () =>
-      events.dispatchEvent("peeravailable", undefined),
+      events.emit("peeravailable", undefined),
   };
 }
 

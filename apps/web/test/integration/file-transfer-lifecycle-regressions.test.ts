@@ -7,7 +7,11 @@ import {
   it,
   vi,
 } from "vitest";
-import type { ChunkCache } from "@/libs/domain/file";
+import type {
+  ChunkCache,
+  ChunkCacheEventMap,
+} from "@/libs/domain/file";
+import { EventBus } from "@weblink/platform/events";
 import type { FileMetaData } from "@/libs/domain/file";
 import type { FileTransferMessage } from "@/libs/domain/message";
 import type { PeerSession } from "@/libs/domain/session";
@@ -16,10 +20,10 @@ import {
   TransferMode,
   type ProgressValue,
 } from "@/libs/domain/transfer/file-transferer";
-import type { RtcChannelHandler } from "@/libs/application/rtc/rtc-service";
+
 import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { TransferRegistry } from "@/libs/application/transfer/transfer-registry";
@@ -65,11 +69,11 @@ class TestTransfer extends FileTransferBase {
   }
   protected handleReceiveMessage(): void {}
   progress(value: ProgressValue): void {
-    this.dispatchEvent("progress", value);
+    this.emit("progress", value);
   }
   complete(): void {
     this.isComplete = true;
-    this.dispatchEvent("complete", undefined);
+    this.emit("complete", undefined);
   }
 }
 
@@ -87,12 +91,13 @@ function cacheStub(id = "shared") {
     file,
     isComplete: true,
   };
-  const events = new EventTarget();
+  const events = new EventBus<ChunkCacheEventMap>(
+    "test.cache",
+  );
   const stub = {
     id,
-    addEventListener: events.addEventListener.bind(events),
-    removeEventListener:
-      events.removeEventListener.bind(events),
+    events: events.events,
+
     getInfo: vi.fn(async () => info),
     setInfo: vi.fn(async (next: FileMetaData) => {
       info = { ...info, ...next };
@@ -156,18 +161,9 @@ function fixture(automaticDeletion = false) {
     updateTransferMessage: vi.fn(update),
   };
   const transport = new FakeRtcTransport();
-  const channelHandlers = new Set<RtcChannelHandler>();
-  const rtc = {
-    onSessionClosed:
-      transport.onSessionClosed.bind(transport),
-    onChannel: (handler: RtcChannelHandler) => {
-      channelHandlers.add(handler);
-      return () => {
-        channelHandlers.delete(handler);
-      };
-    },
-  };
-  const protocol = new RtcProtocol(transport);
+
+  const rtc = { events: transport.events };
+  const protocol = new P2PProtocol(transport);
   transport.sendImpl = async (session, message) => {
     if (
       ![
@@ -264,7 +260,7 @@ function fixture(automaticDeletion = false) {
     messages,
     store,
     transport,
-    channelHandlers,
+
     protocol,
     caches,
     cacheApi,
@@ -278,8 +274,10 @@ function fixture(automaticDeletion = false) {
       session: PeerSession,
       channel: TestChannel,
     ) => {
-      for (const handler of channelHandlers)
-        await handler({ session, channel: channel.rtc() });
+      transport.events.emit("channel", {
+        session,
+        channel: channel.rtc(),
+      });
     },
     dispose: () => {
       service.dispose();

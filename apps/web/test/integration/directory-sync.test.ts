@@ -11,7 +11,7 @@ import {
 } from "vitest";
 import type { VfsVolume } from "@weblink/platform";
 import { FileCacheFactory } from "@/libs/application/cache-service";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import { FileFingerprintService } from "@/libs/application/file-fingerprint-service";
 import {
   VfsDatabase,

@@ -10,15 +10,27 @@ import {
   createPasswordCipher,
   type PasswordCipher,
 } from "@/libs/domain/utils/encrypt/e2e";
-import {
-  EventHandler,
-  MultiEventEmitter,
-} from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { encodeSignalingEnvelope } from "@/libs/domain/signaling-protocol";
+import type { EventSource } from "@weblink/platform/events";
 
 export class WebSocketSignalingService implements SignalingService {
-  private eventEmitter: MultiEventEmitter<SignalingServiceEventMap> =
-    new MultiEventEmitter();
+  private eventEmitter: EventBus<SignalingServiceEventMap> =
+    new EventBus("signaling.peer");
+  readonly events: EventSource<SignalingServiceEventMap> = {
+    subscribe: (event, callback, options) => {
+      const stop = this.eventEmitter.subscribe(
+        event,
+        callback,
+        options,
+      );
+      if (event === "signal" && !options?.signal?.aborted) {
+        this.signalListenerReady = true;
+        this.flushPendingSignals();
+      }
+      return stop;
+    },
+  };
   private socket: WebSocket;
   private _clientId: string;
   private _targetClientId: string;
@@ -82,43 +94,11 @@ export class WebSocketSignalingService implements SignalingService {
     );
   }
 
-  addEventListener<
-    K extends keyof SignalingServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<SignalingServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    this.eventEmitter.addEventListener(
-      event,
-      callback,
-      options,
-    );
-    if (event === "signal") {
-      this.signalListenerReady = true;
-      this.flushPendingSignals();
-    }
-  }
-
-  removeEventListener<
-    K extends keyof SignalingServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<SignalingServiceEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void {
-    return this.eventEmitter.removeEventListener(
-      event,
-      callback,
-      options,
-    );
-  }
-
-  dispatchEvent<K extends keyof SignalingServiceEventMap>(
+  private emit<K extends keyof SignalingServiceEventMap>(
     event: K,
     data: SignalingServiceEventMap[K],
-  ): boolean {
-    return this.eventEmitter.dispatchEvent(event, data);
+  ): void {
+    return this.eventEmitter.emit(event, data);
   }
 
   notifyPeerOnline(connectionId: string): void {
@@ -128,7 +108,7 @@ export class WebSocketSignalingService implements SignalingService {
     )
       return;
     this.peerConnectionId = connectionId;
-    this.dispatchEvent("peeravailable", undefined);
+    this.emit("peeravailable", undefined);
   }
 
   resetSocket(socket: WebSocket) {
@@ -148,7 +128,7 @@ export class WebSocketSignalingService implements SignalingService {
     if (this._status === status) return;
     this._status = status;
     if (status !== "init") {
-      this.dispatchEvent("statuschange", status);
+      this.emit("statuschange", status);
     }
   }
 
@@ -231,7 +211,7 @@ export class WebSocketSignalingService implements SignalingService {
         }
         return;
       }
-      this.dispatchEvent("signal", message);
+      this.emit("signal", message);
     } catch (error) {
       console.error(
         "[WebSocketSignalingService] failed to handle signal:",
@@ -244,7 +224,7 @@ export class WebSocketSignalingService implements SignalingService {
     if (!this.signalListenerReady) return;
     const pending = this.pendingSignals.splice(0);
     pending.forEach((message) => {
-      this.dispatchEvent("signal", message);
+      this.emit("signal", message);
     });
   }
 
@@ -257,6 +237,6 @@ export class WebSocketSignalingService implements SignalingService {
     this.cipher = undefined;
     this.signalListenerReady = false;
     this.setStatus("closed");
-    this.eventEmitter.clearListeners();
+    this.eventEmitter.dispose();
   }
 }

@@ -25,6 +25,9 @@ import type {
   ToolResult,
 } from "@weblink/automation";
 import type { PeerCapabilities } from "@/libs/domain/protocol/capabilities";
+import type { PeerSession } from "@/libs/domain/session";
+import type { PeerSessionEventMap } from "@/libs/domain/session";
+import { EventBus } from "@weblink/platform/events";
 const fixture = vi.hoisted(() => ({
   generation: "connection-1",
   remoteCapabilities: (() => undefined) as () =>
@@ -35,7 +38,8 @@ const fixture = vi.hoisted(() => ({
   channelReady: true,
   finishOpening: undefined as (() => void) | undefined,
   closeLink: undefined as (() => void) | undefined,
-  events: undefined as unknown as EventTarget,
+  events:
+    undefined as unknown as EventBus<PeerSessionEventMap>,
   messageReady: true,
   pc: {},
   advertise: vi.fn(),
@@ -62,6 +66,9 @@ vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
     sessions: {
       desktop: {
+        get events() {
+          return fixture.events.events;
+        },
         clientId: "a",
         targetClientId: "desktop",
         get isMessageChannelReady() {
@@ -70,13 +77,7 @@ vi.mock("@/libs/application/session-service", () => ({
         get peerConnection() {
           return fixture.pc;
         },
-        addEventListener(
-          ...args: Parameters<
-            EventTarget["addEventListener"]
-          >
-        ) {
-          fixture.events.addEventListener(...args);
-        },
+
         createChannel: async (
           _label: string,
           _protocol: string,
@@ -166,7 +167,9 @@ beforeEach(() => {
   fixture.channelReady = true;
   fixture.finishOpening = undefined;
   fixture.closeLink = undefined;
-  fixture.events = new EventTarget();
+  fixture.events = new EventBus<PeerSessionEventMap>(
+    "test.session",
+  );
   fixture.messageReady = true;
   fixture.pc = {};
   vi.clearAllMocks();
@@ -511,41 +514,26 @@ it("uses channel readiness events instead of scanning sessions on a timer and re
   fixture.messageReady = true;
   await vi.advanceTimersByTimeAsync(5000);
   expect(fixture.createChannel).not.toHaveBeenCalled();
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   await vi.advanceTimersByTimeAsync(0);
   expect(fixture.createChannel).toHaveBeenCalledTimes(1);
   expect(runtime.peers()).toHaveLength(1);
 
   fixture.messageReady = false;
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "closed",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "closed");
   expect(runtime.peers()).toEqual([]);
   fixture.messageReady = true;
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   await vi.advanceTimersByTimeAsync(0);
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
   expect(runtime.peers()).toHaveLength(1);
   unmount();
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
-  fixture.events.dispatchEvent(
-    new CustomEvent("peerconnectioninit", {
-      detail: fixture.pc,
-    }),
+  fixture.events.emit("messagechannelchange", "ready");
+  fixture.events.emit(
+    "peerconnectioninit",
+    fixture.pc as NonNullable<
+      PeerSession["peerConnection"]
+    >,
   );
   await vi.advanceTimersByTimeAsync(5000);
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
@@ -571,10 +559,11 @@ it("starts a replacement from its connection event and ignores an older channel 
   await runtime.configureMcp(true);
   expect(fixture.createChannel).toHaveBeenCalledTimes(1);
   fixture.pc = {};
-  fixture.events.dispatchEvent(
-    new CustomEvent("peerconnectioninit", {
-      detail: fixture.pc,
-    }),
+  fixture.events.emit(
+    "peerconnectioninit",
+    fixture.pc as NonNullable<
+      PeerSession["peerConnection"]
+    >,
   );
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
   const oldChannel = { close: vi.fn() };
@@ -583,11 +572,7 @@ it("starts a replacement from its connection event and ignores an older channel 
     expect(oldChannel.close).toHaveBeenCalledOnce(),
   );
   expect(runtime.peers()).toEqual([]);
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   expect(fixture.createChannel).toHaveBeenCalledTimes(2);
   newOpened(fixture.channel);
   await waitFor(() =>

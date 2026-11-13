@@ -1,26 +1,31 @@
 import type { PeerSession } from "@/libs/domain/session";
+import { EventBus } from "@weblink/platform/events";
+import type { RtcServiceEventMap } from "@/libs/application/rtc/rtc-service";
 import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import type {
-  RtcAnyMessageHandler,
-  RtcProtocolTransport,
-  RtcSessionClosedHandler,
+  ProtocolAnyMessageHandler,
+  ProtocolTransport,
+  ProtocolSessionClosedHandler,
 } from "@/libs/domain/protocol/transport";
 import {
   type MessageSendOptions,
-  RtcProtocolError,
+  P2PProtocolError,
 } from "@/libs/domain/protocol/errors";
 
-export class FakeRtcTransport implements RtcProtocolTransport<PeerSession> {
+export class FakeRtcTransport implements ProtocolTransport<PeerSession> {
+  readonly events = new EventBus<RtcServiceEventMap>(
+    "test.rtc",
+  );
   readonly sendCalls: {
     session: PeerSession;
     message: SessionMessage;
     options?: MessageSendOptions;
   }[] = [];
   readonly handlers = new Set<
-    RtcAnyMessageHandler<PeerSession>
+    ProtocolAnyMessageHandler<PeerSession>
   >();
   readonly closedHandlers = new Set<
-    RtcSessionClosedHandler<PeerSession>
+    ProtocolSessionClosedHandler<PeerSession>
   >();
   sendImpl?: (
     session: PeerSession,
@@ -34,13 +39,13 @@ export class FakeRtcTransport implements RtcProtocolTransport<PeerSession> {
     options?: MessageSendOptions,
   ): Promise<void> {
     if (options?.signal?.aborted)
-      throw new RtcProtocolError("aborted");
+      throw new P2PProtocolError("aborted");
     this.sendCalls.push({ session, message, options });
     await this.sendImpl?.(session, message, options);
   }
 
   onAny(
-    handler: RtcAnyMessageHandler<PeerSession>,
+    handler: ProtocolAnyMessageHandler<PeerSession>,
   ): () => void {
     this.handlers.add(handler);
     return () => {
@@ -49,7 +54,7 @@ export class FakeRtcTransport implements RtcProtocolTransport<PeerSession> {
   }
 
   onSessionClosed(
-    handler: RtcSessionClosedHandler<PeerSession>,
+    handler: ProtocolSessionClosedHandler<PeerSession>,
   ): () => void {
     this.closedHandlers.add(handler);
     return () => {
@@ -71,6 +76,7 @@ export class FakeRtcTransport implements RtcProtocolTransport<PeerSession> {
   close(session: PeerSession): void {
     for (const handler of this.closedHandlers)
       handler(session);
+    this.events.emit("sessionclosed", { session });
   }
 }
 

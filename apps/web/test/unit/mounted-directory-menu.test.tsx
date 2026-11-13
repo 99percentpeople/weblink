@@ -22,7 +22,7 @@ const openDirectory = vi.fn<FileStorage["openDirectory"]>();
 const storage = {
   mounts,
   openDirectory,
-  onChange: () => stop,
+  events: { subscribe: () => stop },
 } as unknown as FileStorage;
 beforeEach(() => {
   vi.clearAllMocks();

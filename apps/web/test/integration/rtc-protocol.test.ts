@@ -6,10 +6,8 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  RtcProtocol,
-  type WebRtcProtocol,
-} from "@/libs/application/rtc/rtc-protocol";
+import { type WebRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import {
   createSessionMessage,
   type SessionMessage,
@@ -23,7 +21,7 @@ import {
 
 const protocols: WebRtcProtocol[] = [];
 const create = (transport = new FakeRtcTransport()) => {
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   protocols.push(protocol);
   return { protocol, transport };
 };

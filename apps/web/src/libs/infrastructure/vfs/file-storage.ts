@@ -1,5 +1,6 @@
 import type {
   FileStorage,
+  FileStorageEventMap,
   FileStorageMount,
   FileStorageSnapshot,
   WritableStoredFile,
@@ -29,16 +30,15 @@ import { DirectoryVerification } from "@/libs/infrastructure/vfs/directory-verif
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
 import { WritableFileStore } from "./writable-file-store";
 import { isHiddenDirectoryEntry } from "./directory-visibility";
+import { EventBus } from "@weblink/platform/events";
 
 export class FileStorageService implements FileStorage {
   private readonly volumes = new Map<string, VfsVolume>();
   migrationProgress?: StorageMigrationProgress;
-  private readonly migrationListeners = new Set<
-    (progress: StorageMigrationProgress) => void
-  >();
-  private readonly listeners = new Set<
-    (mountId?: string) => void
-  >();
+  private readonly bus = new EventBus<FileStorageEventMap>(
+    "files.storage",
+  );
+  readonly events = this.bus.events;
   private readonly watches = new Map<string, () => void>();
   private initializing?: Promise<void>;
   private selected = "indexeddb";
@@ -171,9 +171,7 @@ export class FileStorageService implements FileStorage {
       this.lifetime.signal,
       (progress) => {
         this.migrationProgress = progress;
-        this.migrationListeners.forEach((listener) =>
-          listener(progress),
-        );
+        this.bus.emit("migration", progress);
       },
     );
     for (const volume of this.volumes.values())
@@ -583,37 +581,15 @@ export class FileStorageService implements FileStorage {
       this.directoryVerification,
     );
   }
-  onMigrationProgress(
-    listener: (progress: StorageMigrationProgress) => void,
-  ): () => void {
-    this.migrationListeners.add(listener);
-    if (this.migrationProgress)
-      listener(this.migrationProgress);
-    return () => {
-      this.migrationListeners.delete(listener);
-    };
-  }
-  onChange(
-    listener: (mountId?: string) => void,
-  ): () => void {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
   private changed(mountId?: string): void {
-    if (!this.disposed)
-      this.listeners.forEach((listener) =>
-        listener(mountId),
-      );
+    if (!this.disposed) this.bus.emit("changed", mountId);
   }
   dispose(): void {
     this.disposed = true;
     this.lifetime.abort();
     this.watches.forEach((stop) => stop());
     this.watches.clear();
-    this.listeners.clear();
-    this.migrationListeners.clear();
+    this.bus.dispose();
     // Migration may still be rolling back staging pages after abort. Close only
     // after it settles, so its cleanup cannot reopen a disposed service's DB.
     void (this.initializing ?? Promise.resolve())

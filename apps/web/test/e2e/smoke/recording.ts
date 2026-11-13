@@ -533,7 +533,7 @@ async function run() {
                   ? () =>
                       recordingMediaSources(
                         {
-                          subscribe(consumer, signal) {
+                          subscribe(consumer, _signal) {
                             return taps
                               .get(
                                 stream.getVideoTracks()[0],

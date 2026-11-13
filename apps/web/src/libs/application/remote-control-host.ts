@@ -4,6 +4,7 @@ import type {
   PlatformRuntime,
 } from "@weblink/platform";
 import { createSignal } from "solid-js";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { RemoteScreenConsent } from "./remote-screen-consent";
 import type { ControlCapability } from "../domain/protocol/capabilities";
 export interface RemoteControlPolicy {
@@ -71,7 +72,7 @@ export class RemoteControlHost {
   private owner?: string;
   private ready: Promise<void> = Promise.resolve();
   private timer?: ReturnType<typeof setTimeout>;
-  private unwatch?: () => void;
+  private subscriptions = new SubscriptionScope();
   private statusRevision = 0;
   private decisionRetry?: ReturnType<typeof setTimeout>;
   private recoveryDelay = 1000;
@@ -178,17 +179,17 @@ export class RemoteControlHost {
     const current = () =>
       generation === this.generation &&
       this.owner === owner;
+    const subscriptions = this.subscriptions;
     try {
-      const unwatch =
-        await this.platform.remoteControl!.watch(
+      await subscriptions.track(
+        this.platform.remoteControl!.watch(
           owner,
           (status) => {
             if (current())
               void this.receive(generation, owner, status);
           },
-        );
-      if (current()) this.unwatch = unwatch;
-      else unwatch();
+        ),
+      );
     } catch (error) {
       // Retrying observation must not revoke an existing native grant.
       if (!current()) return;
@@ -496,8 +497,8 @@ export class RemoteControlHost {
     ++this.generation;
     clearTimeout(this.timer);
     clearTimeout(this.decisionRetry);
-    this.unwatch?.();
-    this.unwatch = undefined;
+    this.subscriptions.dispose();
+    this.subscriptions = new SubscriptionScope();
     const id = this.owner;
     this.owner = undefined;
     if (id) this.ownerRevision[1]((value) => value + 1);

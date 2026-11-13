@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RemoteGamepads,
   gamepadState,
-  type GamepadSample,
 } from "@/libs/domain/remote-control/gamepad";
 import {
   parseInputCapabilities,

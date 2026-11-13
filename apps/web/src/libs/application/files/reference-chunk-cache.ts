@@ -9,11 +9,11 @@ import type {
   FileMetaData,
 } from "@/libs/domain/file";
 import type { FileReference } from "@/libs/domain/file-library";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 
 /** A complete attachment with its own metadata, backed by immutable shared bytes. */
 export class ReferenceChunkCache
-  extends MultiEventEmitter<ChunkCacheEventMap>
+  extends EventBus<ChunkCacheEventMap>
   implements ChunkCache
 {
   readonly id: string;
@@ -34,7 +34,7 @@ export class ReferenceChunkCache
     private readonly source: () => Promise<ChunkCache | null> = async () =>
       null,
   ) {
-    super();
+    super("files.reference");
     this.id = reference.id;
   }
   async refresh(
@@ -44,7 +44,7 @@ export class ReferenceChunkCache
     await this.initialize();
   }
   async initialize(): Promise<void> {
-    this.dispatchEvent("update", await this.getInfo());
+    this.emit("update", await this.getInfo());
   }
   async getFile(): Promise<StoredFile | null> {
     if (this.removed) return null;
@@ -151,7 +151,7 @@ export class ReferenceChunkCache
       fingerprint: this.reference.fingerprint,
     };
     await this.update(this.reference);
-    this.dispatchEvent("update", await this.getInfo());
+    this.emit("update", await this.getInfo());
   }
   async getChunk(
     index: number,
@@ -194,6 +194,7 @@ export class ReferenceChunkCache
     if (this.removed) return;
     this.removed = true;
     this.snapshot = undefined;
-    this.dispatchEvent("cleanup", undefined);
+    this.emit("cleanup", undefined);
+    this.dispose();
   }
 }

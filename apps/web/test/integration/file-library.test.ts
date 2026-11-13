@@ -17,6 +17,37 @@ beforeEach(() => vi.stubGlobal("File", NodeFile));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shared file library", () => {
+  it("releases reference subscriptions on removal and library disposal", async () => {
+    const f = setup();
+    const imported = await f.library.importFile(
+      new File(["content"], "file.txt"),
+    );
+    const reference = await f.library.prepare(
+      { kind: "library", localFileId: imported.cache.id },
+      {
+        id: "attachment",
+        chunkSize: 2,
+        fileName: "copy.txt",
+      },
+    );
+    const controller = new AbortController();
+    const remove = vi.spyOn(
+      controller.signal,
+      "removeEventListener",
+    );
+    const removed = vi.fn();
+    reference.events.subscribe("cleanup", removed, {
+      signal: controller.signal,
+    });
+    imported.cache.events.subscribe("update", () => {}, {
+      signal: controller.signal,
+    });
+    await reference.cleanup();
+    expect(removed).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledTimes(1);
+    f.library.dispose();
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
   it("keeps retained storage owned while a refresh reads its snapshot", async () => {
     const f = setup();
     await f.library.importFile(
@@ -730,7 +761,7 @@ describe("content-owned sharing", () => {
       )?.getFile(),
     ).not.toBeNull();
     const revoked = vi.fn();
-    f.library.onUnshare(revoked);
+    f.library.events.subscribe("unshared", revoked);
     await f.library.setShared(shared.id, false);
     expect(revoked).toHaveBeenCalledWith([shared.id]);
     expect(

@@ -1,6 +1,6 @@
 import { PeerSession } from "../../../src/libs/domain/session";
 import { createSessionMessage } from "../../../src/libs/domain/protocol/messages";
-import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type {
   RawSignal,
   SignalingService,
@@ -40,8 +40,9 @@ async function until(
 // Controllable signaling outage, with actual browser SDP, ICE, RTP and data
 // channels. WebSocket join/replay ordering is covered by integration tests.
 class Sender implements SignalingService {
-  readonly events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
+  readonly events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
+  );
   status: SignalingServiceStatus = "connected";
   remote!: Sender;
   interruptOffer?: () => void;
@@ -51,17 +52,13 @@ class Sender implements SignalingService {
     readonly clientId: string,
     readonly targetClientId: string,
   ) {}
-  addEventListener = this.events.addEventListener.bind(
-    this.events,
-  );
-  removeEventListener =
-    this.events.removeEventListener.bind(this.events);
+
   setStatus(
     status: Exclude<SignalingServiceStatus, "init">,
   ) {
     this.status = status;
     record(`${this.clientId} signaling ${status}`);
-    this.events.dispatchEvent("statuschange", status);
+    this.events.emit("statuschange", status);
   }
   async sendSignal(signal: RawSignal) {
     if (signal.type === "candidate") {
@@ -99,7 +96,7 @@ class Sender implements SignalingService {
   }
   private deliver(signal: RawSignal) {
     queueMicrotask(() =>
-      this.remote.events.dispatchEvent("signal", {
+      this.remote.events.emit("signal", {
         ...signal,
         clientId: this.clientId,
         targetClientId: this.targetClientId,
@@ -114,7 +111,7 @@ class Sender implements SignalingService {
   }
   close() {
     this.setStatus("closed");
-    this.events.clearListeners();
+    this.events.clear();
   }
 }
 function videoSource(color: string) {
@@ -183,15 +180,13 @@ async function main() {
       loadIceServers: async () => [],
     });
     for (const session of [a, b]) {
-      session.addEventListener("statuschange", (event) =>
-        record(
-          `${session.clientId} session ${event.detail}`,
-        ),
+      session.events.subscribe("statuschange", (event) =>
+        record(`${session.clientId} session ${event}`),
       );
-      session.addEventListener(
+      session.events.subscribe(
         "peerconnectioninit",
         (event) => {
-          const pc = event.detail;
+          const pc = event;
           const observe =
             <Args extends unknown[]>(
               method: string,
@@ -230,11 +225,11 @@ async function main() {
         },
       );
     }
-    b.addEventListener("remotestreamchange", (event) => {
-      remote = event.detail;
+    b.events.subscribe("remotestreamchange", (event) => {
+      remote = event;
     });
-    a.addEventListener("remotestreamchange", (event) => {
-      reverseRemote = event.detail;
+    a.events.subscribe("remotestreamchange", (event) => {
+      reverseRemote = event;
     });
     a.setStream(stream);
     await Promise.all([a.listen(), b.listen()]);
@@ -276,9 +271,9 @@ async function main() {
     const id = crypto.randomUUID();
     try {
       for (const session of [a, b]) {
-        session.addEventListener(
+        session.events.subscribe(
           "message",
-          ({ detail }) => {
+          (detail) => {
             if (
               detail.id === id &&
               detail.type === "send-text" &&
@@ -535,15 +530,15 @@ async function main() {
       "online peer keeps its signaling socket",
     );
     sb.setStatus("connected");
-    sa.events.dispatchEvent("peeravailable", undefined);
+    sa.events.emit("peeravailable", undefined);
     await until(
       () => mediaReady(),
       "server peer-online restores media and messages",
     );
     const availableA = a.peerConnection,
       availableB = b.peerConnection;
-    sa.events.dispatchEvent("peeravailable", undefined);
-    sb.events.dispatchEvent("peeravailable", undefined);
+    sa.events.emit("peeravailable", undefined);
+    sb.events.emit("peeravailable", undefined);
     await Promise.resolve();
     assert(
       a.peerConnection === availableA &&
@@ -636,9 +631,9 @@ async function main() {
     };
     const offlineController = new AbortController();
     let offline = false;
-    b.addEventListener(
+    b.events.subscribe(
       "statuschange",
-      ({ detail }) => {
+      (detail) => {
         offline = detail === "disconnected";
       },
       { signal: offlineController.signal },

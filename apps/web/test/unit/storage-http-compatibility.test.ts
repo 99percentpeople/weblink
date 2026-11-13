@@ -114,7 +114,7 @@ it.each(["completed", "partial"])(
     );
     legacy.close();
     const phases: string[] = [];
-    storage.onMigrationProgress(({ phase }) =>
+    storage.events.subscribe("migration", ({ phase }) =>
       phases.push(phase),
     );
     await storage.initialize();

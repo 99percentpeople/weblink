@@ -2,7 +2,7 @@ import { RoomMessagingService } from "../../../src/libs/application/messaging/ro
 import { P2PProtocol } from "../../../src/libs/domain/protocol/protocol";
 import { parseSessionMessage } from "../../../src/libs/domain/protocol/validation";
 import { MessageSendQueue } from "../../../src/libs/domain/session-send-queue";
-import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type {
   PeerSession,
   PeerSessionEventMap,
@@ -119,16 +119,16 @@ function participant(id: string) {
     behavior,
     endpoint(peerId: string) {
       let channel: RTCDataChannel | undefined;
-      const emitter =
-        new MultiEventEmitter<PeerSessionEventMap>();
+      const emitter = new EventBus<PeerSessionEventMap>(
+        "test.events",
+      );
       const session = {
         clientId: id,
         targetClientId: peerId,
         get isMessageChannelReady() {
           return channel?.readyState === "open";
         },
-        addEventListener:
-          emitter.addEventListener.bind(emitter),
+        events: emitter.events,
       } as unknown as PeerSession;
       const queue = new MessageSendQueue(
         () => channel ?? null,
@@ -146,7 +146,7 @@ function participant(id: string) {
         queues.delete(session);
         for (const handler of closedHandlers)
           handler(session);
-        emitter.dispatchEvent("statuschange", "closed");
+        emitter.emit("statuschange", "closed");
         channel?.close();
       };
       return {
@@ -154,10 +154,7 @@ function participant(id: string) {
           channel = next;
           const ready = () => {
             queue.flush();
-            emitter.dispatchEvent(
-              "messagechannelchange",
-              "ready",
-            );
+            emitter.emit("messagechannelchange", "ready");
           };
           next.addEventListener("open", ready);
           next.addEventListener("message", ({ data }) => {

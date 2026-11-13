@@ -560,9 +560,9 @@ export class PeerTrustService {
       this.revision[1]((v) => v + 1);
       return true;
     };
-    session.addEventListener(
+    session.events.subscribe(
       "channel",
-      ({ detail }) => {
+      (detail) => {
         if (
           detail.label === PAIRING_CHANNEL &&
           detail.protocol === PAIRING_CHANNEL
@@ -586,12 +586,12 @@ export class PeerTrustService {
       },
       { signal: b.life.signal },
     );
-    session.addEventListener("peerconnectioninit", reset, {
+    session.events.subscribe("peerconnectioninit", reset, {
       signal: b.life.signal,
     });
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
-      ({ detail }) => {
+      (detail) => {
         if (detail === "ready") open();
         else reset();
       },

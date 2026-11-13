@@ -77,7 +77,7 @@ vi.mock(
       get conversations() {
         return appState.message.conversations;
       },
-      onMessageStored: mocks.stored,
+      events: { subscribe: mocks.stored },
     },
   }),
 );
@@ -164,7 +164,7 @@ beforeEach(() => {
   mocks.dismiss.mockResolvedValue(undefined);
   mocks.close.mockResolvedValue(undefined);
   mocks.showApp.mockResolvedValue(undefined);
-  mocks.stored.mockImplementation((listener) => {
+  mocks.stored.mockImplementation((_topic, listener) => {
     receiveMessage = listener;
     return mocks.unsubscribe;
   });

@@ -1,4 +1,5 @@
 import { createVideoPresentationStats } from "@/libs/domain/video-presentation-stats";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 /** Read-only player observers, owned by the application diagnostics service. */
 export class PresentationDiagnostics {
   constructor(
@@ -8,7 +9,7 @@ export class PresentationDiagnostics {
       | { read(): Record<string, unknown>; close(): void }
       | undefined,
   ) {}
-  private readonly disposers = new Set<() => void>();
+  private subscriptions = new SubscriptionScope();
   private readonly readers = new Map<
     MediaStreamTrack,
     Set<() => Record<string, unknown>>
@@ -54,14 +55,15 @@ export class PresentationDiagnostics {
       this.readers.set(track, readers);
     }
     readers.add(read);
-    const dispose = () => {
-      this.disposers.delete(dispose);
-      sampler.close();
+    return this.subscriptions.add(() => {
       readers.delete(read);
-      if (!readers.size) this.readers.delete(track);
-    };
-    this.disposers.add(dispose);
-    return dispose;
+      if (
+        !readers.size &&
+        this.readers.get(track) === readers
+      )
+        this.readers.delete(track);
+      sampler.close();
+    });
   }
   read(track: MediaStreamTrack): Record<string, unknown>[] {
     return [...(this.readers.get(track) ?? [])].map(
@@ -69,7 +71,8 @@ export class PresentationDiagnostics {
     );
   }
   clear(): void {
-    for (const dispose of [...this.disposers]) dispose();
-    this.readers.clear();
+    const subscriptions = this.subscriptions;
+    this.subscriptions = new SubscriptionScope();
+    subscriptions.dispose();
   }
 }

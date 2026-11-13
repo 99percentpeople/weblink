@@ -1,4 +1,4 @@
-import type { EventHandler } from "@/libs/utils/event-emitter";
+import type { EventSource } from "@weblink/platform/events";
 import type { ClientID } from "./ids";
 import type { SignalingEnvelope } from "./signaling-protocol";
 
@@ -23,24 +23,9 @@ export type SignalingServiceEventMap = {
 };
 
 export interface SignalingService {
+  readonly events: EventSource<SignalingServiceEventMap>;
   get status(): SignalingServiceStatus;
   sendSignal(signal: RawSignal): Promise<void>;
-
-  addEventListener<
-    K extends keyof SignalingServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<SignalingServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void;
-
-  removeEventListener<
-    K extends keyof SignalingServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<SignalingServiceEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void;
 
   clientId: ClientID;
   targetClientId: ClientID;

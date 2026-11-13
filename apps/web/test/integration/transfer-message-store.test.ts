@@ -48,7 +48,7 @@ it("the production store resolves message identity after deletion and never resu
   );
   try {
     store.deleteMessage("earlier");
-    transferer.dispatchEvent("progress", {
+    transferer.emit("progress", {
       total: 2048,
       received: 512,
     });
@@ -60,7 +60,7 @@ it("the production store resolves message identity after deletion and never resu
       "progress",
     );
     store.deleteMessage("target");
-    transferer.dispatchEvent("progress", {
+    transferer.emit("progress", {
       total: 2048,
       received: 1024,
     });

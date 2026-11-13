@@ -1,6 +1,8 @@
 import { FakeRtcTransport } from "../support/rtc-transport";
 import { describe, expect, it, vi } from "vitest";
 import type { PeerSession } from "@/libs/domain/session";
+import type { PeerSessionEventMap } from "@/libs/domain/session";
+import { EventBus } from "@weblink/platform/events";
 import { RTC_PROFILE_PROTOCOL_VERSION } from "@/libs/domain/profile";
 import {
   createClientPresence,
@@ -8,44 +10,18 @@ import {
 } from "@/libs/infrastructure/signaling/client/client-presence";
 import type { TransferClient } from "@/libs/domain/client";
 import {
-  RtcProtocol,
+  P2PProtocol,
   type ClientProfileMessage,
-} from "@/libs/application/rtc/rtc-protocol";
+} from "@/libs/domain/protocol";
 import { PeerProfileService } from "@/libs/application/peer-profile-service";
 
-class FakeSession {
+class FakeSession extends EventBus<PeerSessionEventMap> {
+  constructor() {
+    super("test.session");
+  }
   readonly clientId = "local";
   readonly targetClientId = "remote";
   isMessageChannelReady = false;
-
-  private readonly listeners = new Map<
-    string,
-    Set<(event: { detail: unknown }) => void>
-  >();
-
-  addEventListener(
-    event: string,
-    handler: (event: { detail: unknown }) => void,
-    options?: AddEventListenerOptions | boolean,
-  ) {
-    const handlers = this.listeners.get(event) ?? new Set();
-    handlers.add(handler);
-    this.listeners.set(event, handlers);
-
-    if (typeof options !== "boolean" && options?.signal) {
-      options.signal.addEventListener(
-        "abort",
-        () => handlers.delete(handler),
-        { once: true },
-      );
-    }
-  }
-
-  emit(event: string, detail: unknown) {
-    for (const handler of this.listeners.get(event) ?? []) {
-      handler({ detail });
-    }
-  }
 }
 
 const flush = async () => {
@@ -104,7 +80,7 @@ describe("PeerProfileService", () => {
       .spyOn(Date, "now")
       .mockReturnValue(100);
     const transport = new FakeRtcTransport();
-    const protocol = new RtcProtocol(transport);
+    const protocol = new P2PProtocol(transport);
     const session = new FakeSession();
     const service = new PeerProfileService(protocol, {
       getLocalClient: () => ({
@@ -139,7 +115,7 @@ describe("PeerProfileService", () => {
 
   it("accepts only profiles matching the bound RTC peers", async () => {
     const transport = new FakeRtcTransport();
-    const protocol = new RtcProtocol(transport);
+    const protocol = new P2PProtocol(transport);
     const session = new FakeSession();
     const onRemoteClient = vi.fn();
     const service = new PeerProfileService(protocol, {

@@ -29,12 +29,17 @@ import type {
   ToolResult,
 } from "@weblink/automation";
 import { AutomationError } from "@weblink/automation";
-import type { PeerSession } from "@/libs/domain/session";
+import type {
+  PeerSession,
+  PeerSessionEventMap,
+} from "@/libs/domain/session";
+import { EventBus } from "@weblink/platform/events";
 const fixture = vi.hoisted(() => ({
   configureShortcut: vi.fn(async (_shortcut: string) => {}),
   generation: "connection-1",
   closeLink: undefined as (() => void) | undefined,
-  events: new EventTarget(),
+  events:
+    undefined as unknown as EventBus<PeerSessionEventMap>,
   native: undefined as unknown as NativeAutomation,
   sessions: {} as Record<string, PeerSession>,
   receive: true,
@@ -701,7 +706,9 @@ beforeEach(() => {
   statusRevision = 0;
   fixture.configureShortcut.mockReset().mockResolvedValue();
   fixture.generation = "connection-1";
-  fixture.events = new EventTarget();
+  fixture.events = new EventBus<PeerSessionEventMap>(
+    "test.session",
+  );
   fixture.closeLink = undefined;
   fixture.handle.mockReset().mockResolvedValue({});
   fixture.remoteCall.mockReset().mockResolvedValue({
@@ -1297,14 +1304,14 @@ it("does not start the listener if the owner closes while native initialization 
   expect(appState.options.mcpEnabled).toBe(true);
 });
 function peer() {
+  const events = fixture.events.events;
   fixture.sessions.peer = {
+    events,
     clientId: "a",
     targetClientId: "peer",
     isMessageChannelReady: true,
     peerConnection: {},
-    addEventListener: fixture.events.addEventListener.bind(
-      fixture.events,
-    ),
+
     createChannel: async (
       _label: string,
       _protocol: string,
@@ -1881,11 +1888,7 @@ it("waits for native cleanup before reopening an automation channel in the same 
   );
   fixture.closeLink!();
   await waitFor(() => expect(release).toBeDefined());
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   expect(view.runtime.peers()).toEqual([]);
   expect(fixture.incoming).toBe(previous);
   expect(fixture.native.peer).toHaveBeenCalledTimes(1);
@@ -1923,11 +1926,7 @@ it("fences a registered channel immediately when the shared connection generatio
     "TARGET_DISCONNECTED",
   );
   expect(fixture.native.call).toHaveBeenCalledTimes(1);
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   await waitFor(() =>
     expect(fixture.incoming).not.toBe(previous),
   );
@@ -1955,21 +1954,13 @@ it("admits automation only after shared paired-device access succeeds and revoke
   expect(fixture.incoming).toBeUndefined();
   expect(fixture.native.peer).not.toHaveBeenCalled();
   fixture.receive = true;
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   await waitFor(() =>
     expect(fixture.incoming).toBeDefined(),
   );
   await incoming();
   fixture.receive = false;
-  fixture.events.dispatchEvent(
-    new CustomEvent("messagechannelchange", {
-      detail: "ready",
-    }),
-  );
+  fixture.events.emit("messagechannelchange", "ready");
   await waitFor(() =>
     expect(fixture.native.disconnect).toHaveBeenCalled(),
   );

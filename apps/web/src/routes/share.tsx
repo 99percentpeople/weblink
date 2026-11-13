@@ -26,7 +26,7 @@ const ShareClientItem = (props: { client: ClientInfo }) => {
   );
 };
 
-const Share = (props: RouteSectionProps) => {
+const Share = (_props: RouteSectionProps) => {
   const availableClients = createMemo(() =>
     Object.values(appState.session.clientViewData).filter(
       (client) => client.onlineStatus === "online",

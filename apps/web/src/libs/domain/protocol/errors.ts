@@ -10,8 +10,6 @@ export type P2PProtocolErrorCode =
   | "invalid-message"
   | "unsupported-protocol";
 
-export type RtcProtocolErrorCode = P2PProtocolErrorCode;
-
 export class P2PProtocolError extends Error {
   constructor(
     readonly code: P2PProtocolErrorCode,
@@ -22,9 +20,6 @@ export class P2PProtocolError extends Error {
     this.name = "P2PProtocolError";
   }
 }
-
-// Backward-compatible WebRTC-era name.
-export { P2PProtocolError as RtcProtocolError };
 
 export function protocolError(
   error: unknown,

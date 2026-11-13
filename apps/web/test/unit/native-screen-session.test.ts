@@ -1168,7 +1168,7 @@ describe("native screen control", () => {
     expect(receivers).toHaveLength(0);
   });
   it("bounds reconnect attempts and releases senders when answers never arrive", async () => {
-    const { session, channel, port } = setup();
+    const { session, port } = setup();
     const pub = publication();
     session.setPublication(pub);
     session.setRemoteCapabilities({
@@ -1249,7 +1249,7 @@ describe("native screen control", () => {
     session.reset();
   });
   it("sends just one screen to a single-screen peer and promotes the next after removal", async () => {
-    const { session, channel } = setup();
+    const { session } = setup();
     const first = publication("one"),
       second = publication("two");
     session.setPublications([first, second]);

@@ -40,9 +40,14 @@ const fixture = vi.hoisted(() => {
       })),
     openDirectory,
     initialize: vi.fn(),
-    onChange: (listener: () => void) => {
-      state.listeners.add(listener);
-      return () => state.listeners.delete(listener);
+    events: {
+      subscribe: (
+        _topic: "changed",
+        listener: () => void,
+      ) => {
+        state.listeners.add(listener);
+        return () => state.listeners.delete(listener);
+      },
     },
     setDefault: vi.fn(),
     mountDirectory: vi.fn(),

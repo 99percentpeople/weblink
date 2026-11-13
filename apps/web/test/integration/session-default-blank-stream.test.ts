@@ -23,14 +23,14 @@ const makeSender = (
   targetClientId: string,
 ): SignalingService =>
   ({
+    events: { subscribe: () => () => {} },
     clientId,
     targetClientId,
     get status() {
       return "connected";
     },
     sendSignal: async () => {},
-    addEventListener: ((..._args: any[]) => {}) as any,
-    removeEventListener: ((..._args: any[]) => {}) as any,
+
     close: () => {},
   }) as SignalingService;
 

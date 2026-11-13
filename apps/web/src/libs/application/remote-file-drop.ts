@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createSignal } from "solid-js";
 import type {
   ClipboardScope,
@@ -47,7 +48,7 @@ interface Options {
     WebRtcProtocol,
     "call" | "handle" | "notify" | "on"
   >;
-  rtc: Pick<RtcService, "onSessionClosed">;
+  rtc: Pick<RtcService, "events">;
   registry: TransferRegistry;
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
@@ -89,7 +90,7 @@ export class RemoteFileDrop {
     [],
   );
   readonly tasks = this.state[0];
-  private readonly stops: (() => void)[];
+  private readonly subscriptions = new SubscriptionScope();
   private disposed = false;
   private nativeSetup: Promise<void> = Promise.resolve();
   private queueNative(action: () => Promise<void>) {
@@ -98,20 +99,27 @@ export class RemoteFileDrop {
     return result;
   }
   constructor(private readonly options: Options) {
-    this.stops = [
+    this.subscriptions.add(
       options.protocol.handle("remote-file-drop", (ctx) =>
         this.receive(ctx),
       ),
+    );
+    this.subscriptions.add(
       options.protocol.on(
         "remote-file-drop-position",
         ({ session, message }) =>
           this.receivePosition(session, message),
       ),
-      options.rtc.onSessionClosed((session) => {
-        const job = this.jobs.get(session);
-        if (job) this.stop(job);
-      }),
-    ];
+    );
+    this.subscriptions.add(
+      options.rtc.events.subscribe(
+        "sessionclosed",
+        ({ session }) => {
+          const job = this.jobs.get(session);
+          if (job) this.stop(job);
+        },
+      ),
+    );
   }
   clearFinished = () =>
     this.state[1]((tasks) =>
@@ -718,7 +726,7 @@ export class RemoteFileDrop {
   }
   dispose() {
     this.disposed = true;
-    for (const stop of this.stops) stop();
+    this.subscriptions.dispose();
     for (const job of this.jobs.values()) this.stop(job);
   }
 }

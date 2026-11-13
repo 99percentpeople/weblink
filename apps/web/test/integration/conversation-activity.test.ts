@@ -11,7 +11,6 @@ import { reconcile } from "solid-js/store";
 import { MessageStores } from "@/libs/application/messaging/message-store";
 import { createConversationActivity } from "@/libs/state/create-conversation-activity";
 import {
-  appState,
   createInitialAppState,
   setAppState,
 } from "@/libs/state/app-state";

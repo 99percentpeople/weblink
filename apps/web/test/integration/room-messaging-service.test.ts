@@ -23,7 +23,7 @@ import type {
   PeerSessionEventMap,
 } from "@/libs/domain/session";
 import type { TextMessage } from "@/libs/domain/message";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import {
   FakeRtcTransport,
   deferred,
@@ -123,23 +123,23 @@ function node(
 }
 
 function connect(a: Node, b: Node, ready = true) {
-  const leftEmitter =
-    new MultiEventEmitter<PeerSessionEventMap>();
-  const rightEmitter =
-    new MultiEventEmitter<PeerSessionEventMap>();
+  const leftEmitter = new EventBus<PeerSessionEventMap>(
+    "test.events",
+  );
+  const rightEmitter = new EventBus<PeerSessionEventMap>(
+    "test.events",
+  );
   const left = {
     clientId: a.id,
     targetClientId: b.id,
     isMessageChannelReady: ready,
-    addEventListener:
-      leftEmitter.addEventListener.bind(leftEmitter),
+    events: leftEmitter.events,
   } as unknown as PeerSession;
   const right = {
     clientId: b.id,
     targetClientId: a.id,
     isMessageChannelReady: ready,
-    addEventListener:
-      rightEmitter.addEventListener.bind(rightEmitter),
+    events: rightEmitter.events,
   } as unknown as PeerSession;
   a.state.sessions.push(left);
   b.state.sessions.push(right);
@@ -161,11 +161,11 @@ function connect(a: Node, b: Node, ready = true) {
       Object.assign(right, {
         isMessageChannelReady: value,
       });
-      leftEmitter.dispatchEvent(
+      leftEmitter.emit(
         "messagechannelchange",
         value ? "ready" : "closed",
       );
-      rightEmitter.dispatchEvent(
+      rightEmitter.emit(
         "messagechannelchange",
         value ? "ready" : "closed",
       );
@@ -179,8 +179,8 @@ function connect(a: Node, b: Node, ready = true) {
       );
       a.transport.close(left);
       b.transport.close(right);
-      leftEmitter.dispatchEvent("statuschange", "closed");
-      rightEmitter.dispatchEvent("statuschange", "closed");
+      leftEmitter.emit("statuschange", "closed");
+      rightEmitter.emit("statuschange", "closed");
     },
   };
 }

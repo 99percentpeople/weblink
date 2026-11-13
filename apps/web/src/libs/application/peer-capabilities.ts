@@ -155,9 +155,9 @@ export class PeerCapabilitiesService {
       changed(undefined);
     };
     const signal = binding.lifetime.signal;
-    session.addEventListener(
+    session.events.subscribe(
       "message",
-      ({ detail: message }) => {
+      (message) => {
         if (
           message.type !== "peer-capabilities" ||
           message.client !== session.targetClientId ||
@@ -190,12 +190,12 @@ export class PeerCapabilitiesService {
       },
       { signal },
     );
-    session.addEventListener("peerconnectioninit", reset, {
+    session.events.subscribe("peerconnectioninit", reset, {
       signal,
     });
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
-      ({ detail }) => {
+      (detail) => {
         if (detail === "ready") this.refresh(session, true);
         else reset();
       },

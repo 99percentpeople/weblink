@@ -5,6 +5,7 @@ import type {
   SystemNotifications,
 } from "@weblink/platform";
 import type { NotificationOptions } from "@/libs/domain/notification-options";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 
 export interface InAppNotification {
   dismiss(): void;
@@ -53,6 +54,7 @@ interface Delivery {
 
 /** One event uses one channel; an explicit native body click can transfer it to the existing toast. */
 export class NotificationService {
+  private readonly subscriptions = new SubscriptionScope();
   private readonly deliveries = new Map<string, Delivery>();
   private readonly pending = new Map<string, Delivery>();
   private readonly session?: Promise<NotificationSession>;
@@ -66,9 +68,17 @@ export class NotificationService {
     private readonly onError: (error: unknown) => void,
   ) {
     this.session = platform?.watch(
-      (action) => void this.respond(action),
+      this.subscriptions.guard(
+        (action: NotificationAction) =>
+          void this.respond(action),
+      ),
     );
     void this.session?.catch(onError);
+    this.subscriptions.add(() =>
+      this.session
+        ?.then((session) => session.close())
+        .catch(onError),
+    );
   }
   private current(
     intent: NotificationIntent,
@@ -354,8 +364,6 @@ export class NotificationService {
     for (const id of this.deliveries.keys())
       this.dismiss(id);
     this.deliveries.clear();
-    void this.session
-      ?.then((session) => session.close())
-      .catch(this.onError);
+    this.subscriptions.dispose();
   }
 }

@@ -63,7 +63,7 @@ vi.mock(
     messageStores: {
       clients: [],
       conversations: [],
-      onMessageStored: () => mocks.unsubscribe,
+      events: { subscribe: () => mocks.unsubscribe },
     },
   }),
 );

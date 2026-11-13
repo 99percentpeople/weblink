@@ -91,10 +91,15 @@ vi.mock("@/libs/application/cache-service", () => ({
           canOpen: !!fixture.platform.filesystem,
         },
       ],
-      onChange: (listener: () => void) => {
-        fixture.storageState.listeners.add(listener);
-        return () =>
-          fixture.storageState.listeners.delete(listener);
+      events: {
+        subscribe: (
+          _topic: "changed",
+          listener: () => void,
+        ) => {
+          fixture.storageState.listeners.add(listener);
+          return () =>
+            fixture.storageState.listeners.delete(listener);
+        },
       },
     },
   },

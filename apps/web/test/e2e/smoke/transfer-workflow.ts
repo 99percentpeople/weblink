@@ -3,7 +3,7 @@ import { FileFingerprintService } from "../../../src/libs/application/file-finge
 import { IndexedDbFileLibrary } from "../../../src/libs/infrastructure/storage/indexeddb-file-library";
 import { completeLocalFile } from "../../../src/libs/application/transfer/file-content-completion";
 import type { ChunkCache } from "../../../src/libs/domain/file";
-import { FileStorageService } from "../../../src/libs/application/file-storage-service";
+import { FileStorageService } from "../../../src/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "../../../src/libs/infrastructure/vfs/database";
 import { FileSender } from "../../../src/libs/domain/transfer/file-sender";
 import { FileReceiver } from "../../../src/libs/domain/transfer/file-receiver";
@@ -15,11 +15,11 @@ import type {
 import type { FileTransferMessage } from "../../../src/libs/domain/message";
 import type { SessionMessage } from "../../../src/libs/domain/protocol/messages";
 import type {
-  RtcAnyMessageHandler,
-  RtcSessionClosedHandler,
+  ProtocolAnyMessageHandler,
+  ProtocolSessionClosedHandler,
 } from "../../../src/libs/domain/protocol/transport";
-import type { RtcChannelHandler } from "../../../src/libs/application/rtc/rtc-service";
-import { RtcProtocol } from "../../../src/libs/application/rtc/rtc-protocol";
+import type { RtcServiceEventMap } from "../../../src/libs/application/rtc/rtc-service";
+import { P2PProtocol } from "../../../src/libs/domain/protocol";
 import { PeerMessagingService } from "../../../src/libs/application/messaging/peer-messaging-service";
 import { FileTransferService } from "../../../src/libs/application/transfer/file-transfer-service";
 import { TransferRegistry } from "../../../src/libs/application/transfer/transfer-registry";
@@ -31,7 +31,7 @@ import {
 import type { FileTransferStates } from "../../../src/libs/application/transfer/file-transfer-state";
 import { RoomMessagingService } from "../../../src/libs/application/messaging/room-messaging-service";
 import { RoomFileSharingService } from "../../../src/libs/application/messaging/room-file-sharing-service";
-import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { getDefaultAppOptions } from "../../../src/libs/state/app-options";
 
 import { createRoot, createEffect } from "solid-js";
@@ -84,12 +84,14 @@ class BrowserTransport {
     RTCDataChannel
   >();
   readonly incoming = new Set<
-    RtcAnyMessageHandler<PeerSession>
+    ProtocolAnyMessageHandler<PeerSession>
   >();
   readonly closed = new Set<
-    RtcSessionClosedHandler<PeerSession>
+    ProtocolSessionClosedHandler<PeerSession>
   >();
-  readonly files = new Set<RtcChannelHandler>();
+  readonly events = new EventBus<RtcServiceEventMap>(
+    "test.rtc",
+  );
   async send(
     session: PeerSession,
     message: SessionMessage,
@@ -102,24 +104,18 @@ class BrowserTransport {
     this.sent.push(message);
     channel.send(JSON.stringify(message));
   }
-  onAny(handler: RtcAnyMessageHandler<PeerSession>) {
+  onAny(handler: ProtocolAnyMessageHandler<PeerSession>) {
     this.incoming.add(handler);
     return () => {
       this.incoming.delete(handler);
     };
   }
   onSessionClosed(
-    handler: RtcSessionClosedHandler<PeerSession>,
+    handler: ProtocolSessionClosedHandler<PeerSession>,
   ) {
     this.closed.add(handler);
     return () => {
       this.closed.delete(handler);
-    };
-  }
-  onChannel(handler: RtcChannelHandler) {
-    this.files.add(handler);
-    return () => {
-      this.files.delete(handler);
     };
   }
   attach(session: PeerSession, channel: RTCDataChannel) {
@@ -135,8 +131,7 @@ class BrowserTransport {
       });
     } else {
       ++this.fileChannels;
-      for (const handler of this.files)
-        void handler({ session, channel });
+      this.events.emit("channel", { session, channel });
     }
   }
 }
@@ -147,7 +142,7 @@ function makeNode(
   contentEnabled = false,
 ) {
   const transport = new BrowserTransport();
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   const sessions = new Map<string, PeerSession>();
   const caches = new Map<string, ChunkCache>();
   const messages: FileTransferMessage[] = [];
@@ -239,7 +234,7 @@ function makeNode(
       await raw.initialize();
       const scoped = raw;
       rawCaches.set(fid, scoped);
-      raw.addEventListener("cleanup", () => {
+      raw.events.subscribe("cleanup", () => {
         rawCaches.delete(fid);
         if (caches.get(fid) === scoped) caches.delete(fid);
       });
@@ -273,10 +268,10 @@ function makeNode(
       getCache: (fid) => caches.get(fid) ?? null,
       publish: async (cache) => {
         caches.set(cache.id, cache);
-        cache.addEventListener("update", ({ detail }) =>
+        cache.events.subscribe("update", (detail) =>
           index.update(cache.id, detail),
         );
-        cache.addEventListener("cleanup", () =>
+        cache.events.subscribe("cleanup", () =>
           index.update(cache.id, null),
         );
         await cache.initialize();
@@ -447,8 +442,7 @@ function makeNode(
     getSessions: () => sessions.values(),
     isReady: (session) => session.isMessageChannelReady,
     canList: () => sharing,
-    onSessionClosed: (handler) =>
-      transport.onSessionClosed(handler),
+    sessionEvents: transport.events,
   });
   return {
     holdCompletion(gate: Promise<void>) {
@@ -511,8 +505,9 @@ async function connect(a: Node, b: Node) {
     remote: Node,
     pc: RTCPeerConnection,
   ): PeerSession => {
-    const events =
-      new MultiEventEmitter<PeerSessionEventMap>();
+    const events = new EventBus<PeerSessionEventMap>(
+      "test.events",
+    );
     const result = {
       clientId: local.id,
       targetClientId: remote.id,
@@ -523,8 +518,7 @@ async function connect(a: Node, b: Node) {
             ?.readyState === "open"
         );
       },
-      addEventListener:
-        events.addEventListener.bind(events),
+      events: events.events,
       createChannel: async (
         label: string,
         protocol: string,
@@ -542,7 +536,7 @@ async function connect(a: Node, b: Node) {
     } as unknown as PeerSession;
     pc.addEventListener("connectionstatechange", () => {
       if (pc.connectionState === "closed")
-        events.dispatchEvent("statuschange", "closed");
+        events.emit("statuschange", "closed");
     });
     return result;
   };

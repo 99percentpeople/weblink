@@ -4,6 +4,7 @@ import {
   SetStoreFunction,
 } from "solid-js/store";
 import type { Accessor } from "solid-js";
+import { EventBus } from "@weblink/platform/events";
 import type { Client } from "@/libs/domain/client";
 import type { ClientID } from "@/libs/domain/ids";
 import type {
@@ -44,17 +45,12 @@ import {
 } from "./message-projection";
 
 export class MessageStores {
-  private readonly storedListeners = new Set<
-    (message: StoreMessage) => void
-  >();
-  onMessageStored(
-    listener: (message: StoreMessage) => void,
-  ): () => void {
-    this.storedListeners.add(listener);
-    return () => {
-      this.storedListeners.delete(listener);
-    };
-  }
+  private readonly bus = new EventBus<{
+    stored: StoreMessage;
+  }>("messaging.store", (error) =>
+    console.warn("Message notification failed", error),
+  );
+  readonly events = this.bus.events;
   readonly messages: StoreMessage[] =
     appState.message.messages;
   readonly clients: Client[] = appState.message.clients;
@@ -125,16 +121,7 @@ export class MessageStores {
               message.conversationId,
               Date.now(),
             );
-          for (const listener of this.storedListeners) {
-            try {
-              listener(message);
-            } catch (error) {
-              console.warn(
-                "Message notification failed",
-                error,
-              );
-            }
-          }
+          this.bus.emit("stored", message);
         },
         conversations: this.conversations,
         messages: this.messages,

@@ -9,8 +9,8 @@ import {
 } from "vitest";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
-import type { RtcChannelHandler } from "@/libs/application/rtc/rtc-service";
+import { P2PProtocol } from "@/libs/domain/protocol";
+
 import type { PeerSession } from "@/libs/domain/session";
 import type {
   ChunkCache,
@@ -34,10 +34,10 @@ import {
 function setup() {
   const fixture = registryFixture();
   const transport = new FakeRtcTransport();
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   const sessions = new Map<string, PeerSession>();
   const caches = new Map<string, ChunkCache>();
-  const channels = new Set<RtcChannelHandler>();
+
   const cacheApi = {
     getCache: (id: string) => caches.get(id) ?? null,
     createCache: vi.fn(
@@ -59,16 +59,7 @@ function setup() {
       protocol,
       fixture.messages,
     ),
-    rtc: {
-      onSessionClosed:
-        transport.onSessionClosed.bind(transport),
-      onChannel: (handler) => {
-        channels.add(handler);
-        return () => {
-          channels.delete(handler);
-        };
-      },
-    },
+    rtc: { events: transport.events },
     getSession: (id) => sessions.get(id),
     getChunkSize: () => 1024,
   });
@@ -81,8 +72,7 @@ function setup() {
     session: PeerSession,
     channel = fakeChannel(),
   ) => {
-    for (const handler of channels)
-      await handler({ session, channel });
+    transport.events.emit("channel", { session, channel });
     return channel;
   };
   return {
@@ -197,11 +187,11 @@ describe("room attachment transfer lifecycle", () => {
       ),
     );
     await Promise.all([f.emitChannel(a), f.emitChannel(b)]);
-    f.created[0].dispatchEvent("progress", {
+    f.created[0].emit("progress", {
       total: 2048,
       received: 256,
     });
-    f.created[1].dispatchEvent("progress", {
+    f.created[1].emit("progress", {
       total: 2048,
       received: 1024,
     });
@@ -265,7 +255,7 @@ describe("room attachment transfer lifecycle", () => {
       [[0, 1]],
       expect.any(AbortSignal),
     );
-    f.created[0].dispatchEvent("progress", {
+    f.created[0].emit("progress", {
       total: 2048,
       received: 1024,
     });
@@ -680,7 +670,7 @@ describe("room attachment transfer lifecycle", () => {
       "paused",
     );
     f.messages.messages.splice(0, 1);
-    f.created[1].dispatchEvent("progress", {
+    f.created[1].emit("progress", {
       total: 2048,
       received: 100,
     });

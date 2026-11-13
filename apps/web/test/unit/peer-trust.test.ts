@@ -6,7 +6,7 @@ import type {
   DevicePin,
 } from "@/libs/infrastructure/identity/device-identity-store";
 import type { PeerSession } from "@/libs/domain/session";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type { IdentityProof } from "@/libs/domain/device-identity/handshake";
 import type { PairingCredentials } from "@/libs/domain/device-identity/credentials";
 import type { PairingRequest } from "@/libs/domain/device-identity/manual-pairing";
@@ -70,7 +70,7 @@ it("ignores stale automatic verification/failure after an explicit manual approv
     blocked: true,
   });
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
-  h.events.dispatchEvent("channel", {
+  h.events.emit("channel", {
     label: "weblink-device-pairing/1",
     protocol: "weblink-device-pairing/1",
     close() {},
@@ -110,14 +110,14 @@ it("does not apply a manual commit queued for a disconnected binding to its repl
     blocked: true,
   });
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
-  h.events.dispatchEvent("channel", {
+  h.events.emit("channel", {
     label: "weblink-device-pairing/1",
     protocol: "weblink-device-pairing/1",
     close() {},
   });
   const manual = manualHooks[0];
   manual.accepting();
-  h.events.dispatchEvent(
+  h.events.emit(
     "peerconnectioninit",
     h.session.peerConnection,
   );
@@ -152,7 +152,7 @@ function setup(pin?: DevicePin) {
     { quarantine: reset, paired },
     store,
   );
-  const events = new MultiEventEmitter<any>();
+  const events = new EventBus<any>("test.events");
   const sdp = `a=fingerprint:sha-256 ${Array(32).fill("ab").join(":")}`;
   const session = {
     clientId: "a",
@@ -162,7 +162,7 @@ function setup(pin?: DevicePin) {
       localDescription: { sdp },
       remoteDescription: { sdp },
     },
-    addEventListener: events.addEventListener.bind(events),
+    events: events.events,
     createChannel: async (
       _label: string,
       _protocol: string,
@@ -235,8 +235,8 @@ it("quarantines a mismatching key persistently; even the old key needs re-pairin
     expect(h.pins.get("b")?.blocked).toBe(true),
   );
   expect(h.service.get("b")?.state).toBe("untrusted");
-  h.events.dispatchEvent("messagechannelchange", "closed");
-  h.events.dispatchEvent("messagechannelchange", "ready");
+  h.events.emit("messagechannelchange", "closed");
+  h.events.emit("messagechannelchange", "ready");
   await vi.waitFor(() => expect(hooks).toHaveLength(2));
   hooks[1].verified({ ...proof, fingerprint: "old-key" });
   await vi.waitFor(() =>
@@ -306,7 +306,7 @@ it("withdraws live authority on authenticated transport loss without quarantinin
   expect(h.service.trusted("b")).toBe(false);
   expect(h.pins.get("b")?.blocked).toBe(false);
   expect(h.reset).not.toHaveBeenCalled();
-  h.events.dispatchEvent("messagechannelchange", "ready");
+  h.events.emit("messagechannelchange", "ready");
   await vi.waitFor(() => expect(hooks).toHaveLength(2));
   hooks[1].verified(proof);
   await vi.waitFor(() =>
@@ -416,7 +416,7 @@ it("retains a valid pairing decision when transport closes during its storage co
   expect(h.paired).toHaveBeenCalledOnce();
   expect(h.service.trusted("b")).toBe(false);
   h.reset.mockClear();
-  h.events.dispatchEvent("messagechannelchange", "ready");
+  h.events.emit("messagechannelchange", "ready");
   await vi.waitFor(() => expect(hooks).toHaveLength(2));
   hooks[1].verified(proof);
   await vi.waitFor(() =>
@@ -454,7 +454,7 @@ it("does not let a duplicate or stale first-use proof replace the live device", 
   );
   hooks[0].interrupted();
   hooks[0].verified({ ...proof, fingerprint: "stale-key" });
-  h.events.dispatchEvent("messagechannelchange", "ready");
+  h.events.emit("messagechannelchange", "ready");
   await vi.waitFor(() => expect(hooks).toHaveLength(2));
   hooks[1].verified(proof);
   await vi.waitFor(() =>
@@ -512,8 +512,8 @@ it("remembers a rejected first connection so it cannot retry as a new device", a
   await vi.waitFor(() => expect(hooks).toHaveLength(1));
   hooks[0].failed();
   await vi.waitFor(() => expect(keys.blocked).toBe(true));
-  h.events.dispatchEvent("messagechannelchange", "closed");
-  h.events.dispatchEvent("messagechannelchange", "ready");
+  h.events.emit("messagechannelchange", "closed");
+  h.events.emit("messagechannelchange", "ready");
   await vi.waitFor(() => expect(hooks).toHaveLength(2));
   hooks[1].verified(proof);
   await vi.waitFor(() =>
@@ -558,10 +558,7 @@ it.each(["interrupted", "failed"] as const)(
     } else {
       expect(h.pins.get("b")?.blocked).toBe(false);
       expect(h.reset).not.toHaveBeenCalled();
-      h.events.dispatchEvent(
-        "messagechannelchange",
-        "ready",
-      );
+      h.events.emit("messagechannelchange", "ready");
       await vi.waitFor(() => expect(hooks).toHaveLength(2));
       hooks[1].verified(proof);
       await vi.waitFor(() =>
@@ -641,10 +638,7 @@ it.each(["interrupted", "failed"] as const)(
       expect(h.reset).toHaveBeenCalledOnce();
     } else {
       expect(h.reset).not.toHaveBeenCalled();
-      h.events.dispatchEvent(
-        "messagechannelchange",
-        "ready",
-      );
+      h.events.emit("messagechannelchange", "ready");
       await vi.waitFor(() => expect(hooks).toHaveLength(2));
       hooks[1].verified(recoveredProof);
       await vi.waitFor(() =>

@@ -40,9 +40,9 @@ export class PeerSessionLifecycleController {
   ) {
     this.bindBrowserLifecycle();
     let signalingStatus = options.sender.status;
-    options.sender.addEventListener(
+    options.sender.events.subscribe(
       "statuschange",
-      ({ detail }) => {
+      (detail) => {
         if (detail === signalingStatus) return;
         signalingStatus = detail;
         if (detail !== "connected") return;
@@ -53,7 +53,7 @@ export class PeerSessionLifecycleController {
       },
       { signal: this.browserController.signal },
     );
-    options.sender.addEventListener(
+    options.sender.events.subscribe(
       "peeravailable",
       () => this.resume("peer-online"),
       { signal: this.browserController.signal },
@@ -343,9 +343,9 @@ export class PeerSessionLifecycleController {
         },
         { once: true, signal: controller.signal },
       );
-      sender.addEventListener(
+      sender.events.subscribe(
         "statuschange",
-        ({ detail }) => {
+        (detail) => {
           if (detail === "connected") {
             cleanup();
             resolve();

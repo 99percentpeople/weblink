@@ -9,8 +9,8 @@ import {
 } from "vitest";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
-import type { RtcChannelHandler } from "@/libs/application/rtc/rtc-service";
+import { P2PProtocol } from "@/libs/domain/protocol";
+
 import type { PeerSession } from "@/libs/domain/session";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import { TransferMode } from "@/libs/domain/transfer/file-transferer";
@@ -31,8 +31,8 @@ import {
 function setup() {
   const f = registryFixture();
   const transport = new FakeRtcTransport();
-  const channelHandlers = new Set<RtcChannelHandler>();
-  const protocol = new RtcProtocol(transport);
+
+  const protocol = new P2PProtocol(transport);
   const sessions = new Map<string, PeerSession>();
   const session = fileSession();
   sessions.set("peer", session);
@@ -49,16 +49,7 @@ function setup() {
       },
     ),
   };
-  const rtc = {
-    onSessionClosed:
-      transport.onSessionClosed.bind(transport),
-    onChannel: (handler: RtcChannelHandler) => {
-      channelHandlers.add(handler);
-      return () => {
-        channelHandlers.delete(handler);
-      };
-    },
-  };
+  const rtc = { events: transport.events };
   const waitForCapabilities = vi.fn(async () => {});
   const supportsQueue = vi.fn(() => false);
   const service = new FileTransferService({
@@ -105,8 +96,10 @@ function setup() {
     peer: PeerSession,
     channel: RTCDataChannel,
   ) => {
-    for (const handler of channelHandlers)
-      await handler({ session: peer, channel });
+    transport.events.emit("channel", {
+      session: peer,
+      channel,
+    });
   };
   return {
     ...f,
@@ -482,7 +475,7 @@ describe("file operation preparation and cancellation", () => {
         ({ message }) => message.type === "request-file",
       )?.message.id,
     ).toBe("old");
-    f.created[0].dispatchEvent("progress", {
+    f.created[0].emit("progress", {
       total: 2048,
       received: 512,
     });

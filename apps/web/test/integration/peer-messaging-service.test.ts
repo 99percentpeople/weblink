@@ -7,10 +7,8 @@ import {
   vi,
 } from "vitest";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
-import {
-  RtcProtocol,
-  type WebRtcProtocol,
-} from "@/libs/application/rtc/rtc-protocol";
+import { type WebRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import {
   FakeRtcTransport,
@@ -27,7 +25,7 @@ const watch = <T>(promise: Promise<T>) => {
 };
 function setup() {
   const transport = new FakeRtcTransport();
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   protocols.push(protocol);
   const store = {
     setSendMessage: vi.fn(async () => {}),

@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createUuid } from "@/libs/domain/ids";
 import { createSignal } from "solid-js";
 import type {
@@ -32,7 +33,7 @@ import type { FileContentReceives } from "./file-content-receives";
 
 export interface SharedFileTransferOptions {
   protocol: Pick<WebRtcProtocol, "call" | "handle">;
-  rtc: Pick<RtcService, "onSessionClosed">;
+  rtc: Pick<RtcService, "events">;
   registry: TransferRegistry;
   caches: Pick<
     FileCacheFactory,
@@ -82,29 +83,42 @@ export class SharedFileTransfers {
             ) === contentKey(fingerprint))),
     );
   }
-  private readonly stops: (() => void)[];
+  private readonly subscriptions = new SubscriptionScope();
   private disposed = false;
   constructor(
     private readonly options: SharedFileTransferOptions,
   ) {
-    this.stops = [
+    this.subscriptions.add(
       options.protocol.handle(
         "request-shared-file",
         (ctx) => this.serve(ctx),
       ),
-      options.caches.library.onUnshare((ids) =>
-        this.revoke(ids),
+    );
+    this.subscriptions.add(
+      options.caches.library.events.subscribe(
+        "unshared",
+        (ids) => this.revoke(ids),
       ),
-      options.caches.library.onRemove((ids) => {
-        this.revoke(ids);
-        for (const job of this.jobs.values())
-          if (ids.includes(job.fileId)) this.pause(job);
-      }),
-      options.rtc.onSessionClosed((session) => {
-        for (const job of this.jobs.values())
-          if (job.session === session) this.pause(job);
-      }),
-    ];
+    );
+    this.subscriptions.add(
+      options.caches.library.events.subscribe(
+        "removed",
+        (ids) => {
+          this.revoke(ids);
+          for (const job of this.jobs.values())
+            if (ids.includes(job.fileId)) this.pause(job);
+        },
+      ),
+    );
+    this.subscriptions.add(
+      options.rtc.events.subscribe(
+        "sessionclosed",
+        ({ session }) => {
+          for (const job of this.jobs.values())
+            if (job.session === session) this.pause(job);
+        },
+      ),
+    );
   }
   private update(
     job: Job,
@@ -246,7 +260,7 @@ export class SharedFileTransfers {
         true,
         message.queue,
       );
-      run.transferer.addEventListener(
+      run.transferer.events.subscribe(
         "ready",
         () => {
           void (run.transferer as FileSender)
@@ -278,7 +292,7 @@ export class SharedFileTransfers {
       TransferRegistration["lifecycle"]
     > = {
       bind: (entry, signal) => {
-        entry.transferer.addEventListener(
+        entry.transferer.events.subscribe(
           "ready",
           () => {
             if (job.task.status !== "paused")
@@ -286,9 +300,9 @@ export class SharedFileTransfers {
           },
           { signal },
         );
-        entry.transferer.addEventListener(
+        entry.transferer.events.subscribe(
           "progress",
-          ({ detail }) => {
+          (detail) => {
             if (job.task.status !== "paused")
               this.update(job, {
                 bytes: detail.received,
@@ -297,7 +311,7 @@ export class SharedFileTransfers {
           },
           { signal },
         );
-        entry.transferer.addEventListener(
+        entry.transferer.events.subscribe(
           "close",
           () => {
             if (
@@ -312,7 +326,7 @@ export class SharedFileTransfers {
           },
           { signal },
         );
-        cache.addEventListener(
+        cache.events.subscribe(
           "merging",
           () => {
             if (job.task.status !== "paused")
@@ -324,7 +338,7 @@ export class SharedFileTransfers {
           { signal },
         );
       },
-      complete: async (entry, signal) => {
+      complete: async (_entry, signal) => {
         if (!sending) {
           if (job.task.status !== "paused")
             this.update(job, {
@@ -778,7 +792,7 @@ export class SharedFileTransfers {
   };
   dispose(): void {
     this.disposed = true;
-    this.stops.forEach((stop) => stop());
+    this.subscriptions.dispose();
     for (const job of this.jobs.values()) this.pause(job);
   }
 }

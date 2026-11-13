@@ -1,8 +1,5 @@
 import { waitBufferedAmountLowThreshold } from "../utils/channel";
-import {
-  EventHandler,
-  MultiEventEmitter,
-} from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { catchError } from "@/libs/catch";
 import type { ChunkCache } from "@/libs/domain/file";
 import type { FileMetaData } from "@/libs/domain/file";
@@ -17,8 +14,9 @@ import {
 } from "./protocol";
 
 export abstract class FileTransferBase {
-  private eventEmitter: MultiEventEmitter<FileTransfererEventMap> =
-    new MultiEventEmitter();
+  private eventEmitter: EventBus<FileTransfererEventMap> =
+    new EventBus("transfer");
+  readonly events = this.eventEmitter.events;
 
   channel: RTCDataChannel | null = null;
   protected bufferedAmountLowThreshold = 64 * 1024; // 64KB
@@ -55,38 +53,11 @@ export abstract class FileTransferBase {
     this.info = options.info ?? null;
   }
 
-  addEventListener<K extends keyof FileTransfererEventMap>(
+  protected emit<K extends keyof FileTransfererEventMap>(
     eventName: K,
-    handler: EventHandler<FileTransfererEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    return this.eventEmitter.addEventListener(
-      eventName,
-      handler,
-      options,
-    );
-  }
-  removeEventListener<
-    K extends keyof FileTransfererEventMap,
-  >(
-    eventName: K,
-    handler: EventHandler<FileTransfererEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void {
-    return this.eventEmitter.removeEventListener(
-      eventName,
-      handler,
-      options,
-    );
-  }
-
-  protected dispatchEvent<
-    K extends keyof FileTransfererEventMap,
-  >(eventName: K, event: FileTransfererEventMap[K]) {
-    return this.eventEmitter.dispatchEvent(
-      eventName,
-      event,
-    );
+    event: FileTransfererEventMap[K],
+  ) {
+    return this.eventEmitter.emit(eventName, event);
   }
 
   protected abstract handleReceiveMessage(
@@ -116,10 +87,7 @@ export abstract class FileTransferBase {
         this.channel = null;
       }
       if (!this.isComplete && !this.paused) {
-        this.dispatchEvent(
-          "error",
-          Error(`connection is closed`),
-        );
+        this.emit("error", Error(`connection is closed`));
       }
     };
     channel.addEventListener("close", onClose, {
@@ -139,7 +107,7 @@ export abstract class FileTransferBase {
       this.bufferedAmountLowThreshold;
 
     if (channel.readyState === "open") {
-      this.dispatchEvent("ready", undefined);
+      this.emit("ready", undefined);
       return;
     }
 
@@ -153,7 +121,7 @@ export abstract class FileTransferBase {
       "open",
       () => {
         controller.abort();
-        this.dispatchEvent("ready", undefined);
+        this.emit("ready", undefined);
       },
       {
         signal: controller.signal,
@@ -207,7 +175,7 @@ export abstract class FileTransferBase {
       ),
     );
     if (error) {
-      this.dispatchEvent("error", error);
+      this.emit("error", error);
       throw error;
     }
     return availableChannel;
@@ -246,13 +214,14 @@ export abstract class FileTransferBase {
     this.closed = true;
 
     if (this.isComplete) {
-      this.dispatchEvent("complete", undefined);
+      this.emit("complete", undefined);
     } else {
-      this.dispatchEvent("close", undefined);
+      this.emit("close", undefined);
     }
     this.unzipWorker?.terminate();
     this.compressWorker?.terminate();
     this.timer && window.clearInterval(this.timer);
     this.controller.abort();
+    this.eventEmitter.dispose();
   }
 }

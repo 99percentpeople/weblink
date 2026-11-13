@@ -4,6 +4,66 @@ import { PresentationDiagnostics } from "@/libs/application/automation/presentat
 
 afterEach(() => vi.restoreAllMocks());
 
+it("does not let a retired cleanup remove a replacement observer", () => {
+  const track = {} as MediaStreamTrack;
+  const video = document.createElement("video");
+  const previous = {
+    read: () => ({ id: 1 }),
+    close: vi.fn(),
+  };
+  const current = {
+    read: () => ({ id: 2 }),
+    close: vi.fn(),
+  };
+  const native = vi
+    .fn()
+    .mockReturnValueOnce(previous)
+    .mockReturnValue(current);
+  const diagnostics = new PresentationDiagnostics(native);
+  const stopPrevious = diagnostics.watch(track, video);
+  diagnostics.clear();
+  const stopCurrent = diagnostics.watch(track, video);
+
+  stopPrevious();
+  stopPrevious();
+  expect(previous.close).toHaveBeenCalledTimes(1);
+  expect(current.close).not.toHaveBeenCalled();
+  expect(diagnostics.read(track)).toEqual([
+    expect.objectContaining({ id: 2 }),
+  ]);
+
+  stopCurrent();
+  diagnostics.clear();
+  expect(current.close).toHaveBeenCalledTimes(1);
+  expect(diagnostics.read(track)).toEqual([]);
+});
+
+it("releases each observer independently and makes its cleanup idempotent", () => {
+  const track = {} as MediaStreamTrack;
+  const video = document.createElement("video");
+  const first = { read: () => ({ id: 1 }), close: vi.fn() };
+  const second = {
+    read: () => ({ id: 2 }),
+    close: vi.fn(),
+  };
+  const native = vi
+    .fn()
+    .mockReturnValueOnce(first)
+    .mockReturnValue(second);
+  const diagnostics = new PresentationDiagnostics(native);
+  const stopFirst = diagnostics.watch(track, video);
+  const stopSecond = diagnostics.watch(track, video);
+  stopFirst();
+  stopFirst();
+  expect(first.close).toHaveBeenCalledTimes(1);
+  expect(diagnostics.read(track)).toEqual([
+    expect.objectContaining({ id: 2 }),
+  ]);
+  diagnostics.clear();
+  stopSecond();
+  expect(second.close).toHaveBeenCalledTimes(1);
+});
+
 it("labels background quality counters and restarts the visible sampling baseline", () => {
   const hidden = vi
     .spyOn(document, "hidden", "get")

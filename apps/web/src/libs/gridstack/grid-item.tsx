@@ -4,16 +4,12 @@ import {
   createMemo,
   createSignal,
   JSX,
-  mergeProps,
   onCleanup,
   onMount,
   splitProps,
 } from "solid-js";
 import { useGridStackContext } from "./grid-context";
-import type {
-  GridStackNode,
-  GridStackPosition,
-} from "gridstack";
+import type { GridStackNode } from "gridstack";
 import { Dynamic } from "solid-js/web";
 import clsx from "clsx";
 import { layout } from "./grid";

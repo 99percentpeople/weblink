@@ -15,7 +15,7 @@ import type {
 import type { SignalingService } from "@/libs/domain/signaling";
 import { SessionService } from "@/libs/application/session-service";
 import { setAppState } from "@/libs/state/app-state";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type {
   SignalingServiceEventMap,
   SignalingServiceStatus,
@@ -42,14 +42,14 @@ const makeSender = (
   targetClientId: string,
 ): SignalingService =>
   ({
+    events: { subscribe: () => () => {} },
     clientId,
     targetClientId,
     get status() {
       return "connected";
     },
     sendSignal: async () => {},
-    addEventListener: ((..._args: any[]) => {}) as any,
-    removeEventListener: ((..._args: any[]) => {}) as any,
+
     close: () => {},
   }) as SignalingService;
 
@@ -109,6 +109,30 @@ afterEach(() => {
 });
 
 describe("PeerSession lifecycle", () => {
+  it("cancels subscriptions and delivers the final status before disposal", () => {
+    const session = new PeerSession(
+      makeSender("local", "remote"),
+      { polite: true },
+    );
+    const removed = vi.fn();
+    const stop = session.events.subscribe(
+      "statuschange",
+      removed,
+    );
+    stop();
+    const statuses: string[] = [];
+    session.events.subscribe("statuschange", (status) =>
+      statuses.push(status),
+    );
+    session.close();
+    expect(removed).not.toHaveBeenCalled();
+    expect(statuses).toEqual(["closed"]);
+    const late = vi.fn();
+    session.events.subscribe("statuschange", late);
+    session.close();
+    expect(late).not.toHaveBeenCalled();
+    expect(statuses).toEqual(["closed"]);
+  });
   it("refreshes ICE configuration before negotiating a replacement connection and preserves relay-only", async () => {
     let credentials: RTCIceServer[] = [
       {
@@ -404,18 +428,16 @@ describe("PeerSession lifecycle", () => {
   });
 
   it("recovers the first interrupted negotiation when signaling returns", async () => {
-    const events =
-      new MultiEventEmitter<SignalingServiceEventMap>();
+    const events = new EventBus<SignalingServiceEventMap>(
+      "test.events",
+    );
     let status: SignalingServiceStatus = "connected";
     const sender: SignalingService = {
       ...makeSender("local", "remote"),
       get status() {
         return status;
       },
-      addEventListener:
-        events.addEventListener.bind(events),
-      removeEventListener:
-        events.removeEventListener.bind(events),
+      events: events.events,
     };
     const pc = Object.assign(new EventTarget(), {
       connectionState: "new",
@@ -446,7 +468,7 @@ describe("PeerSession lifecycle", () => {
       "signaling service is disconnected",
     );
     status = "disconnected";
-    events.dispatchEvent("statuschange", status);
+    events.emit("statuschange", status);
     await failed;
     const reconnect = vi
       .spyOn(session, "reconnect")
@@ -457,7 +479,7 @@ describe("PeerSession lifecycle", () => {
         } as unknown as RTCPeerConnection;
       });
     status = "connected";
-    events.dispatchEvent("statuschange", status);
+    events.emit("statuschange", status);
     await vi.waitFor(() =>
       expect(reconnect).toHaveBeenCalledOnce(),
     );
@@ -875,8 +897,9 @@ describe("SessionService lifecycle", () => {
         loadIceServers: async () => [],
       });
       service.setClientService({
+        events: { subscribe: () => () => {} },
         info: { clientId: local, createdAt: 1 },
-        addEventListener: vi.fn(),
+
         close: vi.fn(),
         removeSender: vi.fn(),
         createSender: () => makeSender(local, remote),
@@ -910,8 +933,9 @@ describe("SessionService lifecycle", () => {
     const oldSender = makeSender("local", "remote");
     const newSender = makeSender("local", "remote");
     const clientService = {
+      events: { subscribe: () => () => {} },
       info: { clientId: "local", createdAt: 1 },
-      addEventListener: vi.fn(),
+
       close: vi.fn(),
       removeSender: vi.fn(),
       createSender: vi
@@ -961,15 +985,14 @@ describe("SessionService lifecycle", () => {
       createdAt: 2,
     };
     const clientService = {
+      events: { subscribe: () => () => {} },
       info: localClient,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+
       createSender: vi.fn(() =>
         makeSender("local", "remote"),
       ),
       removeSender,
-      listenForJoin: vi.fn(),
-      listenForLeave: vi.fn(),
+
       createClient: async () => {},
       updateClient: async () => {},
       close: vi.fn(),
@@ -1018,18 +1041,17 @@ describe("SessionService lifecycle", () => {
       .spyOn(sender, "close")
       .mockImplementation(() => {});
     const clientService = {
+      events: { subscribe: () => () => {} },
       info: {
         clientId: "local",
         name: "Local",
         avatar: null,
         createdAt: 1,
       },
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
+
       createSender: vi.fn(() => sender),
       removeSender: vi.fn(),
-      listenForJoin: vi.fn(),
-      listenForLeave: vi.fn(),
+
       createClient: async () => {},
       updateClient: async () => {},
       close: vi.fn(),

@@ -12,7 +12,7 @@ import {
   createSessionMessage,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type { SignalingServiceEventMap } from "@/libs/domain/signaling";
 import { flushRtc } from "../support/rtc-transport";
 
@@ -50,17 +50,16 @@ function setup(
     "acceptsContent" | "allowsApplication"
   > = {},
 ) {
-  const events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
+  const events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
+  );
   const sender: SignalingService = {
+    events: events.events,
     clientId: "local",
     targetClientId: "remote",
     status: "connected",
     sendSignal: async () => {},
     close: () => {},
-    addEventListener: events.addEventListener.bind(events),
-    removeEventListener:
-      events.removeEventListener.bind(events),
   };
   const capabilities = new PeerCapabilitiesService(() => ({
     messaging: {},
@@ -79,7 +78,7 @@ function setup(
   });
   const stop = capabilities.bind(session, () => {});
   const received: SessionMessage[] = [];
-  session.addEventListener("message", ({ detail }) =>
+  session.events.subscribe("message", (detail) =>
     received.push(detail),
   );
   const channel = new Channel();

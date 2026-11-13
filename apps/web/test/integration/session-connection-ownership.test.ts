@@ -12,7 +12,7 @@ import type {
   SignalingServiceEventMap,
   SignalingServiceStatus,
 } from "@/libs/domain/signaling";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 
 async function flush() {
   for (let index = 0; index < 40; index++)
@@ -71,21 +71,20 @@ class PeerConnection extends EventTarget {
 }
 
 async function harness() {
-  const events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
+  const events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
+  );
+  const subscribe = vi.spyOn(events.events, "subscribe");
   let status: SignalingServiceStatus = "connected";
   const sender = {
+    events: events.events,
     clientId: "local",
     targetClientId: "remote",
     get status() {
       return status;
     },
     sendSignal: vi.fn(async () => {}),
-    addEventListener: vi.fn(
-      events.addEventListener.bind(events),
-    ),
-    removeEventListener:
-      events.removeEventListener.bind(events),
+
     close: vi.fn(),
   } satisfies SignalingService;
   const session = new PeerSession(sender, { polite: true });
@@ -101,15 +100,15 @@ async function harness() {
     current: () =>
       session.peerConnection as unknown as PeerConnection,
     subscriptions: () =>
-      sender.addEventListener.mock.calls.filter(
+      subscribe.mock.calls.filter(
         ([event]) => event === "signal",
       ),
     status(next: Exclude<SignalingServiceStatus, "init">) {
       status = next;
-      events.dispatchEvent("statuschange", next);
+      events.emit("statuschange", next);
     },
     async offer(generation: string) {
-      events.dispatchEvent("signal", {
+      events.emit("signal", {
         clientId: "remote",
         targetClientId: "local",
         type: "offer",
@@ -156,8 +155,7 @@ describe("session and connection lifetime ownership", () => {
       await h.session.listen();
       expect(h.current()).toBe(first);
       expect(PeerConnection.instances).toHaveLength(1);
-      const subscription =
-        h.subscriptions()[0][2] as AddEventListenerOptions;
+      const subscription = h.subscriptions()[0][2]!;
       for (let cycle = 0; cycle < 3; cycle++) {
         const old = h.current();
         const reconnecting = h.session.reconnect({

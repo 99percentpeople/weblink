@@ -80,7 +80,7 @@ export class FileSender extends FileTransferBase {
 
     const ranges = mergeRanges(sendIndexes);
 
-    this.dispatchEvent("progress", {
+    this.emit("progress", {
       total: info.fileSize,
       received: getRequestContentSize(info, ranges),
     });
@@ -115,7 +115,7 @@ export class FileSender extends FileTransferBase {
     // Resume progress is known only after the receiver supplies its missing
     // ranges. Initializing a replacement run must not publish a spurious zero.
     if (this.channel?.readyState === "open") {
-      this.dispatchEvent("ready", undefined);
+      this.emit("ready", undefined);
     }
   }
 
@@ -373,7 +373,7 @@ export class FileSender extends FileTransferBase {
       if (this.paused) return;
       if (!this.closed) {
         // Preserve the sending failure before close removes the run's listeners.
-        this.dispatchEvent(
+        this.emit(
           "error",
           error instanceof Error
             ? error
@@ -439,7 +439,7 @@ export class FileSender extends FileTransferBase {
       }
     } catch (error) {
       if (error instanceof Error)
-        this.dispatchEvent("error", error as Error);
+        this.emit("error", error as Error);
       console.error(error);
     }
   }

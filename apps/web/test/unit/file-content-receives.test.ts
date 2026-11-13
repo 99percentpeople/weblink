@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { FileContentReceives } from "@/libs/application/transfer/file-content-receives";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type { TransferRun } from "@/libs/application/transfer/transfer-registry";
 import type { FileFingerprint } from "@/libs/domain/protocol/file-fingerprint";
 const fingerprint: FileFingerprint = {
@@ -19,9 +19,9 @@ const recipient = (id: string) => ({
 });
 function setup() {
   const controller = new AbortController();
-  const events = new MultiEventEmitter<{
+  const events = new EventBus<{
     complete: void;
-  }>();
+  }>("test.events");
   const run = {
     messageId: "source",
     signal: controller.signal,
@@ -49,7 +49,7 @@ describe("concurrent content receives", () => {
     );
     f.coordinator.bind(f.run);
     expect(second.complete).not.toHaveBeenCalled();
-    f.events.dispatchEvent("complete", undefined);
+    f.events.emit("complete", undefined);
     expect(second.complete).toHaveBeenCalledOnce();
     expect(first.complete).not.toHaveBeenCalled();
     f.controller.abort();

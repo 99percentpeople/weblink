@@ -24,7 +24,7 @@ import type {
   FileTransferMessage,
   RoomMessage,
 } from "@/libs/domain/message";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import {
   FakeRtcTransport,
   deferred,
@@ -62,7 +62,7 @@ function setup(
   const sessions = new Map<string, PeerSession>();
   const emitters = new Map<
     string,
-    MultiEventEmitter<PeerSessionEventMap>
+    EventBus<PeerSessionEventMap>
   >();
   const offers = new Map<string, RoomCapabilitiesMessage>();
   const failed = new Set<string>();
@@ -105,14 +105,14 @@ function setup(
     store,
   });
   const addPeer = (id: string) => {
-    const emitter =
-      new MultiEventEmitter<PeerSessionEventMap>();
+    const emitter = new EventBus<PeerSessionEventMap>(
+      "test.events",
+    );
     const session = {
       clientId: "local",
       targetClientId: id,
       isMessageChannelReady: true,
-      addEventListener:
-        emitter.addEventListener.bind(emitter),
+      events: emitter.events,
     } as unknown as PeerSession;
     sessions.set(id, session);
     emitters.set(id, emitter);

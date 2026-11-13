@@ -1,9 +1,6 @@
 import { deviceIdentityStore } from "../../identity/device-identity-store";
 import { joinTranscript } from "@/libs/domain/device-identity/crypto";
-import {
-  EventHandler,
-  MultiEventEmitter,
-} from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import {
   comparePasswordHash,
   hashPassword,
@@ -78,7 +75,8 @@ function toError(error: unknown): Error {
 
 export class WebSocketClientService implements ClientService {
   private eventEmitter =
-    new MultiEventEmitter<ClientServiceEventMap>();
+    new EventBus<ClientServiceEventMap>("signaling.room");
+  readonly events = this.eventEmitter.events;
   private roomId: string;
   private password: string | null;
   private client: TransferClient;
@@ -115,9 +113,6 @@ export class WebSocketClientService implements ClientService {
     string,
     WebSocketSignalingService
   > = new Map();
-
-  private eventListeners: Map<string, Array<Function>> =
-    new Map();
 
   private status: "created" | PublicConnectionStatus =
     "created";
@@ -168,39 +163,7 @@ export class WebSocketClientService implements ClientService {
   private setStatus(status: PublicConnectionStatus) {
     if (this.status === status) return;
     this.status = status;
-    this.dispatchEvent("statuschange", status);
-  }
-
-  private dispatchEvent<
-    K extends keyof ClientServiceEventMap,
-  >(event: K, data: ClientServiceEventMap[K]) {
-    return this.eventEmitter.dispatchEvent(event, data);
-  }
-
-  addEventListener<K extends keyof ClientServiceEventMap>(
-    event: K,
-    callback: EventHandler<ClientServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    return this.eventEmitter.addEventListener(
-      event,
-      callback,
-      options,
-    );
-  }
-
-  removeEventListener<
-    K extends keyof ClientServiceEventMap,
-  >(
-    event: K,
-    callback: EventHandler<ClientServiceEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    return this.eventEmitter.removeEventListener(
-      event,
-      callback,
-      options,
-    );
+    this.emit("statuschange", status);
   }
 
   private isCurrentConnection(
@@ -1076,18 +1039,6 @@ export class WebSocketClientService implements ClientService {
     this.pendingPeerSignals.delete(targetClientId);
   }
 
-  listenForJoin(
-    callback: (client: TransferClient) => void,
-  ) {
-    this.on("join", callback);
-  }
-
-  listenForLeave(
-    callback: (client: TransferClient) => void,
-  ) {
-    this.on("leave", callback);
-  }
-
   private handleSessionReplaced(local = false): void {
     if (this.closed) return;
     console.info(
@@ -1183,19 +1134,15 @@ export class WebSocketClientService implements ClientService {
     this.releaseSocket(this.socket, true);
     this.releaseRoomLock?.();
     this.releaseRoomLock = null;
-    this.eventListeners.clear();
     this.setStatus("disconnected");
+    this.eventEmitter.dispose();
   }
 
-  private emit(event: string, data: unknown) {
-    const listeners = this.eventListeners.get(event) || [];
-    listeners.forEach((callback) => callback(data));
-  }
-
-  private on(event: string, callback: Function) {
-    const listeners = this.eventListeners.get(event) || [];
-    listeners.push(callback);
-    this.eventListeners.set(event, listeners);
+  private emit<K extends keyof ClientServiceEventMap>(
+    event: K,
+    data: ClientServiceEventMap[K],
+  ) {
+    this.eventEmitter.emit(event, data);
   }
 
   async updateClient(options: UpdateClientOptions) {

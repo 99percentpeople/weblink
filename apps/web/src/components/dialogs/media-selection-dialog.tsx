@@ -7,7 +7,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  For,
   Show,
 } from "solid-js";
 import { createDialog } from "@/components/dialogs/dialog";

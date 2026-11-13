@@ -3,11 +3,11 @@ import {
   type MessageSendOptions,
   positiveTimeout,
   protocolError,
-  RtcProtocolError,
+  P2PProtocolError,
 } from "./protocol/errors";
 
 type Waiter = {
-  finish: (error?: RtcProtocolError) => void;
+  finish: (error?: P2PProtocolError) => void;
 };
 type Entry = { data: string; waiters: Set<Waiter> };
 
@@ -30,9 +30,9 @@ export class MessageSendQueue {
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       if (this.closed)
-        return reject(new RtcProtocolError("closed"));
+        return reject(new P2PProtocolError("closed"));
       if (options.signal?.aborted)
-        return reject(new RtcProtocolError("aborted"));
+        return reject(new P2PProtocolError("aborted"));
       const timeout = positiveTimeout(
         options.sendTimeoutMs ?? 10_000,
         "sendTimeoutMs",
@@ -46,7 +46,7 @@ export class MessageSendQueue {
       let entry = this.entries.get(key);
       if (entry && entry.data !== data)
         return reject(
-          new RtcProtocolError(
+          new P2PProtocolError(
             "already-pending",
             "A queued request cannot change its payload",
           ),
@@ -59,7 +59,7 @@ export class MessageSendQueue {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const onAbort = () =>
-        waiter.finish(new RtcProtocolError("aborted"));
+        waiter.finish(new P2PProtocolError("aborted"));
       const waiter: Waiter = {
         finish: (error) => {
           if (settled) return;
@@ -83,7 +83,7 @@ export class MessageSendQueue {
       timer = setTimeout(
         () =>
           waiter.finish(
-            new RtcProtocolError(
+            new P2PProtocolError(
               "send-timeout",
               "Timed out waiting for the RTC message channel",
             ),
@@ -102,7 +102,7 @@ export class MessageSendQueue {
       const channel = this.getChannel();
       if (!channel || channel.readyState !== "open") return;
       this.entries.delete(key);
-      let failure: RtcProtocolError | undefined;
+      let failure: P2PProtocolError | undefined;
       try {
         channel.send(entry.data);
       } catch (error) {
@@ -115,7 +115,7 @@ export class MessageSendQueue {
 
   close(): void {
     this.closed = true;
-    const error = new RtcProtocolError(
+    const error = new P2PProtocolError(
       "closed",
       "RTC session closed before the message was sent",
     );

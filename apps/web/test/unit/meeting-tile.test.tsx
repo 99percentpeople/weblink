@@ -1440,7 +1440,7 @@ it("delegates recording to its application owner and disables other sources unti
     ),
   );
   const recording: RecordingControls = {
-    onSaved: () => () => {},
+    events: { subscribe: () => () => {} },
     state,
     start,
     stop,

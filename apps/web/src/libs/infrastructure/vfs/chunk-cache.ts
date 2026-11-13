@@ -17,7 +17,7 @@ import {
   StorageUnavailableError,
   storageFilename,
 } from "@/libs/domain/vfs";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { mergeRanges } from "@/libs/utils/range";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
 import { expectedChunkSize } from "@/libs/domain/file-chunks";
@@ -35,7 +35,7 @@ const digest = async (bytes: ArrayBuffer) =>
 
 /** The checkpoint contains only committed bytes. Preallocated length is never progress. */
 export class VfsChunkCache
-  extends MultiEventEmitter<ChunkCacheEventMap>
+  extends EventBus<ChunkCacheEventMap>
   implements ChunkCache
 {
   private pending = new Map<number, ArrayBuffer>();
@@ -63,7 +63,7 @@ export class VfsChunkCache
     private readonly native?: NativeFileSystem,
     private readonly verification?: DirectoryVerification,
   ) {
-    super();
+    super("files.cache");
   }
   private run<T>(work: () => Promise<T>): Promise<T> {
     const next = this.tail
@@ -157,7 +157,7 @@ export class VfsChunkCache
     await this.refresh();
   }
   async refresh(): Promise<void> {
-    this.dispatchEvent("update", await this.getInfo());
+    this.emit("update", await this.getInfo());
   }
   async setInfo(
     data: Omit<ChunkMetaData, "id">,
@@ -356,7 +356,7 @@ export class VfsChunkCache
     this.pending.clear();
     this.pendingBytes = 0;
     if (batch.length)
-      this.dispatchEvent("update", {
+      this.emit("update", {
         ...record.info,
         capabilities: this.describeStorage(record, volume)
           .capabilities,
@@ -494,7 +494,7 @@ export class VfsChunkCache
     }
     const file = await this.readFile(record);
     if (completed) {
-      this.dispatchEvent("update", {
+      this.emit("update", {
         ...record.info!,
         capabilities: this.describeStorage(
           record,
@@ -508,7 +508,7 @@ export class VfsChunkCache
         cachedBytes: file.size,
         chunkCount: Object.keys(record.chunks).length,
       });
-      this.dispatchEvent("complete", file);
+      this.emit("complete", file);
     }
     return file;
   }
@@ -532,7 +532,7 @@ export class VfsChunkCache
         clearTimeout(this.timer);
         this.snapshot = undefined;
         this.pending.clear();
-        this.dispatchEvent("cleanup", undefined);
+        this.emit("cleanup", undefined);
         return null;
       }
       this.missing = undefined;
@@ -803,10 +803,14 @@ export class VfsChunkCache
       this.snapshot = undefined;
       return true;
     });
-    if (removed) this.dispatchEvent("cleanup", undefined);
+    if (removed) {
+      this.emit("cleanup", undefined);
+      this.dispose();
+    }
   }
   dispose(): void {
     clearTimeout(this.timer);
     this.snapshot = undefined;
+    super.dispose();
   }
 }

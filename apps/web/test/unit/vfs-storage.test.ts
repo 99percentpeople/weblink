@@ -9,7 +9,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { FileStorageService } from "@/libs/application/file-storage-service";
+import { FileStorageService } from "@/libs/infrastructure/vfs/file-storage";
 import {
   VfsDatabase,
   type StoredVfsFile,
@@ -79,6 +79,27 @@ const bytes = (...values: number[]) =>
   new Uint8Array(values).buffer;
 
 describe("VFS checkpoints and legacy storage", () => {
+  it("delivers cleanup before releasing cache subscriptions and their abort hooks", async () => {
+    const { cache } = await fixture();
+    const controller = new AbortController();
+    const remove = vi.spyOn(
+      controller.signal,
+      "removeEventListener",
+    );
+    const cleanup = vi.fn();
+    cache.events.subscribe("cleanup", cleanup, {
+      signal: controller.signal,
+    });
+    cache.events.subscribe("update", () => {}, {
+      signal: controller.signal,
+    });
+    await cache.cleanup();
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect((cache as VfsChunkCache).listenerCount).toBe(0);
+    await cache.cleanup();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
   it("keeps a retained cache's missing state and makes release idempotent after external metadata deletion", async () => {
     const f = await fixture();
     const retained = new VfsChunkCache(
@@ -198,7 +219,7 @@ describe("VFS checkpoints and legacy storage", () => {
   it("does not checkpoint rejected volume writes and retries their bytes", async () => {
     const f = await fixture();
     const updates = vi.fn();
-    f.cache.addEventListener("update", ({ detail }) =>
+    f.cache.events.subscribe("update", (detail) =>
       updates(detail),
     );
     await f.cache.storeChunk(0, bytes(1, 2, 3, 4));

@@ -23,7 +23,6 @@ import { reconcile } from "solid-js/store";
 import Chat from "../support/direct-chat-page";
 import type { StoreMessage } from "@/libs/domain/message";
 import {
-  appState,
   createInitialAppState,
   setAppState,
 } from "@/libs/state/app-state";

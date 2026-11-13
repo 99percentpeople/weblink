@@ -36,7 +36,7 @@ import {
   deviceIdentityStore,
   type DevicePin,
 } from "../../../src/libs/infrastructure/identity/device-identity-store";
-import { MultiEventEmitter } from "../../../src/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import { createSessionMessage } from "../../../src/libs/domain/protocol/messages";
 import type {
   RawSignal,
@@ -55,22 +55,19 @@ async function until(check: () => boolean, label: string) {
   }
 }
 class Sender implements SignalingService {
-  readonly events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
+  readonly events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
+  );
   status = "connected" as const;
   remote!: Sender;
   constructor(
     readonly clientId: string,
     readonly targetClientId: string,
   ) {}
-  addEventListener = this.events.addEventListener.bind(
-    this.events,
-  );
-  removeEventListener =
-    this.events.removeEventListener.bind(this.events);
+
   async sendSignal(signal: RawSignal) {
     queueMicrotask(() =>
-      this.remote.events.dispatchEvent("signal", {
+      this.remote.events.emit("signal", {
         ...signal,
         clientId: this.clientId,
         targetClientId: this.targetClientId,
@@ -79,7 +76,7 @@ class Sender implements SignalingService {
     );
   }
   close() {
-    this.events.clearListeners();
+    this.events.clear();
   }
 }
 const newIdentity = async () =>
@@ -174,20 +171,17 @@ async function connection(
       bootstrapMessage(m.type) || allowedB(),
   });
   if (interruptKeyDelivery)
-    sessionB.addEventListener(
-      "channel",
-      ({ detail: channel }) => {
-        if (channel.label !== "weblink-device-identity/1")
-          return;
-        const send = channel.send.bind(channel);
-        channel.send = ((data: string) => {
-          if (
-            !JSON.parse(data).kind.startsWith("credential-")
-          )
-            send(data);
-        }) as typeof channel.send;
-      },
-    );
+    sessionB.events.subscribe("channel", (channel) => {
+      if (channel.label !== "weblink-device-identity/1")
+        return;
+      const send = channel.send.bind(channel);
+      channel.send = ((data: string) => {
+        if (
+          !JSON.parse(data).kind.startsWith("credential-")
+        )
+          send(data);
+      }) as typeof channel.send;
+    });
   const offA = trustA.bind(sessionA),
     offB = trustB.bind(sessionB);
   const dispose = createRoot((dispose) => {
@@ -197,13 +191,13 @@ async function connection(
   });
   const received: string[] = [];
   let remote: MediaStream | null = null;
-  sessionA.addEventListener("message", ({ detail }) => {
+  sessionA.events.subscribe("message", (detail) => {
     if (detail.type === "send-text")
       received.push(detail.data);
   });
-  sessionA.addEventListener(
+  sessionA.events.subscribe(
     "remotestreamchange",
-    ({ detail }) => {
+    (detail) => {
       remote = detail;
     },
   );
@@ -422,8 +416,8 @@ async function main() {
   );
   const rtcA = new RtcService(),
     rtcB = new RtcService();
-  const protocolA = new P2PProtocol(rtcA),
-    protocolB = new P2PProtocol(rtcB);
+  const protocolA = new P2PProtocol(rtcA.transport),
+    protocolB = new P2PProtocol(rtcB.transport);
   rtcA.bindSession(first.sessionA);
   rtcB.bindSession(first.sessionB);
   for (const protocol of [protocolA, protocolB]) {

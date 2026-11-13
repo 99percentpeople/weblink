@@ -14,7 +14,6 @@ import { PeerMessagingService } from "@/libs/application/messaging/peer-messagin
 import { ConversationMessagingService } from "@/libs/application/messaging/conversation-messaging-service";
 import type { MessageRepository } from "@/libs/application/messaging/message-repository";
 import {
-  appState,
   createInitialAppState,
   setAppState,
 } from "@/libs/state/app-state";

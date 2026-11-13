@@ -47,7 +47,7 @@ export default function StorageSettings() {
   };
   onMount(() => {
     onCleanup(
-      storage.onChange(() =>
+      storage.events.subscribe("changed", () =>
         setRevision((value) => value + 1),
       ),
     );

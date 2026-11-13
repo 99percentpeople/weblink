@@ -18,7 +18,7 @@ export const createReloadPrompt = () => {
     );
     const updateServiceWorker = registerSW({
       immediate: true,
-      async onRegisteredSW(swScriptUrl, registration) {
+      async onRegisteredSW(_swScriptUrl, registration) {
         registration &&
           setInterval(async () => {
             await registration.update();

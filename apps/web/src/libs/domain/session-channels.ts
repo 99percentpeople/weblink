@@ -5,7 +5,7 @@ import { catchError, catchErrorSync } from "@/libs/catch";
 import type { SessionMessage } from "./protocol/messages";
 import {
   type MessageSendOptions,
-  RtcProtocolError,
+  P2PProtocolError,
 } from "./protocol/errors";
 import { MessageSendQueue } from "./session-send-queue";
 import { parseSessionMessage } from "./protocol/validation";
@@ -473,7 +473,7 @@ export class PeerSessionChannelController {
     options: MessageSendOptions = {},
   ): Promise<void> {
     if (this.options.getStatus() === "closed") {
-      return Promise.reject(new RtcProtocolError("closed"));
+      return Promise.reject(new P2PProtocolError("closed"));
     }
 
     const pending = this.messageSendQueue.send(

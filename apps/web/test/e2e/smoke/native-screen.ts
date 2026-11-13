@@ -16,7 +16,7 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import { createMeetingSources } from "@/routes/home/components/meeting-sources";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type { ClientService } from "@/libs/domain/client";
 import type {
   RawSignal,
@@ -49,20 +49,17 @@ async function until(
 class Sender implements SignalingService {
   status = "connected" as const;
   remote!: Sender;
-  readonly events =
-    new MultiEventEmitter<SignalingServiceEventMap>();
-  addEventListener = this.events.addEventListener.bind(
-    this.events,
+  readonly events = new EventBus<SignalingServiceEventMap>(
+    "test.events",
   );
-  removeEventListener =
-    this.events.removeEventListener.bind(this.events);
+
   constructor(
     readonly clientId: string,
     readonly targetClientId: string,
   ) {}
   async sendSignal(signal: RawSignal) {
     queueMicrotask(() =>
-      this.remote.events.dispatchEvent("signal", {
+      this.remote.events.emit("signal", {
         ...signal,
         clientId: this.clientId,
         targetClientId: this.targetClientId,
@@ -313,10 +310,11 @@ function pair(
     [b, sb, 2],
   ] as const)
     service.setClientService({
+      events: { subscribe: () => () => {} },
       info: { clientId: sender.clientId, createdAt },
       createSender: () => sender,
       removeSender: () => {},
-      addEventListener: () => {},
+
       close: () => {},
     } as unknown as ClientService);
   return { a, b, time };
@@ -1111,7 +1109,7 @@ async function singleRoom(params: URLSearchParams) {
       );
     const received = new Promise<RTCDataChannel>(
       (resolve) =>
-        viewer.addEventListener("channel", ({ detail }) => {
+        viewer.events.subscribe("channel", (detail) => {
           if (detail.label === "single-room-test")
             resolve(detail);
         }),

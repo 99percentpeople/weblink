@@ -10,13 +10,13 @@ import { File as NodeFile } from "node:buffer";
 import { SharedFileTransfers } from "@/libs/application/transfer/shared-file-transfers";
 import { FileTransferService } from "@/libs/application/transfer/file-transfer-service";
 import { PeerMessagingService } from "@/libs/application/messaging/peer-messaging-service";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import {
   FileCatalogIndex,
   toCatalogMetadata,
 } from "@/libs/application/file-catalog-index";
 import { FileCatalogService } from "@/libs/application/file-catalog-service";
-import { createSessionMessage } from "@/libs/domain/protocol";
+
 import { setupLibrary } from "../support/file-library";
 import {
   FakeRtcTransport,
@@ -42,7 +42,7 @@ function node(id: string, peer: string) {
     clientId: id,
   });
   const transport = new FakeRtcTransport();
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   let connected = true,
     permission = true,
     supported = true;
@@ -73,11 +73,7 @@ function node(id: string, peer: string) {
       return cache;
     },
   };
-  const rtc = {
-    onChannel: () => () => {},
-    onSessionClosed:
-      transport.onSessionClosed.bind(transport),
-  };
+  const rtc = { events: transport.events };
   const files = new FileTransferService({
     protocol,
     rtc,
@@ -110,7 +106,7 @@ function node(id: string, peer: string) {
     isReady: () => connected,
     canList: () => permission,
     supports: () => supported,
-    onSessionClosed: rtc.onSessionClosed,
+    sessionEvents: rtc.events,
   });
   stops.push(() => {
     shared.dispose();
@@ -234,7 +230,7 @@ describe("shared file authorization and independent jobs", () => {
       const transfer = b.created[0];
       const task = b.shared.tasks()[0];
       expect(task.fileId).toBe(transfer.cache.id);
-      transfer.dispatchEvent("progress", {
+      transfer.emit("progress", {
         received: 7,
         total: info.fileSize,
       });
@@ -257,7 +253,7 @@ describe("shared file authorization and independent jobs", () => {
         canPause: false,
         canResume: false,
       });
-      transfer.dispatchEvent("progress", {
+      transfer.emit("progress", {
         received: info.fileSize,
         total: info.fileSize,
       });
@@ -343,7 +339,7 @@ describe("shared file authorization and independent jobs", () => {
     const transfer = b.created[0];
     expect(b.caches.has(transfer.cache.id)).toBe(true);
     expect(transfer.closed).toBe(false);
-    transfer.dispatchEvent("progress", {
+    transfer.emit("progress", {
       received: info.fileSize,
       total: info.fileSize,
     });
@@ -420,7 +416,7 @@ describe("shared file authorization and independent jobs", () => {
     expect(b.messages.messages).toEqual([]);
     const receiver = b.created[0];
     expect(receiver).toBeDefined();
-    receiver.dispatchEvent("progress", {
+    receiver.emit("progress", {
       received: 7,
       total: info.fileSize,
     });
@@ -554,7 +550,7 @@ describe("shared file authorization and independent jobs", () => {
       if (ending === "cancel")
         b.files.contentReceives.cancel("other");
       else
-        b.created[0].dispatchEvent(
+        b.created[0].emit(
           "error",
           new Error("Disconnected"),
         );

@@ -1,4 +1,6 @@
 import { watchStatus } from "./status-watch";
+import { EventBus } from "@weblink/platform/events";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 
 /** One native channel per adapter, released when the last view stops observing. */
 export function createVisibilityWatcher(
@@ -7,20 +9,23 @@ export function createVisibilityWatcher(
   ) => Promise<() => void> = (receive) =>
     watchStatus("application_visibility", {}, receive),
 ): (receive: (visible: boolean) => void) => () => void {
-  const listeners = new Set<(visible: boolean) => void>();
+  const bus = new EventBus<{ changed: boolean }>(
+    "window.visibility",
+  );
   let current: boolean | undefined;
   let generation = 0;
-  let unwatch: (() => void) | undefined;
+  let subscriptions = new SubscriptionScope();
   let retry: ReturnType<typeof setTimeout> | undefined;
   const start = async (token: number) => {
+    const scope = subscriptions;
     try {
-      const dispose = await watch((visible) => {
-        if (token !== generation) return;
-        current = visible;
-        for (const receive of listeners) receive(visible);
-      });
-      if (token !== generation) dispose();
-      else unwatch = dispose;
+      await scope.track(
+        watch((visible) => {
+          if (token !== generation) return;
+          current = visible;
+          bus.emit("changed", visible);
+        }),
+      );
     } catch (error) {
       if (token !== generation) return;
       console.warn(
@@ -32,17 +37,19 @@ export function createVisibilityWatcher(
   };
   return (receive) => {
     // Each registration has its own lifetime even if callbacks are identical.
-    const listener = (visible: boolean) => receive(visible);
-    listeners.add(listener);
+    const stop = bus.subscribe("changed", receive);
+    let active = true;
     if (current !== undefined) receive(current);
-    if (listeners.size === 1) void start(generation);
+    if (bus.listenerCount === 1) void start(generation);
     return () => {
-      if (!listeners.delete(listener) || listeners.size)
-        return;
+      if (!active) return;
+      active = false;
+      stop();
+      if (bus.listenerCount) return;
       ++generation;
       clearTimeout(retry);
-      unwatch?.();
-      unwatch = undefined;
+      subscriptions.dispose();
+      subscriptions = new SubscriptionScope();
       current = undefined;
     };
   };

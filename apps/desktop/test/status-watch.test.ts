@@ -1,8 +1,57 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { platform } from "../src/platform";
+import { watchStatus } from "../src/status-watch";
 
 afterEach(clearMocks);
+it("aborts a pending registration and unregisters it exactly once after completion", async () => {
+  let finish!: () => void;
+  const ipc = vi.fn((command: string) =>
+    command.endsWith("_watch")
+      ? new Promise<void>((resolve) => {
+          finish = resolve;
+        })
+      : Promise.resolve(),
+  );
+  mockIPC(ipc);
+  const controller = new AbortController();
+  const receive = vi.fn();
+  const pending = watchStatus(
+    "capture",
+    { sessionId: "old" },
+    receive,
+    { signal: controller.signal },
+  );
+  const args = (
+    ipc.mock.calls[0] as unknown as [
+      string,
+      { events: { onmessage(value: unknown): void } },
+    ]
+  )[1];
+  controller.abort();
+  args.events.onmessage({ state: "running" });
+  expect(receive).not.toHaveBeenCalled();
+  expect(ipc).toHaveBeenCalledTimes(1);
+  finish();
+  const close = await pending;
+  close();
+  close();
+  expect(ipc).toHaveBeenCalledTimes(2);
+  args.events.onmessage({ state: "closed" });
+  expect(receive).not.toHaveBeenCalled();
+});
+it("does not register a watcher for an already disposed scope", async () => {
+  const ipc = vi.fn();
+  mockIPC(ipc);
+  const controller = new AbortController();
+  controller.abort();
+  (
+    await watchStatus("capture", {}, vi.fn(), {
+      signal: controller.signal,
+    })
+  )();
+  expect(ipc).not.toHaveBeenCalled();
+});
 it.each(["capture", "remote_control"])(
   "scopes %s events and idempotent cleanup to one subscription",
   async (command) => {

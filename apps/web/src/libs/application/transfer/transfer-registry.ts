@@ -256,7 +256,7 @@ export class TransferRegistry {
     this.unfinishedDeliveries.set(input.cache, deliveries);
     // Bind message observers before cleanup listeners; final events must reach the correct message.
     entry.lifecycle.bind(run, controller.signal);
-    transferer.addEventListener(
+    transferer.events.subscribe(
       "ready",
       () => {
         clearTimeout(entry.timer);
@@ -264,7 +264,7 @@ export class TransferRegistry {
       },
       { signal: controller.signal },
     );
-    input.cache.addEventListener(
+    input.cache.events.subscribe(
       "cleanup",
       () =>
         this.fail(
@@ -273,19 +273,19 @@ export class TransferRegistry {
         ),
       { signal: controller.signal },
     );
-    transferer.addEventListener(
+    transferer.events.subscribe(
       "complete",
       () => {
         void this.finish(entry);
       },
       { signal: controller.signal },
     );
-    transferer.addEventListener(
+    transferer.events.subscribe(
       "error",
-      ({ detail }) => this.fail(run, detail),
+      (error) => this.fail(run, error),
       { signal: controller.signal },
     );
-    transferer.addEventListener(
+    transferer.events.subscribe(
       "close",
       () => this.destroy(run),
       { signal: controller.signal },
@@ -411,7 +411,7 @@ export class TransferRegistry {
     this.assertCurrent(run);
     entry.initialized = true;
     if (run.transferer.mode === TransferMode.Receive) {
-      run.transferer.addEventListener(
+      run.transferer.events.subscribe(
         "progress",
         () => {
           entry.dirty = true;

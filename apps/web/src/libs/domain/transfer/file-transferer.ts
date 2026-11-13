@@ -2,7 +2,8 @@ import type {
   ChunkCache,
   FileMetaData,
 } from "@/libs/domain/file";
-import type { EventHandler } from "@/libs/utils/event-emitter";
+
+import type { EventSource } from "@weblink/platform/events";
 import type { CompressionLevel } from "./options";
 import type { FileID } from "../ids";
 
@@ -50,6 +51,7 @@ export type FileTransfererEventMap = {
 };
 
 export interface FileTransferer {
+  readonly events: EventSource<FileTransfererEventMap>;
   readonly cache: ChunkCache;
   readonly mode: TransferMode;
   readonly id: FileID;
@@ -58,16 +60,4 @@ export interface FileTransferer {
   initialize(): Promise<void>;
   pause(notify?: boolean): Promise<void>;
   close(): void;
-  addEventListener<K extends keyof FileTransfererEventMap>(
-    eventName: K,
-    handler: EventHandler<FileTransfererEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void;
-  removeEventListener<
-    K extends keyof FileTransfererEventMap,
-  >(
-    eventName: K,
-    handler: EventHandler<FileTransfererEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void;
 }

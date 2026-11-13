@@ -14,10 +14,7 @@ import type {
   ClientSignal,
   SignalingService,
 } from "./signaling";
-import {
-  EventHandler,
-  MultiEventEmitter,
-} from "../utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import {
   createSessionMessage,
   isRequestType,
@@ -102,8 +99,10 @@ export class PeerSession {
   get roomScreenTransport(): RoomScreenTransport | null {
     return this.peerConnection?.screenTransport ?? null;
   }
-  private eventEmitter: MultiEventEmitter<PeerSessionEventMap> =
-    new MultiEventEmitter();
+  private eventEmitter: EventBus<PeerSessionEventMap> =
+    new EventBus("session");
+  readonly events = this.eventEmitter.events;
+
   peerConnection: RoomConnection | null = null;
   private negotiation: PeerNegotiationController;
   private readonly lifecycle: PeerSessionLifecycleController;
@@ -202,11 +201,10 @@ export class PeerSession {
       ordered: () => this.getRuntimeOptions().ordered,
       createChannel: (label, protocol) =>
         this.createChannel(label, protocol),
-      onChannel: (channel) =>
-        this.dispatchEvent("channel", channel),
+      onChannel: (channel) => this.emit("channel", channel),
       onMessage: (message) => this.receiveMessage(message),
       onMessageChannelChange: (state) =>
-        this.dispatchEvent("messagechannelchange", state),
+        this.emit("messagechannelchange", state),
     });
     this.media = new PeerSessionMediaController({
       nativeRoom: this.usesNativeRoom,
@@ -237,17 +235,11 @@ export class PeerSession {
         });
       },
       onRemoteStreamChange: (stream) =>
-        this.dispatchEvent("remotestreamchange", stream),
+        this.emit("remotestreamchange", stream),
       onRemoteVideoTracksChange: (bindings) =>
-        this.dispatchEvent(
-          "remotevideotrackschange",
-          bindings,
-        ),
+        this.emit("remotevideotrackschange", bindings),
       onRemoteAudioTracksChange: (bindings) =>
-        this.dispatchEvent(
-          "remoteaudiotrackschange",
-          bindings,
-        ),
+        this.emit("remoteaudiotrackschange", bindings),
     });
     this.lifecycle = new PeerSessionLifecycleController({
       sender,
@@ -290,36 +282,11 @@ export class PeerSession {
     return this.dataChannels.isMessageChannelReady;
   }
 
-  addEventListener<K extends keyof PeerSessionEventMap>(
+  private emit<K extends keyof PeerSessionEventMap>(
     eventName: K,
-    handler: EventHandler<PeerSessionEventMap[K]>,
-    options?: boolean | AddEventListenerOptions,
-  ): void {
-    return this.eventEmitter.addEventListener(
-      eventName,
-      handler.bind(this),
-      options,
-    );
-  }
-  removeEventListener<K extends keyof PeerSessionEventMap>(
-    eventName: K,
-    handler: EventHandler<PeerSessionEventMap[K]>,
-    options?: boolean | EventListenerOptions,
-  ): void {
-    return this.eventEmitter.removeEventListener(
-      eventName,
-      handler,
-      options,
-    );
-  }
-
-  private dispatchEvent<
-    K extends keyof PeerSessionEventMap,
-  >(eventName: K, event: PeerSessionEventMap[K]) {
-    return this.eventEmitter.dispatchEvent(
-      eventName,
-      event,
-    );
+    event: PeerSessionEventMap[K],
+  ) {
+    return this.eventEmitter.emit(eventName, event);
   }
 
   private setStatus(status: PeerSessionStatus) {
@@ -338,7 +305,7 @@ export class PeerSession {
       });
     }
     if (status !== "init") {
-      this.dispatchEvent("statuschange", status);
+      this.emit("statuschange", status);
     }
   }
 
@@ -382,7 +349,7 @@ export class PeerSession {
         "error",
         (event) => {
           const cause = (event as ErrorEvent).error;
-          this.dispatchEvent(
+          this.emit(
             "error",
             cause instanceof Error
               ? cause
@@ -460,7 +427,7 @@ export class PeerSession {
       { signal: controller.signal },
     );
 
-    this.dispatchEvent("peerconnectioninit", pc);
+    this.emit("peerconnectioninit", pc);
 
     this.popSignalCache();
 
@@ -527,9 +494,9 @@ export class PeerSession {
           once: true,
           signal: listeners.signal,
         });
-      this.sender.addEventListener(
+      this.sender.events.subscribe(
         "statuschange",
-        ({ detail }) => {
+        (detail) => {
           if (
             detail === "closed" ||
             detail === "disconnected"
@@ -610,7 +577,7 @@ export class PeerSession {
       },
     );
 
-    this.sender.addEventListener(
+    this.sender.events.subscribe(
       "signal",
       async (ev) => {
         if (this.status === "closed") {
@@ -619,37 +586,37 @@ export class PeerSession {
         }
         console.debug("[PeerSession] received signal", {
           peerId: this.targetClientId,
-          type: ev.detail.type,
+          type: ev.type,
         });
         const pc = this.peerConnection;
         if (!pc) {
           console.debug(
             `[PeerSession] peer connection is null, cache signal`,
           );
-          this.signalCache.push(ev.detail);
-          if (ev.detail.type === "offer") {
+          this.signalCache.push(ev);
+          if (ev.type === "offer") {
             this.lifecycle.handleDisconnection(
               "signal:offer-without-pc",
             );
           }
         } else {
-          await this.negotiation.enqueueSignal(ev.detail);
+          await this.negotiation.enqueueSignal(ev);
         }
       },
       { signal: listenController.signal },
     );
 
-    this.sender.addEventListener(
+    this.sender.events.subscribe(
       "statuschange",
       (ev) => {
         console.debug(
           "[PeerSession] signaling status changed",
           {
             peerId: this.targetClientId,
-            status: ev.detail,
+            status: ev,
           },
         );
-        if (ev.detail === "closed") {
+        if (ev === "closed") {
           listenController.abort();
         }
       },
@@ -723,8 +690,7 @@ export class PeerSession {
       approval = Promise.reject(error);
     }
     if (!approval) {
-      if (!signal.aborted)
-        this.dispatchEvent("message", message);
+      if (!signal.aborted) this.emit("message", message);
       combined.dispose();
       return;
     }
@@ -734,7 +700,7 @@ export class PeerSession {
           !signal?.aborted &&
           this.acceptMessage?.(message) !== false
         )
-          this.dispatchEvent("message", message);
+          this.emit("message", message);
       })
       .catch((error: unknown) => {
         if (
@@ -809,7 +775,7 @@ export class PeerSession {
       );
       this.accessLifetime = new AbortController();
     }
-    this.dispatchEvent("accesschange", allowed);
+    this.emit("accesschange", allowed);
   }
 
   async reconnect(options: { initiate?: boolean } = {}) {
@@ -931,5 +897,6 @@ export class PeerSession {
     this.media.dispose();
     this.dataChannels.close();
     this.setStatus("closed");
+    this.eventEmitter.dispose();
   }
 }

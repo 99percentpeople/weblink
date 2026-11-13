@@ -9,7 +9,7 @@ import {
   createSessionMessage,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
-import type { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import type { EventBus } from "@weblink/platform/events";
 import { reconcile } from "solid-js/store";
 import type { NativeControlStatus } from "@weblink/platform";
 import type { ClientService } from "@/libs/domain/client";
@@ -121,20 +121,18 @@ async function setup(expectControl = true) {
       name: "Local",
       avatar: null,
     },
+    events: { subscribe: () => () => {} },
     createSender: (targetClientId) => ({
+      events: { subscribe: () => () => {} },
       clientId: "local",
       targetClientId,
       status: "connected",
       sendSignal: async () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
+
       close: () => {},
     }),
     removeSender: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    listenForJoin: () => {},
-    listenForLeave: () => {},
+
     createClient: async () => {},
     updateClient: async () => {},
     close: () => {},
@@ -155,10 +153,10 @@ async function setup(expectControl = true) {
   native.bind(channel as unknown as RTCDataChannel);
   (
     session as unknown as Pick<
-      MultiEventEmitter<PeerSessionEventMap>,
-      "dispatchEvent"
+      EventBus<PeerSessionEventMap>,
+      "emit"
     >
-  ).dispatchEvent(
+  ).emit(
     "message",
     createSessionMessage(
       { clientId: "remote", targetClientId: "local" },
@@ -233,8 +231,8 @@ async function setup(expectControl = true) {
 it("opens native media from peer consent notifications and channel events without periodic retries", async () => {
   const f = await setup();
   const events = f.session as unknown as Pick<
-    MultiEventEmitter<PeerSessionEventMap>,
-    "dispatchEvent"
+    EventBus<PeerSessionEventMap>,
+    "emit"
   >;
   const channels: Channel[] = [];
   const createDataChannel = vi.fn(() => {
@@ -249,7 +247,7 @@ it("opens native media from peer consent notifications and channel events withou
   } as unknown as RTCPeerConnection;
   let revision = 1;
   const announce = (receiveContent: boolean) =>
-    events.dispatchEvent(
+    events.emit(
       "message",
       createSessionMessage(
         { clientId: "remote", targetClientId: "local" },
@@ -267,7 +265,7 @@ it("opens native media from peer consent notifications and channel events withou
       ),
     );
   try {
-    events.dispatchEvent("messagechannelchange", "ready");
+    events.emit("messagechannelchange", "ready");
     announce(false);
     await vi.advanceTimersByTimeAsync(5000);
     expect(createDataChannel).not.toHaveBeenCalled();
@@ -303,8 +301,8 @@ it("isolates browser codec choices from unrelated peer joins, capability updates
     ).getRuntimeOptions();
   const events = (session: PeerSession) =>
     session as unknown as Pick<
-      MultiEventEmitter<PeerSessionEventMap>,
-      "dispatchEvent"
+      EventBus<PeerSessionEventMap>,
+      "emit"
     >;
   const announce = (
     session: PeerSession,
@@ -312,7 +310,7 @@ it("isolates browser codec choices from unrelated peer joins, capability updates
     video: string[],
     audio: string[],
   ) => {
-    events(session).dispatchEvent(
+    events(session).emit(
       "message",
       createSessionMessage(
         {
@@ -353,10 +351,7 @@ it("isolates browser codec choices from unrelated peer joins, capability updates
         audio: ["audio/opus", "audio/pcma"],
       },
     );
-    events(f.session).dispatchEvent(
-      "messagechannelchange",
-      "ready",
-    );
+    events(f.session).emit("messagechannelchange", "ready");
     announce(
       f.session,
       2,
@@ -382,10 +377,7 @@ it("isolates browser codec choices from unrelated peer joins, capability updates
       createdAt: 3,
       avatar: null,
     });
-    events(other).dispatchEvent(
-      "messagechannelchange",
-      "ready",
-    );
+    events(other).emit("messagechannelchange", "ready");
     await flush();
     expect(options(other).automaticVideoCodecs).toEqual([
       "video/h264",
@@ -404,10 +396,7 @@ it("isolates browser codec choices from unrelated peer joins, capability updates
     expect(options(other).automaticVideoCodecs).toEqual([]);
     expect(options(f.session)).toEqual(original);
     expect(refresh).not.toHaveBeenCalled();
-    events(other).dispatchEvent(
-      "messagechannelchange",
-      "closed",
-    );
+    events(other).emit("messagechannelchange", "closed");
     other.close();
     await flush();
     expect(options(f.session)).toEqual(original);
@@ -529,10 +518,10 @@ it("keeps unanswered requests idle and broadcasts selected, granted and released
     );
     (
       session as unknown as Pick<
-        MultiEventEmitter<PeerSessionEventMap>,
-        "dispatchEvent"
+        EventBus<PeerSessionEventMap>,
+        "emit"
       >
-    ).dispatchEvent("messagechannelchange", "ready");
+    ).emit("messagechannelchange", "ready");
     return messages;
   };
   const add = (clientId: string) =>
@@ -659,10 +648,10 @@ it("hides control discovery and requests, then patches only the affected peer wh
     );
     (
       session as unknown as Pick<
-        MultiEventEmitter<PeerSessionEventMap>,
-        "dispatchEvent"
+        EventBus<PeerSessionEventMap>,
+        "emit"
       >
-    ).dispatchEvent("messagechannelchange", "ready");
+    ).emit("messagechannelchange", "ready");
     return messages;
   };
   try {

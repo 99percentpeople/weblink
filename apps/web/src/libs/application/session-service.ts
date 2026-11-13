@@ -2,6 +2,7 @@ import { ROOM_SCREEN_PREFIX } from "../domain/native-screen/signaling";
 import { ScreenDecodeError } from "../domain/native-screen/errors";
 import { MeetingCameraPeer } from "./meeting-camera-peer";
 import { scopes } from "@weblink/automation";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import {
   VideoQualityPeer,
   type VideoQualityControl,
@@ -63,7 +64,7 @@ import {
 } from "@/libs/state/permission-options";
 import { type SendClipboardMessage } from "@/libs/domain/protocol/messages";
 import { loadSessionIceServers } from "./ice-server-service";
-import { catchError, catchErrorSync } from "@/libs/catch";
+
 import {
   getMeetingAudioSource,
   getMeetingVideoSourceKind,
@@ -90,6 +91,7 @@ export interface ReceivedVideoQuality {
 }
 
 export class SessionService {
+  private clientSubscriptions = new SubscriptionScope();
   private readonly mediaReceive: MediaReceiveService;
   private readonly transportOverride?: RoomTransport;
   private readonly cameras = new Map<
@@ -478,21 +480,27 @@ export class SessionService {
       this.removeService();
     }
     this.service = cs;
+    this.clientSubscriptions = new SubscriptionScope();
     this.remoteControl.start();
 
-    cs.addEventListener("statuschange", (ev) => {
-      setAppState(
-        "session",
-        "clientServiceStatus",
-        ev.detail,
-      );
-    });
+    cs.events.subscribe(
+      "statuschange",
+      (status) => {
+        setAppState(
+          "session",
+          "clientServiceStatus",
+          status,
+        );
+      },
+      { signal: this.clientSubscriptions.signal },
+    );
   }
 
   removeService() {
     this.remoteControl.close();
     this.pendingClients.clear();
     this.service?.close();
+    this.clientSubscriptions.dispose();
     this.service = undefined;
     setAppState(
       "session",
@@ -990,9 +998,9 @@ export class SessionService {
         );
       }
     };
-    session.addEventListener(
+    session.events.subscribe(
       "channel",
-      ({ detail }) => {
+      (detail) => {
         if (session.roomScreens.channel(detail)) return;
         if (
           detail.label === NATIVE_SCREEN_CHANNEL &&
@@ -1002,7 +1010,7 @@ export class SessionService {
       },
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "peerconnectioninit",
       () => {
         opening = false;
@@ -1014,9 +1022,9 @@ export class SessionService {
       },
       { signal: controller.signal },
     );
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
-      ({ detail }) => {
+      (detail) => {
         mainChannelReady = detail === "ready";
         if (detail === "ready") void openNative();
         else {
@@ -1073,10 +1081,10 @@ export class SessionService {
     );
     setClientConfig(client.clientId, { name: client.name });
 
-    session.addEventListener(
+    session.events.subscribe(
       "peerconnectioninit",
       (ev) => {
-        const pc = ev.detail;
+        const pc = ev;
         pc.getSenders().forEach((sender) => {
           switch (sender.track?.kind) {
             case "audio": {
@@ -1119,10 +1127,10 @@ export class SessionService {
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "statuschange",
       (ev) => {
-        switch (ev.detail) {
+        switch (ev) {
           case "created":
             break;
           case "connecting":
@@ -1180,27 +1188,27 @@ export class SessionService {
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "error",
       (ev) => {
         console.error(
           `session ${client.clientId} error`,
-          ev.detail,
+          ev,
         );
       },
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "remotestreamchange",
       (ev) => {
-        meetingStream = ev.detail;
+        meetingStream = ev;
         publishMeetingStream();
       },
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "remotevideotrackschange",
       (ev) => {
         setAppState(
@@ -1208,13 +1216,13 @@ export class SessionService {
           "clientViewData",
           client.clientId,
           "videoTracks",
-          ev.detail.map((binding) => ({ ...binding })),
+          ev.map((binding) => ({ ...binding })),
         );
       },
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "remoteaudiotrackschange",
       (ev) => {
         setAppState(
@@ -1222,19 +1230,19 @@ export class SessionService {
           "clientViewData",
           client.clientId,
           "audioTracks",
-          ev.detail.map((binding) => ({ ...binding })),
+          ev.map((binding) => ({ ...binding })),
         );
       },
       { signal: controller.signal },
     );
 
-    session.addEventListener(
+    session.events.subscribe(
       "messagechannelchange",
       (ev) => {
         const view = this.clientViewData[client.clientId];
         if (!view) return;
 
-        const ready = ev.detail === "ready";
+        const ready = ev === "ready";
 
         setAppState(
           "session",
@@ -1286,6 +1294,7 @@ export class SessionService {
     setAppState("session", "clientViewData", reconcile({}));
 
     this.service?.close();
+    this.clientSubscriptions.dispose();
     this.service = undefined;
     setAppState(
       "session",

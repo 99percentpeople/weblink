@@ -64,7 +64,7 @@ export function setupLibrary() {
     if (!raw.has(id)) {
       const cache = fakeCache(id);
       raw.set(id, cache);
-      cache.addEventListener("cleanup", () => {
+      cache.events.subscribe("cleanup", () => {
         if (raw.get(id) === cache) raw.delete(id);
         if (caches.get(id) === cache) caches.delete(id);
       });
@@ -79,7 +79,7 @@ export function setupLibrary() {
     getCache: (id) => caches.get(id) ?? null,
     publish: async (cache) => {
       caches.set(cache.id, cache);
-      cache.addEventListener("cleanup", () => {
+      cache.events.subscribe("cleanup", () => {
         if (caches.get(cache.id) === cache)
           caches.delete(cache.id);
       });

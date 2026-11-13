@@ -18,7 +18,7 @@ import {
   splitProps,
   Switch,
 } from "solid-js";
-import { Button } from "@/components/ui/button";
+
 import { cn } from "@/libs/cn";
 import { appState } from "@/libs/state/app-state";
 import {

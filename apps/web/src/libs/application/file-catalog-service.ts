@@ -4,6 +4,8 @@ import type {
   StorageQuery,
 } from "@/libs/domain/protocol";
 import type { FileCatalogIndex } from "./file-catalog-index";
+import type { EventSource } from "@weblink/platform/events";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import {
   RemoteFileCatalog,
   type RemoteCatalogState,
@@ -16,21 +18,21 @@ export interface FileCatalogServiceOptions<
     P2PProtocol<S>,
     "call" | "handle" | "on" | "notify"
   >;
-  index: Pick<FileCatalogIndex, "query" | "onChange">;
+  index: Pick<FileCatalogIndex, "query" | "events">;
   getSessions(): Iterable<S>;
   isReady(session: S): boolean;
   canList(session: S): boolean;
   supports?(session: S): boolean;
-  onSessionClosed(
-    handler: (session: S) => void,
-  ): () => void;
+  sessionEvents: EventSource<{
+    sessionclosed: { session: S };
+  }>;
 }
 
 /** Application-lifetime directory provider and invalidation router; no UI/browser dependencies. */
 export class FileCatalogService<S extends ProtocolSession> {
   private readonly views = new Map<RemoteFileCatalog, S>();
   private readonly sharing = new Map<S, boolean>();
-  private readonly stops: (() => void)[];
+  private readonly subscriptions = new SubscriptionScope();
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
 
@@ -38,7 +40,7 @@ export class FileCatalogService<S extends ProtocolSession> {
     private readonly options: FileCatalogServiceOptions<S>,
   ) {
     const { protocol, index } = options;
-    this.stops = [
+    this.subscriptions.add(
       protocol.handle(
         "request-storage",
         ({ session, message }) => {
@@ -50,17 +52,29 @@ export class FileCatalogService<S extends ProtocolSession> {
           );
         },
       ),
+    );
+    this.subscriptions.add(
       protocol.on("storage-changed", ({ session }) => {
         for (const [view, owner] of this.views)
           if (owner === session) view.refresh();
       }),
-      index.onChange(() => this.scheduleNotification()),
-      options.onSessionClosed((session) => {
+    );
+    index.events.subscribe(
+      "changed",
+      () => this.scheduleNotification(),
+      {
+        signal: this.subscriptions.signal,
+      },
+    );
+    options.sessionEvents.subscribe(
+      "sessionclosed",
+      ({ session }) => {
         this.sharing.delete(session);
         for (const [view, owner] of this.views)
           if (owner === session) view.close();
-      }),
-    ];
+      },
+      { signal: this.subscriptions.signal },
+    );
   }
 
   watch(
@@ -144,7 +158,7 @@ export class FileCatalogService<S extends ProtocolSession> {
     if (this.disposed) return;
     this.disposed = true;
     clearTimeout(this.timer);
-    this.stops.forEach((stop) => stop());
+    this.subscriptions.dispose();
     for (const view of this.views.keys()) view.dispose();
     this.sharing.clear();
   }

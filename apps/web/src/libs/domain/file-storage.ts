@@ -6,6 +6,12 @@ import type {
 } from "@weblink/platform";
 import type { ChunkCache } from "./file";
 import type { StorageMigrationProgress } from "./storage-migration";
+import type { EventSource } from "@weblink/platform/events";
+
+export interface FileStorageEventMap {
+  changed: string | undefined;
+  migration: StorageMigrationProgress;
+}
 
 /** Local operations, resolved from the file's own backing store, never the default mount. */
 export interface FileCapabilities {
@@ -62,6 +68,8 @@ export interface FileStorageSettings {
 }
 
 export interface FileStorage extends FileStorageSettings {
+  readonly events: EventSource<FileStorageEventMap>;
+  readonly migrationProgress?: StorageMigrationProgress;
   initialize(): Promise<void>;
   list(): Promise<string[]>;
   synchronize(): Promise<FileStorageSnapshot>;
@@ -84,11 +92,5 @@ export interface FileStorage extends FileStorageSettings {
   authorizeDefault(
     options?: StorageAuthorizationOptions,
   ): Promise<void>;
-  onChange(
-    listener: (mountId?: string) => void,
-  ): () => void;
-  onMigrationProgress(
-    listener: (progress: StorageMigrationProgress) => void,
-  ): () => void;
   dispose(): void;
 }

@@ -32,8 +32,7 @@ function side(client: string, target: string) {
     getSessions: () => [session],
     isReady: () => ready,
     canList: () => sharing,
-    onSessionClosed: (handler) =>
-      transport.onSessionClosed(handler),
+    sessionEvents: transport.events,
   });
   service.syncSharing();
   disposers.push(() => {

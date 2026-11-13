@@ -1,6 +1,5 @@
 import type {
   Component,
-  ComponentProps,
   JSX,
   ValidComponent,
 } from "solid-js";
@@ -8,8 +7,6 @@ import { splitProps } from "solid-js";
 
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
 import * as ProgressPrimitive from "@kobalte/core/progress";
-
-import { Label } from "@/components/ui/label";
 
 type ProgressRootProps<T extends ValidComponent = "div"> =
   ProgressPrimitive.ProgressRootProps<T> & {
@@ -27,11 +24,11 @@ const Progress = <T extends ValidComponent = "div">(
     <ProgressPrimitive.Root {...others}>
       {local.children}
       <ProgressPrimitive.Track
-        class="relative h-2 w-full overflow-hidden rounded-full
-          bg-secondary"
+        class="bg-secondary relative h-2 w-full overflow-hidden
+          rounded-full"
       >
         <ProgressPrimitive.Fill
-          class="h-full w-[var(--kb-progress-fill-width)] flex-1 bg-primary
+          class="bg-primary h-full w-[var(--kb-progress-fill-width)] flex-1
             transition-all"
         />
       </ProgressPrimitive.Track>

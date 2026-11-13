@@ -2,14 +2,14 @@ import { FileCatalogIndex } from "../../../src/libs/application/file-catalog-ind
 import { runRoomChatSmoke } from "./room-chat";
 import { runSessionMediaSmoke } from "./session-media";
 import { RemoteFileCatalog } from "../../../src/libs/application/remote-file-catalog";
-import { RtcProtocol } from "../../../src/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "../../../src/libs/domain/protocol";
 import { MessageSendQueue } from "../../../src/libs/domain/session-send-queue";
 import { parseSessionMessage } from "../../../src/libs/domain/protocol/validation";
 import type { PeerSession } from "../../../src/libs/domain/session";
 import type {
-  RtcAnyMessageHandler,
-  RtcProtocolTransport,
-  RtcSessionClosedHandler,
+  ProtocolAnyMessageHandler,
+  ProtocolTransport,
+  ProtocolSessionClosedHandler,
 } from "../../../src/libs/domain/protocol/transport";
 
 declare global {
@@ -52,9 +52,9 @@ function endpoint(
   } as PeerSession;
   let channel: RTCDataChannel | null = null;
   const queue = new MessageSendQueue(() => channel);
-  const handlers = new Set<RtcAnyMessageHandler>();
-  const closed = new Set<RtcSessionClosedHandler>();
-  const transport: RtcProtocolTransport = {
+  const handlers = new Set<ProtocolAnyMessageHandler>();
+  const closed = new Set<ProtocolSessionClosedHandler>();
+  const transport: ProtocolTransport = {
     send: (_session, message, options) =>
       queue.send(message, options),
     onAny: (handler) => {
@@ -70,7 +70,7 @@ function endpoint(
       };
     },
   };
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   return {
     session,
     protocol,

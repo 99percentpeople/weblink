@@ -29,7 +29,6 @@ import {
 import {
   Circle,
   FolderOpen,
-  ArrowLeft,
   Columns2,
   Minimize2,
   Info,

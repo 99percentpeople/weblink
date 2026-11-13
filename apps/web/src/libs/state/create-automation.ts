@@ -11,6 +11,7 @@ import { createUuid } from "@/libs/domain/ids";
 import { resolveRemoteKeyboardOptions } from "@/libs/domain/remote-control/keyboard-options";
 import { combineAbortSignals } from "@/libs/utils/abort-signals";
 import { PresentationDiagnostics } from "@/libs/application/automation/presentation";
+import { NativeAutomationEvents } from "@/libs/application/automation/native-events";
 import {
   AutomationScreenShares,
   type AutomationScreenAuthority,
@@ -44,7 +45,6 @@ import {
 import { platform } from "@/libs/platform/runtime";
 import { DEFAULT_MCP_SERVER } from "@weblink/platform";
 import type {
-  NativeAutomationEvent,
   NativeAutomationPeer,
   NativeAutomationRequest,
   McpTokenSummary,
@@ -360,6 +360,7 @@ export function createAutomation(
   let clientSnapshotSequence = 0;
   let nativeRevision = -1;
   let nativeSessionClosed = false;
+  let nativeEvents: NativeAutomationEvents | undefined;
   let shareRevision = 0;
   const shareCalls = new Set<AbortController>();
   const applyNativeStatus = (
@@ -885,9 +886,9 @@ export function createAutomation(
           ),
         };
         bindings.set(session, b);
-        session.addEventListener(
+        session.events.subscribe(
           "channel",
-          ({ detail }) => {
+          (detail) => {
             if (detail.label === CHANNEL) {
               if (detail.protocol === CHANNEL)
                 bind(session, detail);
@@ -896,16 +897,16 @@ export function createAutomation(
           },
           { signal: b.abort.signal },
         );
-        session.addEventListener(
+        session.events.subscribe(
           "messagechannelchange",
-          ({ detail }) => {
+          (detail) => {
             if (detail === "closed")
               links.get(session)?.close();
             else untrack(sync);
           },
           { signal: b.abort.signal },
         );
-        session.addEventListener(
+        session.events.subscribe(
           "peerconnectioninit",
           () => untrack(sync),
           { signal: b.abort.signal },
@@ -964,6 +965,7 @@ export function createAutomation(
   };
   const closeNativeSession = () => {
     nativeSessionClosed = true;
+    nativeEvents?.dispose();
     ++snapshotSequence;
     ++clientSnapshotSequence;
     setError("SESSION_CLOSED");
@@ -1140,30 +1142,25 @@ export function createAutomation(
     void (async () => {
       if (native)
         try {
-          const queued: NativeAutomationEvent[] = [];
-          const receive = (
-            event: NativeAutomationEvent,
-          ) => {
-            if (life.signal.aborted || nativeSessionClosed)
+          const channel = (nativeEvents =
+            new NativeAutomationEvents(life.signal));
+          channel.events.subscribe("status", (event) => {
+            if (
+              event.epoch !== epoch ||
+              event.snapshot.revision < nativeRevision
+            )
               return;
-            if (!epoch) {
-              queued.push(event);
-              return;
-            }
-            if (event.kind === "status") {
-              if (
-                event.epoch !== epoch ||
-                event.snapshot.revision < nativeRevision
-              )
-                return;
-              ++snapshotSequence;
-              applyNativeStatus(
-                event.snapshot as unknown as NativeSnapshot,
-              );
-            } else if (event.kind === "closed") {
-              if (event.epoch === epoch)
-                closeNativeSession();
-            } else if (event.kind === "token-used") {
+            ++snapshotSequence;
+            applyNativeStatus(
+              event.snapshot as unknown as NativeSnapshot,
+            );
+          });
+          channel.events.subscribe("closed", (event) => {
+            if (event.epoch === epoch) closeNativeSession();
+          });
+          channel.events.subscribe(
+            "token-used",
+            (event) => {
               if (event.epoch !== epoch) return;
               const at = Math.max(
                 tokenUsage.get(event.id) ?? 0,
@@ -1176,7 +1173,11 @@ export function createAutomation(
                 "lastUsedAt",
                 at,
               );
-            } else if (event.kind === "policies-reset") {
+            },
+          );
+          channel.events.subscribe(
+            "policies-reset",
+            (event) => {
               if (event.revision !== undefined)
                 nativeRevision = Math.max(
                   nativeRevision,
@@ -1188,26 +1189,28 @@ export function createAutomation(
               } catch (e) {
                 setError(String(e));
               }
-            } else if (event.kind === "cancel") {
-              if (event.revision !== undefined)
-                nativeRevision = Math.max(
-                  nativeRevision,
-                  event.revision,
-                );
-              calls
-                .get(event.id)
-                ?.abort(new AutomationError("CANCELLED"));
-            } else {
-              if (event.revision !== undefined)
-                nativeRevision = Math.max(
-                  nativeRevision,
-                  event.revision,
-                );
-              void receiveNative(event);
-            }
-          };
-          epoch = await native.open(receive);
-          queued.forEach(receive);
+            },
+          );
+          channel.events.subscribe("cancel", (event) => {
+            if (event.revision !== undefined)
+              nativeRevision = Math.max(
+                nativeRevision,
+                event.revision,
+              );
+            calls
+              .get(event.id)
+              ?.abort(new AutomationError("CANCELLED"));
+          });
+          channel.events.subscribe("call", (event) => {
+            if (event.revision !== undefined)
+              nativeRevision = Math.max(
+                nativeRevision,
+                event.revision,
+              );
+            return receiveNative(event);
+          });
+          epoch = await native.open(channel.receive);
+          channel.activate(epoch);
           if (life.signal.aborted) {
             await native.close(epoch);
             return;

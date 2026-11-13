@@ -12,7 +12,7 @@ import {
 import type { FileTransferMessage } from "@/libs/domain/message";
 import type { SessionMessage } from "@/libs/domain/protocol/messages";
 import type { PeerSession } from "@/libs/domain/session";
-import { MultiEventEmitter } from "@/libs/utils/event-emitter";
+import { EventBus } from "@weblink/platform/events";
 import type { FileTransferStates } from "@/libs/application/transfer/file-transfer-state";
 import { TransferRegistry } from "@/libs/application/transfer/transfer-registry";
 import {
@@ -105,8 +105,9 @@ export class FakeMessages {
 }
 
 export function fakeCache(id = "file") {
-  const events =
-    new MultiEventEmitter<ChunkCacheEventMap>();
+  const events = new EventBus<ChunkCacheEventMap>(
+    "test.events",
+  );
   let info: FileMetaData = {
     id,
     fileName: "sample.bin",
@@ -117,9 +118,8 @@ export function fakeCache(id = "file") {
   };
   const cache = {
     id,
-    addEventListener: events.addEventListener.bind(events),
-    removeEventListener:
-      events.removeEventListener.bind(events),
+    events: events.events,
+
     initialize: vi.fn(async () => {}),
     setInfo: vi.fn(async (value: Partial<FileMetaData>) => {
       info = { ...info, ...value, id };
@@ -142,7 +142,7 @@ export function fakeCache(id = "file") {
     ),
     flush: vi.fn(async () => {}),
     cleanup: vi.fn(async () => {
-      events.dispatchEvent("cleanup", undefined);
+      events.emit("cleanup", undefined);
     }),
     getCachedKeys: vi.fn(async () => []),
     calcCachedBytes: vi.fn(async () => 0),
@@ -179,7 +179,7 @@ export function fileSession(peer = "peer"): PeerSession {
   } as unknown as PeerSession;
 }
 export class FakeTransfer
-  extends MultiEventEmitter<FileTransfererEventMap>
+  extends EventBus<FileTransfererEventMap>
   implements FileTransferer
 {
   channel: RTCDataChannel | null = null;
@@ -189,7 +189,7 @@ export class FakeTransfer
     readonly cache: ChunkCache,
     readonly mode: TransferMode,
   ) {
-    super();
+    super("test.events");
   }
   get id() {
     return this.cache.id;
@@ -200,12 +200,12 @@ export class FakeTransfer
   setChannel = vi.fn((channel: RTCDataChannel) => {
     this.channel = channel;
     if (channel.readyState === "open")
-      this.dispatchEvent("ready", undefined);
+      this.emit("ready", undefined);
   });
   close = vi.fn(() => {
     if (this.closed) return;
     this.closed = true;
-    this.dispatchEvent(
+    this.emit(
       this.completed ? "complete" : "close",
       undefined,
     );
@@ -213,7 +213,7 @@ export class FakeTransfer
   pause = vi.fn(async (_notify?: boolean) => this.close());
   finish() {
     this.completed = true;
-    this.dispatchEvent("complete", undefined);
+    this.emit("complete", undefined);
   }
 }
 export function registryFixture() {

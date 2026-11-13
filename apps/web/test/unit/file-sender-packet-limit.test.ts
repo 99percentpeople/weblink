@@ -86,7 +86,7 @@ describe("file sender packet limits", () => {
         } as unknown as ChunkCache,
       });
       const progress = vi.fn();
-      transfer.addEventListener("progress", ({ detail }) =>
+      transfer.events.subscribe("progress", (detail) =>
         progress(detail),
       );
       try {
@@ -118,7 +118,7 @@ describe("file sender packet limits", () => {
   it("waits for receiver ranges before reporting resume progress", async () => {
     const transfer = sender(32768, 32768);
     const progress = vi.fn();
-    transfer.addEventListener("progress", progress);
+    transfer.events.subscribe("progress", progress);
     try {
       await transfer.initialize();
       expect(progress).not.toHaveBeenCalled();
@@ -135,14 +135,10 @@ describe("file sender packet limits", () => {
         resume: true,
         ranges: [],
       });
-      expect(progress).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            total: contents.length,
-            received: contents.length,
-          },
-        }),
-      );
+      expect(progress).toHaveBeenCalledWith({
+        total: contents.length,
+        received: contents.length,
+      });
     } finally {
       transfer.close();
     }
@@ -209,10 +205,10 @@ describe("file sender packet limits", () => {
     const transfer = sender(32768, 32768);
     const channel = new Channel(1);
     const events: string[] = [];
-    transfer.addEventListener("error", ({ detail }) =>
+    transfer.events.subscribe("error", (detail) =>
       events.push(detail.message),
     );
-    transfer.addEventListener("close", () =>
+    transfer.events.subscribe("close", () =>
       events.push("closed"),
     );
     await transfer.initialize();

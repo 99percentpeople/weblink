@@ -36,7 +36,9 @@ export function MountedDirectoryMenu(props: {
           .filter((mount) => mount.canOpen),
       );
     refresh();
-    onCleanup(props.storage.onChange(refresh));
+    onCleanup(
+      props.storage.events.subscribe("changed", refresh),
+    );
   });
   const open = (id: string) => {
     void props.storage

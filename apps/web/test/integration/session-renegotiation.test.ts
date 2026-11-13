@@ -52,8 +52,7 @@ async function harness() {
     targetClientId: "remote",
     status: "connected",
     sendSignal,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
+    events: { subscribe: () => () => {} },
     close: vi.fn(),
   } as unknown as SignalingService;
   const session = new PeerSession(sender, {

@@ -91,22 +91,19 @@ async function main() {
             maxMessageSize: pc.sctp?.maxMessageSize,
           });
         const receiver = new FileReceiver({ cache, info });
-        receiver.addEventListener(
-          "progress",
-          ({ detail }) => {
-            if (
-              focusChanged ||
-              detail.received < 8 * 1024 * 1024
-            )
-              return;
-            focusChanged = true;
-            // Opening the task list resets remote input focus but retains the control grant.
-            queueMicrotask(() => {
-              epoch = `${epoch}-refocused`;
-              control.dispatchEvent(new Event("change"));
-            });
-          },
-        );
+        receiver.events.subscribe("progress", (detail) => {
+          if (
+            focusChanged ||
+            detail.received < 8 * 1024 * 1024
+          )
+            return;
+          focusChanged = true;
+          // Opening the task list resets remote input focus but retains the control grant.
+          queueMicrotask(() => {
+            epoch = `${epoch}-refocused`;
+            control.dispatchEvent(new Event("change"));
+          });
+        });
         return receiver;
       },
       publish: () => {},

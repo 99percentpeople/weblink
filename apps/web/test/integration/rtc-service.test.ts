@@ -1,19 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 import { RtcService } from "@/libs/application/rtc/rtc-service";
-import { RtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import {
   createSessionMessage,
   type SessionMessage,
 } from "@/libs/domain/protocol/messages";
 import type { MessageSendOptions } from "@/libs/domain/protocol/errors";
 import type { PeerSession } from "@/libs/domain/session";
+import type { PeerSessionEventMap } from "@/libs/domain/session";
+import { EventBus } from "@weblink/platform/events";
 import {
   flushRtc,
   makeSession,
   deferred,
 } from "../support/rtc-transport";
 
-class SessionEvents extends EventTarget {
+class SessionEvents extends EventBus<PeerSessionEventMap> {
+  constructor() {
+    super("test.session");
+  }
   readonly clientId = "a";
   readonly targetClientId = "b";
   readonly sendMessage = vi.fn(
@@ -25,20 +30,62 @@ class SessionEvents extends EventTarget {
   get session(): PeerSession {
     return this as unknown as PeerSession;
   }
-  emit(type: string, detail: unknown): void {
-    this.dispatchEvent(new CustomEvent(type, { detail }));
-  }
 }
 
 describe("RTC transport session ownership", () => {
+  it("releases application subscriptions while preserving protocol delivery and close reasons", () => {
+    const service = new RtcService();
+    const session = new SessionEvents();
+    const lifetime = new AbortController();
+    const applicationMessage = vi.fn();
+    const protocolMessage = vi.fn();
+    const protocolClosed = vi.fn();
+    service.events.subscribe(
+      "message",
+      applicationMessage,
+      {
+        signal: lifetime.signal,
+      },
+    );
+    const stopMessage =
+      service.transport.onAny(protocolMessage);
+    const stopClosed =
+      service.transport.onSessionClosed(protocolClosed);
+    service.bindSession(session.session);
+    const message = createSessionMessage(
+      makeSession("b", "a"),
+      "send-text",
+      { data: "hello" },
+    );
+    session.emit("message", message);
+    lifetime.abort();
+    session.emit("message", message);
+    expect(applicationMessage).toHaveBeenCalledTimes(1);
+    expect(protocolMessage).toHaveBeenCalledTimes(2);
+    session.emit("accesschange", false);
+    expect(protocolClosed).toHaveBeenLastCalledWith(
+      session.session,
+      { recoverable: true },
+    );
+    session.emit("statuschange", "closed");
+    expect(protocolClosed).toHaveBeenLastCalledWith(
+      session.session,
+    );
+    expect(protocolClosed).toHaveBeenCalledTimes(2);
+    stopMessage();
+    stopClosed();
+    service.unbindAllSessions();
+    expect(session.listenerCount).toBe(0);
+  });
+
   it("replaces a session binding without retaining listeners for its predecessor", async () => {
     const service = new RtcService();
     const first = new SessionEvents();
     const second = new SessionEvents();
     const messages = vi.fn();
     const closed = vi.fn();
-    service.onAny(messages);
-    service.onSessionClosed(closed);
+    service.events.subscribe("message", messages);
+    service.events.subscribe("sessionclosed", closed);
     service.bindSession(first.session);
     service.bindSession(first.session);
     const message = createSessionMessage(
@@ -49,7 +96,9 @@ describe("RTC transport session ownership", () => {
     first.emit("message", message);
     expect(messages).toHaveBeenCalledTimes(1);
     service.bindSession(second.session);
-    expect(closed).toHaveBeenCalledWith(first.session);
+    expect(closed).toHaveBeenCalledWith({
+      session: first.session,
+    });
     first.emit("message", message);
     second.emit("message", message);
     expect(messages).toHaveBeenCalledTimes(2);
@@ -62,7 +111,7 @@ describe("RTC transport session ownership", () => {
   it("rejects a pending protocol call when a bound session closes", async () => {
     const service = new RtcService();
     const session = new SessionEvents();
-    const protocol = new RtcProtocol(service);
+    const protocol = new P2PProtocol(service.transport);
     service.bindSession(session.session);
     const pending = protocol.call(
       session.session,
@@ -90,7 +139,7 @@ describe("RTC transport session ownership", () => {
     async (type) => {
       const service = new RtcService();
       const session = new SessionEvents();
-      const protocol = new RtcProtocol(service);
+      const protocol = new P2PProtocol(service.transport);
       service.bindSession(session.session);
       const payload =
         type === "send-text"
@@ -160,7 +209,7 @@ describe("RTC transport session ownership", () => {
   it("aborts interrupted handlers and suppresses their late replies after access recovers", async () => {
     const service = new RtcService();
     const session = new SessionEvents();
-    const protocol = new RtcProtocol(service);
+    const protocol = new P2PProtocol(service.transport);
     const oldWork = deferred<void>();
     const newWork = deferred<void>();
     const handler = vi
@@ -217,7 +266,11 @@ describe("RTC transport session ownership", () => {
       signal: new AbortController().signal,
       sendTimeoutMs: 100,
     };
-    await service.send(session.session, message, options);
+    await service.transport.send(
+      session.session,
+      message,
+      options,
+    );
     expect(session.sendMessage).toHaveBeenCalledWith(
       message,
       options,

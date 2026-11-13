@@ -1,4 +1,4 @@
-import { FileStorageService } from "../../../src/libs/application/file-storage-service";
+import { FileStorageService } from "../../../src/libs/infrastructure/vfs/file-storage";
 import { VfsDatabase } from "../../../src/libs/infrastructure/vfs/database";
 
 const MiB = 1024 * 1024;

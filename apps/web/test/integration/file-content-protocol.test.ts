@@ -5,10 +5,8 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  RtcProtocol,
-  type WebRtcProtocol,
-} from "@/libs/application/rtc/rtc-protocol";
+import { type WebRtcProtocol } from "@/libs/application/rtc/rtc-protocol";
+import { P2PProtocol } from "@/libs/domain/protocol";
 import { createSessionMessage } from "@/libs/domain/protocol/messages";
 import { validateSessionMessage } from "@/libs/domain/protocol/validation";
 import {
@@ -31,7 +29,7 @@ const offer = {
 const instances: WebRtcProtocol[] = [];
 const setup = () => {
   const transport = new FakeRtcTransport();
-  const protocol = new RtcProtocol(transport);
+  const protocol = new P2PProtocol(transport);
   instances.push(protocol);
   return { transport, protocol };
 };

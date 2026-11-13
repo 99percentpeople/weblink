@@ -1,3 +1,4 @@
+import { EventBus } from "@weblink/platform/events";
 import type {
   BinarySource,
   StoredFile,
@@ -97,26 +98,13 @@ export class FileLibraryService {
   >();
   private storageOwners = new Map<string, string>();
   private storageOwnershipRevision = 0;
-  private readonly changes = new Set<() => void>();
-  private readonly removals = new Set<
-    (ids: string[]) => void
-  >();
-  onRemove(listener: (ids: string[]) => void): () => void {
-    this.removals.add(listener);
-    return () => {
-      this.removals.delete(listener);
-    };
-  }
-  private readonly unshares = new Set<
-    (ids: string[]) => void
-  >();
+  private readonly changes = new EventBus<{
+    changed: void;
+    removed: string[];
+    unshared: string[];
+  }>("files.library");
+  readonly events = this.changes.events;
   private sharedIds = new Set<string>();
-  onUnshare(listener: (ids: string[]) => void): () => void {
-    this.unshares.add(listener);
-    return () => {
-      this.unshares.delete(listener);
-    };
-  }
   private channel?: BroadcastChannel;
   private refreshing?: Promise<void>;
   constructor(
@@ -204,9 +192,7 @@ export class FileLibraryService {
       );
       this.sharedIds = shared;
       if (revoked.length)
-        this.unshares.forEach((listener) =>
-          listener(revoked),
-        );
+        this.changes.emit("unshared", revoked);
       this.changed(false);
     };
     const pending = work().finally(() => {
@@ -219,21 +205,14 @@ export class FileLibraryService {
   dispose(): void {
     this.channel?.close();
     this.channel = undefined;
-    this.changes.clear();
-    this.removals.clear();
-    this.unshares.clear();
-  }
-
-  onChange(listener: () => void): () => void {
-    this.changes.add(listener);
-    return () => {
-      this.changes.delete(listener);
-    };
+    this.changes.dispose();
+    for (const cache of this.references.values())
+      cache.dispose();
   }
   private changed(broadcast = true): void {
     if (broadcast)
       this.channel?.postMessage({ changed: true });
-    this.changes.forEach((listener) => listener());
+    this.changes.emit("changed", undefined);
   }
   ownsStorage(id: string): boolean {
     return this.storageOwners.has(id);
@@ -928,9 +907,7 @@ export class FileLibraryService {
       if (enabled) this.sharedIds.add(sharedId);
       else {
         this.sharedIds.delete(sharedId);
-        this.unshares.forEach((listener) =>
-          listener([sharedId]),
-        );
+        this.changes.emit("unshared", [sharedId]);
       }
       for (const reference of await this.repository.references(
         source.contentKey,
@@ -1107,7 +1084,7 @@ export class FileLibraryService {
       await this.options
         .getCache(id)
         ?.cleanup({ deleteSource: true });
-      this.removals.forEach((listener) => listener([id]));
+      this.changes.emit("removed", [id]);
       return;
     }
     await withContentLock(ref.contentKey, async () => {
@@ -1134,8 +1111,9 @@ export class FileLibraryService {
     const refs = await this.repository.references(
       record.key,
     );
-    this.removals.forEach((listener) =>
-      listener(refs.map((ref) => ref.id)),
+    this.changes.emit(
+      "removed",
+      refs.map((ref) => ref.id),
     );
     await this.repository.removeContent(record.key);
     for (const ref of refs) {

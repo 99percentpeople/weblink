@@ -5,6 +5,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { toast } from "solid-sonner";
+import { EventBus } from "@weblink/platform/events";
 import { t } from "@/i18n";
 import {
   RecordingService,
@@ -98,9 +99,14 @@ function selectRecordingInput(
 
 export function createRecording(app: AppStateContextProps) {
   const manager = createCacheManager();
-  const savedListeners = new Set<
-    (recording: SavedRecording) => void
-  >();
+  const bus = new EventBus<{ saved: SavedRecording }>(
+    "recording",
+    (error) =>
+      console.warn(
+        "Recording completion listener failed",
+        error,
+      ),
+  );
   const [state, setState] =
     createSignal<RecordingStatus | null>(null);
   let presentation: RecordingPresentation = {};
@@ -127,16 +133,7 @@ export function createRecording(app: AppStateContextProps) {
         throw new Error("Saved recording is unavailable");
       // Publish only after VFS commit and library verification. Notifications
       // retain the identity, never a potentially large or stale file snapshot.
-      for (const listener of savedListeners) {
-        try {
-          listener({ id, fileName: file.name });
-        } catch (error) {
-          console.warn(
-            "Recording completion listener failed",
-            error,
-          );
-        }
-      }
+      bus.emit("saved", { id, fileName: file.name });
     },
     failed,
   });
@@ -154,16 +151,11 @@ export function createRecording(app: AppStateContextProps) {
     ),
   );
   onCleanup(() => {
-    savedListeners.clear();
+    bus.dispose();
     void service.stop();
   });
   return {
-    onSaved(listener: (recording: SavedRecording) => void) {
-      savedListeners.add(listener);
-      return () => {
-        savedListeners.delete(listener);
-      };
-    },
+    events: bus.events,
     state,
     supported: () => service.supported,
     pause: () => service.pause(),

@@ -124,10 +124,10 @@ describe("FileTransferBase single-channel backpressure", () => {
 
     let error: Error | undefined;
     let closed = false;
-    transfer.addEventListener("error", (event) => {
-      error = event.detail;
+    transfer.events.subscribe("error", (event) => {
+      error = event;
     });
-    transfer.addEventListener("close", () => {
+    transfer.events.subscribe("close", () => {
       closed = true;
     });
 

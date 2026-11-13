@@ -5,10 +5,7 @@ import { createUuid } from "@/libs/domain/ids";
 import type { StorageMigrationProgress } from "@/libs/domain/storage-migration";
 import type { VfsVolume } from "@/libs/domain/vfs";
 import { withExclusiveTask } from "@/libs/utils/exclusive-task";
-import {
-  VfsDatabase,
-  type StoredVfsFile,
-} from "../vfs/database";
+import { VfsDatabase } from "../vfs/database";
 import { IndexedDbVolume } from "../vfs/indexeddb-volume";
 import {
   LEGACY_DATABASE_PREFIX,

@@ -2,6 +2,7 @@ import type {
   CaptureStatus,
   NativeCapture,
 } from "@weblink/platform";
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 
 /** The capture owner renews its lease even when every presentation is hidden. */
 export function monitorNativeCapture(
@@ -10,32 +11,29 @@ export function monitorNativeCapture(
   onStatus: (status: CaptureStatus) => void,
   onError: (error: unknown) => void = console.warn,
 ): () => void {
-  let closed = false;
-  let unwatch: (() => void) | undefined;
+  const scope = new SubscriptionScope(undefined, onError);
   let retry: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;
-  const close = () => {
-    if (closed) return;
-    closed = true;
+  scope.add(() => {
     clearTimeout(retry);
     clearTimeout(heartbeat);
-    unwatch?.();
-  };
+  });
+  const close = () => scope.dispose();
   const watch = async () => {
     try {
-      const dispose = await capture.watch(
-        sessionId,
-        (status) => {
-          if (closed || status.sessionId !== sessionId)
+      await scope.track(
+        capture.watch(sessionId, (status) => {
+          if (
+            scope.signal.aborted ||
+            status.sessionId !== sessionId
+          )
             return;
           if (status.state !== "running") close();
           onStatus(status);
-        },
+        }),
       );
-      if (closed) dispose();
-      else unwatch = dispose;
     } catch (error) {
-      if (closed) return;
+      if (scope.signal.aborted) return;
       onError(error);
       retry = setTimeout(() => void watch(), 1000);
     }
@@ -45,14 +43,14 @@ export function monitorNativeCapture(
     try {
       await capture.renew(sessionId);
     } catch (error) {
-      if (!closed) onError(error);
+      if (!scope.signal.aborted) onError(error);
       delay = 1000;
     } finally {
-      if (!closed)
+      if (!scope.signal.aborted)
         heartbeat = setTimeout(() => void renew(), delay);
     }
   };
   void watch();
-  if (!closed) void renew();
+  if (!scope.signal.aborted) void renew();
   return close;
 }

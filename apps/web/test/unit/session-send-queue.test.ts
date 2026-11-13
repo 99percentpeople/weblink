@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PeerSession } from "@/libs/domain/session";
 import type { SignalingService } from "@/libs/domain/signaling";
-import type { SendTextMessage } from "@/libs/application/rtc/rtc-protocol";
+import { EventBus } from "@weblink/platform/events";
+import type { SignalingServiceEventMap } from "@/libs/domain/signaling";
+import type { SendTextMessage } from "@/libs/domain/protocol";
 
 if (typeof window === "undefined") {
   (globalThis as any).window = {
@@ -24,14 +26,16 @@ const makeSender = (
   targetClientId: string,
 ): SignalingService =>
   ({
+    events: new EventBus<SignalingServiceEventMap>(
+      "test.signaling",
+    ).events,
     clientId,
     targetClientId,
     get status() {
       return "connected";
     },
     sendSignal: async () => {},
-    addEventListener: ((..._args: any[]) => {}) as any,
-    removeEventListener: ((..._args: any[]) => {}) as any,
+
     close: () => {},
   }) as SignalingService;
 

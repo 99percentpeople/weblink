@@ -51,7 +51,12 @@ export default function FileManager() {
   onMount(() => {
     const refresh = () =>
       setMountId(cacheManager.storage.defaultMountId);
-    onCleanup(cacheManager.storage.onChange(refresh));
+    onCleanup(
+      cacheManager.storage.events.subscribe(
+        "changed",
+        refresh,
+      ),
+    );
     refresh();
   });
   const files = useLibraryFiles(mountId);

@@ -82,7 +82,7 @@ export class FileContentReceives {
     if (!found) return;
     const [key, job] = found;
     job.run = run;
-    run.transferer.addEventListener(
+    run.transferer.events.subscribe(
       "complete",
       () => {
         // Start completions before removing the reservation. Each callback binds its

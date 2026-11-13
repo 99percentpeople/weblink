@@ -3,7 +3,7 @@ import {
   createSessionMessage,
   P2P_ROOM_FILE_PROTOCOL_VERSION,
   requestSpec,
-} from "@/libs/application/rtc/rtc-protocol";
+} from "@/libs/domain/protocol";
 import { P2PProtocol } from "@/libs/domain/protocol";
 import { validateSessionMessage } from "@/libs/domain/protocol/validation";
 import {

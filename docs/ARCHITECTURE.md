@@ -793,6 +793,39 @@ message transport:
   until a peer connection exists. Room membership and client IDs
   also remain visible to the signaling backend.
 
+## Event subscriptions and ownership
+
+`@weblink/platform/events` provides the typed subscription contract shared by
+web services and desktop adapters. A service exposes `events.subscribe(topic,
+receive, { signal, once })`; callbacks receive the topic's payload and each call
+returns an idempotent unsubscribe function. Delivery stays synchronous and ordered.
+An `EventBus` belongs to one service or session, with separate domains for
+signaling, peer sessions, transfers, files, automation and window visibility.
+Consumers receive the subscription interface; publication stays with the owner.
+There is no global event bus or shared event-name registry.
+
+`RtcService.events` routes application messages, channels and session closure.
+Its `transport` adapts these events to the portable `ProtocolTransport` contract;
+the protocol module remains independent of platform and UI subscription code.
+
+`SubscriptionScope` owns subscriptions and other cleanup callbacks. Pass its
+`signal` to domain subscriptions or DOM listeners, use `add` for synchronous
+cleanup registration and `track` for asynchronous native watcher registration.
+A registration that finishes after disposal is released immediately; `guard`
+suppresses callbacks after disposal. Room replacement, session closure and view
+cleanup release their own scopes. Final close/complete events are published
+before the owner's bus is disposed.
+
+Business events use payload subscriptions without DOM event envelopes or manual
+callback matching. Each subscription has its own lifetime, even when callbacks
+are identical. Native IPC, BroadcastChannel and WebRTC listeners stay inside
+their adapters. Events describe changes; Solid stores remain the source of UI
+state. Consumers subscribe to changes and read the current snapshot when needed,
+including file-storage migration progress. Automation keeps its initial snapshot,
+epoch/revision checks and pre-initialization event queue. Protocol messages,
+permission decisions and required heartbeat/retry timers retain their existing
+semantics.
+
 ## Design conventions
 
 - Keep WebRTC details in `src/libs/domain`. Prefer exposing

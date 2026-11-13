@@ -9,17 +9,24 @@ import {
 import type {
   Client,
   ClientService,
+  ClientServiceEventMap,
   ClientServiceInitOptions,
   TransferClient,
 } from "@/libs/domain/client";
 import type { PeerSession } from "@/libs/domain/session";
 import { RoomService } from "@/libs/application/room-service";
+import { EventBus } from "@weblink/platform/events";
 import {
   appState,
   setAppState,
 } from "@/libs/state/app-state";
 
-function createClientService(): ClientService {
+function createClientService(): ClientService & {
+  emitter: EventBus<ClientServiceEventMap>;
+} {
+  const emitter = new EventBus<ClientServiceEventMap>(
+    "test.room",
+  );
   const info: TransferClient = {
     clientId: "local",
     name: "Local",
@@ -28,13 +35,13 @@ function createClientService(): ClientService {
   };
 
   return {
+    emitter,
+    events: emitter.events,
     info,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
+
     createSender: vi.fn(),
     removeSender: vi.fn(),
-    listenForJoin: vi.fn(),
-    listenForLeave: vi.fn(),
+
     createClient: vi.fn(async () => {}),
     updateClient: vi.fn(async () => {}),
     close: vi.fn(),
@@ -196,8 +203,8 @@ describe("RoomService", () => {
       close: vi.fn(),
     } as unknown as PeerSession;
     h.sessions.addClient.mockResolvedValue(session);
-    const joined = vi.mocked(service.listenForJoin).mock
-      .calls[0][0];
+    const joined = (client: TransferClient) =>
+      service.emitter.emit("join", client);
 
     joined({
       clientId: "remote",
@@ -248,8 +255,8 @@ describe("RoomService", () => {
       close: vi.fn(),
     } as unknown as PeerSession;
     h.sessions.addClient.mockResolvedValue(session);
-    const joined = vi.mocked(service.listenForJoin).mock
-      .calls[0][0];
+    const joined = (client: TransferClient) =>
+      service.emitter.emit("join", client);
     joined({
       clientId: "remote",
       createdAt: 2,
@@ -305,8 +312,8 @@ describe("RoomService", () => {
     const service = createClientService();
     const harness = createHarness(async () => service);
     await harness.room.join();
-    const joined = vi.mocked(service.listenForJoin).mock
-      .calls[0][0];
+    const joined = (client: TransferClient) =>
+      service.emitter.emit("join", client);
     const peer = {
       clientId: "peer",
       name: "Peer",
@@ -359,12 +366,7 @@ describe("RoomService", () => {
     expect(
       harness.sessions.setClientService,
     ).toHaveBeenCalledWith(clientService);
-    expect(
-      clientService.listenForJoin,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      clientService.listenForLeave,
-    ).toHaveBeenCalledTimes(1);
+    expect(clientService.emitter.listenerCount).toBe(2);
     expect(
       clientService.createClient,
     ).toHaveBeenCalledTimes(1);
@@ -375,6 +377,7 @@ describe("RoomService", () => {
 
     harness.room.leave();
 
+    expect(clientService.emitter.listenerCount).toBe(0);
     expect(harness.onLeaving).toHaveBeenCalledTimes(1);
     expect(
       harness.profiles.unbindAllSessions,
@@ -463,7 +466,7 @@ describe("RoomService", () => {
 
     expect(factory).toHaveBeenCalledTimes(1);
     expect(service.createClient).toHaveBeenCalledTimes(1);
-    expect(service.listenForJoin).toHaveBeenCalledTimes(1);
+    expect(service.emitter.listenerCount).toBe(2);
     expect(appState.roomStatus.roomId).toBe("room-a");
   });
 

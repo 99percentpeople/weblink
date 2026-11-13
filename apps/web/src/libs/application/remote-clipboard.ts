@@ -1,3 +1,4 @@
+import { SubscriptionScope } from "@weblink/platform/subscription-scope";
 import { createSignal } from "solid-js";
 import type { PlatformRuntime } from "@weblink/platform";
 import type { PeerSession } from "../domain/session";
@@ -45,7 +46,7 @@ interface Options {
   platform: PlatformRuntime;
   host: Pick<RemoteControlHost, "clipboardScope">;
   protocol: Pick<WebRtcProtocol, "call" | "handle">;
-  rtc: Pick<RtcService, "onSessionClosed">;
+  rtc: Pick<RtcService, "events">;
   registry: TransferRegistry;
   caches: Pick<FileCacheFactory, "temporaryTransferCache">;
   enabled(): boolean;
@@ -106,21 +107,26 @@ export class RemoteClipboard {
     [],
   );
   readonly tasks = this.state[0];
-  private readonly stops: (() => void)[];
+  private readonly subscriptions = new SubscriptionScope();
   private disposed = false;
   constructor(private readonly options: Options) {
-    this.stops = [
+    this.subscriptions.add(
       options.protocol.handle("remote-clipboard", (ctx) =>
         this.receive(ctx),
       ),
-      options.rtc.onSessionClosed((session) => {
-        const job = this.jobs.get(session);
-        if (job) this.stop(job);
-        this.watching.get(session)?.close();
-        this.observers.get(session)?.stop?.();
-        this.observers.delete(session);
-      }),
-    ];
+    );
+    this.subscriptions.add(
+      options.rtc.events.subscribe(
+        "sessionclosed",
+        ({ session }) => {
+          const job = this.jobs.get(session);
+          if (job) this.stop(job);
+          this.watching.get(session)?.close();
+          this.observers.get(session)?.stop?.();
+          this.observers.delete(session);
+        },
+      ),
+    );
   }
   clearFinished = () =>
     this.state[1]((tasks) =>
@@ -813,7 +819,7 @@ export class RemoteClipboard {
   }
   dispose() {
     this.disposed = true;
-    for (const stop of this.stops) stop();
+    this.subscriptions.dispose();
     for (const watch of this.watching.values())
       watch.close();
     for (const watch of this.observers.values())
