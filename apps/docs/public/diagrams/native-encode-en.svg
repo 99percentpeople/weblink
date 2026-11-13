@@ -1,0 +1,431 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 620"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Native sending: textures to bitstream
+  </title>
+  <desc id="desc">
+    WGC or DXGI capture supplies a D3D11 texture. GPU
+    preparation converts it for compatible NVENC or Media
+    Foundation encoding. Compressed output passes through
+    CPU memory to native WebRTC. Local preview stays on the
+    shared GPU presenter. Software or memory-input encoding
+    uses conditional CPU readback.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="618"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Native sending: textures to bitstream
+  </text>
+  <path
+    class="edge data"
+    d="M280 131L325 131"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 131L620 131"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M155 174L155 402"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M155 224H450V270"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 174L745 270"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 358L745 402"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M450 358L450 402"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M575 446H596V314H620"
+    marker-end="url(#control-arrow)"
+  />
+  <g class="node accent">
+    <rect x="30" y="88" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="125"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native capture
+    </text>
+    <text
+      x="155"
+      y="149"
+      class="detail"
+      text-anchor="middle"
+    >
+      WGC / DXGI · BGRA
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="88" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="113"
+      class="node-title"
+      text-anchor="middle"
+    >
+      GPU preparation
+    </text>
+    <text
+      x="450"
+      y="137"
+      class="detail"
+      text-anchor="middle"
+    >
+      Scale / rotate / cursor
+    </text>
+    <text
+      x="450"
+      y="161"
+      class="detail"
+      text-anchor="middle"
+    >
+      BGRA → NV12
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="620" y="88" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="113"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Hardware encoder
+    </text>
+    <text
+      x="745"
+      y="137"
+      class="detail"
+      text-anchor="middle"
+    >
+      NVENC / Media Foundation
+    </text>
+    <text
+      x="745"
+      y="161"
+      class="detail"
+      text-anchor="middle"
+    >
+      H.264 / H.265
+    </text>
+  </g>
+  <text x="450" y="253" class="label" text-anchor="middle">
+    Only when required
+  </text>
+  <g class="node warning">
+    <rect x="325" y="270" width="250" height="88" rx="12" />
+    <text
+      x="450"
+      y="308"
+      class="node-title"
+      text-anchor="middle"
+    >
+      CPU readback
+    </text>
+    <text
+      x="450"
+      y="332"
+      class="detail"
+      text-anchor="middle"
+    >
+      Raw pixel memory
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="270" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="308"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Compressed output
+    </text>
+    <text
+      x="745"
+      y="332"
+      class="detail"
+      text-anchor="middle"
+    >
+      Bitstream in CPU memory
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="30" y="402" width="250" height="88" rx="12" />
+    <text
+      x="155"
+      y="440"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Shared GPU presenter
+    </text>
+    <text
+      x="155"
+      y="464"
+      class="detail"
+      text-anchor="middle"
+    >
+      Local capture preview
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="402" width="250" height="88" rx="12" />
+    <text
+      x="450"
+      y="440"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Encode from memory
+    </text>
+    <text
+      x="450"
+      y="464"
+      class="detail"
+      text-anchor="middle"
+    >
+      Native software / hardware
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="402" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="440"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native WebRTC
+    </text>
+    <text
+      x="745"
+      y="464"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP → remote device
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="535" width="836" height="58" rx="12" />
+    <text
+      x="450"
+      y="558"
+      class="detail"
+      text-anchor="middle"
+    >
+      GPU texture input avoids a full raw-frame round trip
+      through CPU memory.
+    </text>
+    <text
+      x="450"
+      y="582"
+      class="detail"
+      text-anchor="middle"
+    >
+      Compressed output, transport, and control still
+      involve the CPU.
+    </text>
+  </g>
+</svg>

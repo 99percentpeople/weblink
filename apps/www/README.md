@@ -24,6 +24,20 @@ bun run preview:www
 端口被占用时会直接报错；可通过命令行参数 `--port` 指定其他端口。
 也可以直接在 `apps/www` 中运行对应的 `dev`、`lint`、`build`、`preview` 脚本。
 
+文档站地址通过 `VITE_DOCS_URL` 配置，指向文档根目录，不包含语言路径。
+本地开发默认使用 `http://localhost:5175/`，生产构建默认使用 `https://docs.webl.ink/`。
+可将 `apps/www/.env.example` 复制为 `apps/www/.env.development.local`，设置本地地址：
+
+```dotenv
+VITE_DOCS_URL=http://localhost:5175
+```
+
+本地预览文档时，在另一个终端运行 `bun run dev:docs`。
+部署时通过构建环境注入 `VITE_DOCS_URL`，也可在 `apps/www/.env.production.local` 中配置。
+例如 `https://example.com/docs/` 会保留 `/docs/` 前缀，再追加语言和文章路径；末尾斜线会自动补齐。
+地址同时应用于 HTML 链接与语言切换。修改本地环境文件后重启开发服务，修改部署地址后重新构建。
+本地环境文件不提交到 Git。
+
 ## 内容与资源
 
 - `index.html`：宣传文案、实际截图、版本入口、FAQ 和搜索/分享元信息。
@@ -38,7 +52,9 @@ bun run preview:www
 - `public/screenshots/`：主应用的实际运行截图，作为宣传素材随站点构建。
 - `public/screenshots/dark/`：对应六个场景的实际深色界面截图。
 
-主按钮打开 `https://webl.ink`；源码和部署说明指向官方 GitHub 仓库。
+主按钮打开 `https://webl.ink`；源码指向官方 GitHub 仓库，使用、媒体架构和自部署说明指向 `VITE_DOCS_URL` 指定的文档站。
+文档链接通过 `data-docs-path` 保存相对路径，随宣传站语言切换：简体、繁体中文使用 `/zh/`，其余语言使用英文根路径 `/`。
+无 JavaScript 时，中文 HTML 中的文档入口直接使用 `/zh/`；部署入口指向自部署导读，说明可以只部署信令服务并修改客户端 WS 地址。
 首页和 Windows 卡片各保留一个「下载 Windows 版」按钮，统一跳转到
 `https://github.com/99percentpeople/weblink/releases/latest`。
 用户在发布说明中选择安装包或免安装 ZIP。宣传页入口不包含版本号，
@@ -52,18 +68,18 @@ bun run preview:www
 | `weblink-windows-x64-installer` | `Weblink-windows-x64-setup.exe`    |
 | `weblink-windows-x64-portable`  | `Weblink-windows-x64-portable.zip` |
 
-免安装 ZIP 内包含 `weblink-desktop.exe`，解压后即可运行，电脑需预先安装
+免安装 ZIP 内包含 `weblink-desktop.exe` 和 `weblink-portable` 标记，保留两者并解压后运行，电脑需预先安装
 WebView2 120 或更新版本；安装包会在需要时下载并安装 WebView2。
 发布 GitHub Release 时，解压 Actions 下载的外层 artifact 压缩包，将上述
-安装包 `.exe` 和免安装 `.zip` 按原名上传到同一个对应版本的 Release，
+安装包 `.exe`、签名 `.exe.sig`、免安装 `.zip` 和 `latest.json` 按原名上传到同一个对应版本的 Release，
 并将该正式版设为 Latest。
 
-同一次构建会运行 `scripts/generate-release-notes.mjs`，生成包含中英双语
+同一次构建会运行 `scripts/generate-release-notes.mjs`，生成包含英文
 下载表格和当前版本 CHANGELOG 的 `release-notes.md`，保存在
 `weblink-release-notes` artifact 中。创建 Release 时，将该文件内容用作
 发布说明；两种下载链接均绑定本次 tag，保留历史版本与对应附件的关系。
 更改附件名时，同步更新桌面生产构建流程和生成脚本。
-工作流仍只构建并保存 artifact；首次正式发布后，宣传页入口才有目标 Release。
+工作流只构建并保存 artifact，GitHub Release 由发布者创建。
 
 同一页面支持明暗主题：首次访问跟随系统，手动切换后以 `www-theme`
 保存选择，刷新后沿用。电脑与手机端均在顶部提供主题下拉菜单，支持
@@ -148,15 +164,34 @@ Windows 画面是微软公开的演示素材，通过浏览器标签页共享：
 托管服务若从仓库根目录执行构建，可使用 `bun run build:www`，
 输出目录设置为 `apps/www/dist`。本项目独立于现有 Web 应用的部署流程。
 
-正式站点为 https://www.webl.ink，对应独立的 Cloudflare Pages 项目
-`weblink-www`（生产分支 `public`）。`www-production.yml` 独立处理宣传站：
-`apps/www/**`、共享的 `packages/theme/**`、`packages/locale/**` 或该工作流
-更新时，PR 执行类型检查与构建，推送到 `public` 后自动部署同一份构建产物。
-正式应用版本标签和仅涉及应用的修改不会重新部署宣传站。
-`version.json` 使用宣传站的提交和分支标识，不再读取应用版本号。
-仅更新根锁文件不会触发自动部署；需要刷新此类依赖或部署配置时，可在
-Actions 中对 `public` 手动运行该工作流。部署完成后仍通过域名上的
-`version.json` 核对提交。
-应用入口 https://webl.ink 继续使用原有的 `weblink` 项目。
-`www.webl.ink` 在该项目中绑定为自定义域名，DNS 使用开启代理的 CNAME
-指向 `weblink-www.pages.dev`。常规发布只更新站点文件，不修改 DNS。
+正式站点为 [www.webl.ink](https://www.webl.ink/)，对应独立的 Cloudflare Pages 项目
+`weblink-www`，生产分支为 `public`。`www-production.yml` 处理宣传站，
+`docs.yml` 处理[文档站](../docs/README.md)，两者都不依赖应用版本、tag 或 GitHub Release。
+
+宣传站源码、共享主题与语言包、根依赖配置或相关部署脚本变化时，PR 只检查和构建；
+推送到 `public` 后，工作流比较构建内容与 `weblink-www.pages.dev` 上的内容摘要。
+相同则跳过上传，变化才部署；仅修改应用、文档正文或本 README 不触发宣传站流程。
+根锁文件变化可能触发构建，但输出内容未变仍不会重复部署。
+
+`deployment.json` 保存文件内容摘要及来源提交，用于判断变化和确认发布成功，
+不包含应用版本号。文件时间与来源提交不参与摘要，重复运行相同内容会跳过部署。
+正式部署按顺序执行，避免旧构建覆盖新构建；PR 检查可以取消过时运行。
+
+首次配置：
+
+1. 在 Cloudflare Pages 使用 `weblink-www` 项目，生产分支设为 `public`。
+   使用 GitHub Actions 上传产物；若项目还启用了 Cloudflare Git 自动构建，关闭该自动部署，避免发布两次。
+   如果项目实际的 Pages 域名不是 `weblink-www.pages.dev`，在仓库 Variables 中设置 `WWW_PAGES_URL` 为该 HTTPS 根地址。
+2. 在 GitHub 仓库或 `production` 环境的 Actions Secrets 中配置
+   `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。
+   Token 需要目标账户的 Cloudflare Pages 编辑权限，配置方法见
+   [Cloudflare CI 部署说明](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)。
+3. 可在仓库 Actions Variables 中配置 `VITE_DOCS_URL`，默认 `https://docs.webl.ink`。
+   它在构建阶段生效；修改变量后，在 Actions 的 **Marketing production** 中对 `public` 运行工作流。
+4. 在 Pages 项目的自定义域名中绑定 `www.webl.ink`，按 Cloudflare 提示完成 DNS 与证书配置。
+   应用入口 `webl.ink` 继续使用原有的 `weblink` 项目。
+
+第一次发布时，如果 Pages 域名尚不可访问，在 **Run workflow** 中勾选 `force`。
+日常自动部署和手动运行默认都检查内容是否变化；只有首次初始化或明确需要重新发布时才使用 `force`。
+网络检查失败会停止部署，不会将不可达误判为内容变化；发布后会校验 Pages 域名上的内容摘要。
+自定义域名的 DNS 与证书只需首次配置，常规更新只发布站点文件。

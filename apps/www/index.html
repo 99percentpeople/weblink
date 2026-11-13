@@ -97,6 +97,11 @@
           <a href="#how-it-works"
             ><span data-i18n="nav.start">开始使用</span></a
           >
+          <a href="%VITE_DOCS_URL%zh/" data-docs-path=""
+            ><span data-i18n="common.docs">文档</span>
+            <svg class="icon" aria-hidden="true">
+              <use href="./icons.svg#arrow-up-right" /></svg
+          ></a>
           <a
             href="https://github.com/99percentpeople/weblink"
             >GitHub
@@ -156,6 +161,10 @@
                 ><span data-i18n="nav.faq"
                   >常见问题</span
                 ></a
+              >
+              <a href="%VITE_DOCS_URL%zh/" data-docs-path=""
+                ><span data-i18n="common.docs">文档</span>
+                <span aria-hidden="true">↗</span></a
               >
               <a
                 href="https://github.com/99percentpeople/weblink"
@@ -946,7 +955,8 @@
                     <use href="./icons.svg#check" /></svg
                   ><span
                     data-i18n="platforms.desktop.capture"
-                    >原生显示器、窗口采集与可用的硬件编码</span
+                    >原生屏幕采集、视频编解码与 GPU
+                    显示</span
                   >
                 </li>
                 <li>
@@ -985,9 +995,23 @@
             <svg class="icon" aria-hidden="true">
               <use href="./icons.svg#link" />
             </svg>
-            <span data-i18n="platforms.note"
-              >浏览器与桌面端可以加入同一个房间，按各自设备的能力一起工作。</span
-            >
+            <span>
+              <span data-i18n="platforms.note"
+                >浏览器与桌面端可以加入同一个房间，按各自设备的能力一起工作。</span
+              >
+              <a
+                class="text-link"
+                href="%VITE_DOCS_URL%zh/architecture/media.html"
+                data-docs-path="architecture/media.html"
+                ><span data-i18n="common.mediaArchitecture"
+                  >了解音视频如何工作</span
+                >
+                <svg class="icon" aria-hidden="true">
+                  <use
+                    href="./icons.svg#arrow-up-right"
+                  /></svg
+              ></a>
+            </span>
           </p>
         </div>
       </section>
@@ -1133,7 +1157,8 @@
           </p>
           <a
             class="text-link"
-            href="https://github.com/99percentpeople/weblink/blob/public/docs/DEPLOYMENT.md"
+            href="%VITE_DOCS_URL%zh/deployment/overview.html"
+            data-docs-path="deployment/overview.html"
             ><span data-i18n="privacy.more"
               >了解连接与自部署</span
             >
@@ -1162,7 +1187,8 @@
           </h2>
           <a
             class="text-link"
-            href="https://github.com/99percentpeople/weblink/blob/public/docs/README.md"
+            href="%VITE_DOCS_URL%zh/"
+            data-docs-path=""
             ><span data-i18n="common.readDocs"
               >阅读项目文档</span
             >
@@ -1256,16 +1282,19 @@
             </summary>
             <p>
               <span data-i18n="faq.host.answer"
-                >可以。Weblink 基于 MIT 协议开源，可托管 Web
-                静态构建产物并连接自己的信令服务。仓库提供
-                Bun 和 Cloudflare Workers
-                两种信令实现，也可按网络条件配置 STUN /
-                TURN。具体配置请查看</span
+                >可以。Weblink 基于 MIT 协议开源。只部署 Bun
+                Server 或 Cloudflare
+                Worker，再在现有网页或桌面端修改 WS
+                地址即可；Web
+                前端和桌面客户端可按需构建。STUN / TURN
+                按网络条件配置。具体步骤请查看</span
               ><a
-                href="https://github.com/99percentpeople/weblink/blob/public/docs/DEPLOYMENT.md"
+                href="%VITE_DOCS_URL%zh/deployment/overview.html"
+                data-docs-path="deployment/overview.html"
                 ><span data-i18n="common.deployDocs"
                   >部署文档</span
-                ></a
+                >
+                <span aria-hidden="true">↗</span></a
               ><span data-i18n="faq.host.suffix">。</span>
             </p>
           </details>
@@ -1333,9 +1362,9 @@
       >
         <a href="https://github.com/99percentpeople/weblink"
           >GitHub ↗</a
-        ><a
-          href="https://github.com/99percentpeople/weblink/blob/public/docs/README.md"
-          ><span data-i18n="common.docs">文档</span></a
+        ><a href="%VITE_DOCS_URL%zh/" data-docs-path=""
+          ><span data-i18n="common.docs">文档</span>
+          <span aria-hidden="true">↗</span></a
         ><a
           href="https://github.com/99percentpeople/weblink/issues"
           ><span data-i18n="common.feedback">反馈</span></a

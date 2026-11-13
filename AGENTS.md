@@ -23,7 +23,7 @@ lives in `apps/web`. Run the commands below from the repository root.
   `apps/web`. Root `.env` configures combined local development; its
   `WEBLINK_WEBSOCKET_URL` override applies only to the Vite dev server.
   Never commit local env files or generated artifacts.
-- See `docs/WORKSPACE.md` for commands. `.tmp/IMPLEMENTATION_PLAN.md` is a local
+- See `docs/en/development/workspace.md` for commands. `.tmp/IMPLEMENTATION_PLAN.md` is a local
   roadmap: keep it there, do not add ignore rules for it or include it in commits.
 
 ## Quick commands
@@ -62,10 +62,10 @@ Application paths below are relative to `apps/web/`.
 - `src/libs/state`: reactive stores and the UI-facing composition context.
 - UI should talk to services/state via stable interfaces; keep WebRTC details
   inside domain and concrete persistence behind repository/cache contracts.
-- See `docs/ARCHITECTURE.md` for the current directory and ownership guide.
+- See `docs/en/development/architecture.md` for the current directory and ownership guide.
 - Desktop uses the same frontend with a build-time platform adapter. Keep Tauri
   imports in `apps/desktop`, runtime contracts in `packages/platform`, and native
-  permissions limited to implemented features. See `docs/DESKTOP.md`.
+  permissions limited to implemented features. See `docs/en/development/desktop.md`.
 
 ## Refactor guidelines (stability-first)
 
@@ -89,8 +89,8 @@ Application paths below are relative to `apps/web/`.
 
 ## Docs
 
-- Architecture and ownership: `docs/ARCHITECTURE.md`
-- Deployment and environment configuration: `docs/DEPLOYMENT.md`
-- Test boundaries and commands: `docs/TESTING.md`
+- Architecture and ownership: `docs/en/development/architecture.md`
+- Deployment and environment configuration: `docs/deployment/hosting.md`
+- Test boundaries and commands: `docs/en/development/testing.md`
 - Keep feature docs focused on durable protocol/behavior constraints; do not add
   temporary validation logs or refactor checklists as long-lived documentation.

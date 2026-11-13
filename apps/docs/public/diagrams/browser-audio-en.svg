@@ -1,0 +1,474 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 720"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Browser audio: capture to playback
+  </title>
+  <desc id="desc">
+    Microphone capture applies supported input processing,
+    while screen capture can provide a separate audio track.
+    Each track enters browser WebRTC encoding and transport.
+    On reception, buffering and decoding feed the shared
+    HTML audio player and output device. PCM and encoded
+    media are distinct.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="718"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Browser audio: capture to playback
+  </text>
+  <text x="32" y="78" class="section" text-anchor="start">
+    Sending · independent sources
+  </text>
+  <path
+    class="edge data"
+    d="M280 139L325 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 139L620 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M280 285H596V139H620"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 182L745 242"
+    marker-end="url(#control-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="96" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="133"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Microphone
+    </text>
+    <text
+      x="155"
+      y="157"
+      class="detail"
+      text-anchor="middle"
+    >
+      getUserMedia()
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="96" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="121"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Input processing
+    </text>
+    <text
+      x="450"
+      y="145"
+      class="detail"
+      text-anchor="middle"
+    >
+      Echo / noise / gain
+    </text>
+    <text
+      x="450"
+      y="169"
+      class="detail"
+      text-anchor="middle"
+    >
+      When supported
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="620" y="96" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="133"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Browser encoder
+    </text>
+    <text
+      x="745"
+      y="157"
+      class="detail"
+      text-anchor="middle"
+    >
+      Opus / G.722 / G.711
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="242" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="267"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Screen audio
+    </text>
+    <text
+      x="155"
+      y="291"
+      class="detail"
+      text-anchor="middle"
+    >
+      getDisplayMedia()
+    </text>
+    <text
+      x="155"
+      y="315"
+      class="detail"
+      text-anchor="middle"
+    >
+      Only if an audio track exists
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="242" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="279"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Send to peer
+    </text>
+    <text
+      x="745"
+      y="303"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP / SRTP
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="354" width="836" height="56" rx="12" />
+    <text
+      x="450"
+      y="376"
+      class="detail"
+      text-anchor="middle"
+    >
+      Sampling preferences are not a guarantee of the
+      returned capture format.
+    </text>
+    <text
+      x="450"
+      y="400"
+      class="detail"
+      text-anchor="middle"
+    >
+      The normal Web call needs no application PCM bridge.
+    </text>
+  </g>
+  <text x="32" y="448" class="section" text-anchor="start">
+    Receiving · decode before playback
+  </text>
+  <path
+    class="edge control"
+    d="M280 511L325 511"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 511L620 511"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M745 554L745 598"
+    marker-end="url(#data-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="468" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Receive + buffer
+    </text>
+    <text
+      x="155"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP · timing / loss
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="468" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Browser decoder
+    </text>
+    <text
+      x="450"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      Encoded audio → samples
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="468" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Shared &lt;audio&gt;
+    </text>
+    <text
+      x="745"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      Received MediaStream
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="598" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="635"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Output device
+    </text>
+    <text
+      x="745"
+      y="659"
+      class="detail"
+      text-anchor="middle"
+    >
+      Headphones / speakers
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="598" width="542" height="86" rx="12" />
+    <text
+      x="303"
+      y="623"
+      class="detail"
+      text-anchor="middle"
+    >
+      Source mute, listening state, and output selection
+    </text>
+    <text
+      x="303"
+      y="647"
+      class="detail"
+      text-anchor="middle"
+    >
+      act locally; they do not stop remote capture.
+    </text>
+    <text
+      x="303"
+      y="671"
+      class="detail"
+      text-anchor="middle"
+    >
+      Playback must be permitted by the browser.
+    </text>
+  </g>
+</svg>

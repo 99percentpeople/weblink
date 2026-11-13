@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 460" role="img" aria-labelledby="title desc">
+  <title id="title">Weblink connection paths</title>
+  <desc id="desc">Both clients use WSS for signaling. WebRTC content takes a direct path or a TURN relay. STUN helps discover network addresses.</desc>
+  <defs>
+    <marker id="gray-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1L7 4L1 7" fill="none" stroke="var(--diagram-signal)" stroke-width="1.5"/></marker>
+    <marker id="blue-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M1 1L7 4L1 7" fill="none" stroke="var(--diagram-content)" stroke-width="1.5"/></marker>
+    <style>
+      :root {
+        --diagram-canvas: #f8fafc;
+        --diagram-frame: #dbe3ed;
+        --diagram-node: #ffffff;
+        --diagram-node-border: #cbd5e1;
+        --diagram-peer-border: #a7bfdf;
+        --diagram-relay: #edf3fc;
+        --diagram-text: #1e293b;
+        --diagram-muted: #475569;
+        --diagram-signal: #64748b;
+        --diagram-content: #315fa8;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --diagram-canvas: #151a23;
+          --diagram-frame: #374151;
+          --diagram-node: #20252e;
+          --diagram-node-border: #465368;
+          --diagram-peer-border: #4d6793;
+          --diagram-relay: #24344b;
+          --diagram-text: #e9edf5;
+          --diagram-muted: #b2bed0;
+          --diagram-signal: #94a3b8;
+          --diagram-content: #96b9ff;
+        }
+      }
+      text { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; text-anchor: middle; fill: var(--diagram-text); font-size: 18px; }
+      .detail { font-size: 15px; fill: var(--diagram-muted); }
+      .heading { font-weight: 600; }
+      .signal { fill: none; stroke: var(--diagram-signal); stroke-width: 2; stroke-dasharray: 6 5; marker-start: url(#gray-arrow); marker-end: url(#gray-arrow); }
+      .content { fill: none; stroke: var(--diagram-content); stroke-width: 2.5; marker-start: url(#blue-arrow); marker-end: url(#blue-arrow); }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="898" height="458" rx="16" fill="var(--diagram-canvas)" stroke="var(--diagram-frame)"/>
+  <path class="signal" d="M134 178V72H325"/>
+  <path class="signal" d="M575 72H766V178"/>
+  <text x="227" y="59" class="detail">WSS</text>
+  <text x="673" y="59" class="detail">WSS</text>
+  <path class="content" d="M244 228H656"/>
+  <text x="450" y="210">WebRTC · direct content</text>
+  <path class="content" d="M134 278V362H325"/>
+  <path class="content" d="M575 362H766V278"/>
+  <rect x="325" y="32" width="250" height="80" rx="12" fill="var(--diagram-node)" stroke="var(--diagram-node-border)"/>
+  <text x="450" y="66" class="heading">Signaling</text>
+  <text x="450" y="92" class="detail">Server / Worker</text>
+  <rect x="24" y="178" width="220" height="100" rx="12" fill="var(--diagram-node)" stroke="var(--diagram-peer-border)"/>
+  <text x="134" y="220" class="heading">Client A</text>
+  <text x="134" y="248" class="detail">Browser or Tauri</text>
+  <rect x="656" y="178" width="220" height="100" rx="12" fill="var(--diagram-node)" stroke="var(--diagram-peer-border)"/>
+  <text x="766" y="220" class="heading">Client B</text>
+  <text x="766" y="248" class="detail">Browser or Tauri</text>
+  <rect x="325" y="322" width="250" height="80" rx="12" fill="var(--diagram-relay)" stroke="var(--diagram-peer-border)"/>
+  <text x="450" y="355" class="heading">TURN</text>
+  <text x="450" y="381" class="detail">Content relay when needed</text>
+  <text x="450" y="437" class="detail">STUN helps discover addresses; it does not relay content.</text>
+</svg>

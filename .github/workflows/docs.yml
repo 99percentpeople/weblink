@@ -1,0 +1,133 @@
+name: Documentation production
+
+on:
+  pull_request:
+    paths:
+      - "apps/docs/**"
+      - "!apps/docs/README.md"
+      - "docs/index.md"
+      - "docs/guide/**"
+      - "docs/architecture/**"
+      - "docs/deployment/**"
+      - "docs/zh/**"
+      - "packages/theme/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "scripts/static-site.mjs"
+      - "scripts/test/static-site.test.mjs"
+      - ".github/workflows/docs.yml"
+  push:
+    branches:
+      - public
+    paths:
+      - "apps/docs/**"
+      - "!apps/docs/README.md"
+      - "docs/index.md"
+      - "docs/guide/**"
+      - "docs/architecture/**"
+      - "docs/deployment/**"
+      - "docs/zh/**"
+      - "packages/theme/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "scripts/static-site.mjs"
+      - "scripts/test/static-site.test.mjs"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy even if unchanged or not yet reachable (initial setup/recovery)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Check and build documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOCS_BASE: ${{ vars.DOCS_BASE || '/' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          persist-credentials: false
+          # Accurate per-article lastUpdated values keep unchanged builds stable.
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: node --test scripts/test/static-site.test.mjs
+      - run: bun run check:docs
+      - run: bun run build:docs
+      - run: node scripts/static-site.mjs prepare docs apps/docs/dist
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request'
+        with:
+          name: weblink-docs
+          path: apps/docs/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy docs.webl.ink
+    needs: build
+    if: >-
+      github.repository == '99percentpeople/weblink' &&
+      github.ref == 'refs/heads/public' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://docs.webl.ink
+    env:
+      PAGES_PROJECT_NAME: weblink-docs
+      PAGES_URL: ${{ vars.DOCS_PAGES_URL || 'https://weblink-docs.pages.dev/' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: weblink-docs
+          path: apps/docs/dist
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - name: Compare published content
+        id: changes
+        env:
+          FORCE_DEPLOY: ${{ inputs.force || false }}
+        run: node scripts/static-site.mjs check docs apps/docs/dist "$PAGES_URL"
+      - name: Deploy documentation
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          bunx wrangler@4.137.0 pages deploy apps/docs/dist \
+            --project-name "$PAGES_PROJECT_NAME" \
+            --branch public \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Update docs $GITHUB_SHA"
+      - name: Verify published content
+        if: steps.changes.outputs.changed == 'true'
+        run: node scripts/static-site.mjs verify docs apps/docs/dist "$PAGES_URL"

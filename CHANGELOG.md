@@ -215,10 +215,10 @@ Weblink 1.3 adds verified device pairing and MCP/WebMCP automation for local and
 
 ### Upgrading
 
-- Use 1.3.0 on both endpoints for the new device-pairing and automation flows. Peers must complete identity verification before protected application traffic is allowed; old clients without automation capability cannot use MCP tools over WebRTC. See [device pairing](docs/DEVICE_TRUST.md).
-- Update self-hosted signaling from the revisions pinned by this release, then follow the existing [deployment instructions](docs/DEPLOYMENT.md). Legacy signaling support does not bypass endpoint permissions.
+- Use 1.3.0 on both endpoints for the new device-pairing and automation flows. Peers must complete identity verification before protected application traffic is allowed; old clients without automation capability cannot use MCP tools over WebRTC. See [device pairing](docs/en/reference/device-trust.md).
+- Update self-hosted signaling from the revisions pinned by this release, then follow the existing [deployment instructions](https://docs.webl.ink/deployment/hosting.html). Legacy signaling support does not bypass endpoint permissions.
 - Local `tauri dev` now uses a separate profile from built applications. Existing built-app storage locations and file-library contents are unchanged.
-- Read the [automation setup guide](docs/AUTOMATION.md#quick-start) before enabling MCP or granting remote automation permissions.
+- Read the [automation setup guide](docs/en/reference/automation.md#quick-start) before enabling MCP or granting remote automation permissions.
 
 ## [1.2.0] - 2026-10-18
 

@@ -1,0 +1,2496 @@
+# Desktop development
+
+The Tauri 2 application in `apps/desktop` embeds the existing SolidJS application
+from `apps/web`. The first target is Windows 10 22H2 / Windows 11 on x64, with
+WebView2 120 or newer. The NSIS installer installs or updates the Evergreen
+WebView2 runtime when needed. The desktop application has been manually run and
+verified on Windows. Installer and feature-specific acceptance checks are listed
+below; Linux compilation is a separate development check.
+The current Linux host can launch the shell and exercise IPC, but its WebKit
+does not expose `RTCPeerConnection`; the app therefore displays the existing
+unsupported-browser page. Linux WebRTC support remains a separate platform task.
+
+On Windows, local `tauri dev` uses
+`app_local_data_dir()/profiles/local-dev` for WebView storage. All `tauri build`
+outputs, including CI development builds and stable releases, keep the default
+WebView directory. This isolates local development's localStorage settings, MCP
+credentials, browser identity and IndexedDB from built applications without
+splitting storage by release channel. The distinction follows Tauri development
+mode, not debug assertions. Existing profile data is not copied into the local
+development profile.
+
+## Automation and device permissions {#automation-and-device-permissions}
+
+Windows desktop can expose a Streamable HTTP MCP server and execute authorized
+local or remote automation. **Settings → Automation** separates enabling the MCP
+API from allowing tools to operate this computer. Both switches default to off;
+a controller can expose MCP for forwarding without enabling its own local input
+or Shell access. The default endpoint is `http://127.0.0.1:32100/mcp`.
+
+MCP clients authenticate with locally issued tokens. Calls arriving from another
+Weblink device instead use that device's paired identity and permission groups;
+requests are approved through the shared notification flow. Approved peer access
+lasts for the current connection, while saved Always allow/Deny policies remain
+device-specific. The host emergency-stop shortcut also stops automated input and
+commands. See [automation setup and tool contracts](../reference/automation.md#quick-start)
+and [device pairing](../reference/device-trust.md).
+
+## Run and build {#run-and-build}
+
+Install the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/): on
+Windows these include the MSVC 14.44 (Visual Studio 2022 17.14) or newer, Windows SDK 10.0.26100 or newer, Rust and WebView2. Native WebRTC downloads its prebuilt library on the first Cargo build. The root Cargo configuration selects the static MSVC runtime required by that library.
+The repository pins Rust in `rust-toolchain.toml` and Bun in `package.json`.
+Cargo also fetches the patched WebRTC bindings from the
+[Weblink fork](https://github.com/99percentpeople/rust-sdks/tree/bf9999f9314ff677830ee342973f495d20a474ff),
+pinned to a full Git revision in root `Cargo.toml` and `Cargo.lock`.
+The fork is private. Local Windows x64 builders need Git read access and
+an authenticated GitHub CLI for the initial native library download. For
+offline builds, set `LK_WINDOWS_WEBRTC_ARCHIVE` to the matching SDK release
+ZIP. The SDK verifies its SHA-256 before extraction. Ordinary Web builds and
+TypeScript checks do not fetch this SDK.
+Official desktop Actions use the repository secret `NATIVE_SDK_READ_KEY`, an SSH
+deploy key with read-only access to this SDK repository alone. Both native crates
+must pin the same full commit. The action retrieves the release ZIP through
+Git LFS and removes authentication before Cargo reads the local checkout.
+Rotating the deploy key requires replacing it in the SDK and updating this secret.
+
+Native CI runs only for the official `public` branch's push/manual builds and
+validated release tags. PRs and forks still run Web/TypeScript checks without SDK
+access. Public Actions caches contain only crates.io index/archive files: private
+Git sources and native build outputs must not be cached because fork PRs can
+restore base-branch caches. Do not upload the Cargo Git directory, SDK checkout or
+native debug artifacts. Removing native build caches increases desktop CI time.
+An SDK read failure fails only the desktop job; Web deployment remains independent.
+
+The fork uses `main` for official upstream history and `weblink-native-media`
+for integrated Weblink changes. Feature work can pin a published feature commit
+before integration. Rebase the complete Weblink patch series onto updated `main`
+so our commits always follow the official commits; verify the patches with
+`git range-diff` and refresh both pinned dependency files after validation.
+After initializing Git submodules, run from the root:
+
+```sh
+bun install
+cp .env.example .env
+bun run dev:desktop
+```
+
+`dev:desktop` starts the local Bun signaling server and Tauri. Tauri starts its
+own Vite server at `http://127.0.0.1:1420`; the browser Vite server keeps port 5173. Root `.env` configures the signaling address just as it does for `bun dev`.
+If signaling is already running, use `bun --env-file=.env run desktop`.
+
+```sh
+bun run check:desktop
+bun run --cwd apps/desktop test
+cargo test --workspace --locked
+bun run build:desktop --bundles nsis
+```
+
+Run the NSIS command on Windows. For a host-only build without installers use
+`bun run build:desktop --no-bundle`. Desktop frontend files go to
+`apps/desktop/dist`; Rust binaries and installers go to root `target/`.
+Packaged desktop pages use a secure origin. Non-loopback signaling endpoints
+must use `wss://`; `ws://` is supported only for loopback endpoints in packaged
+builds. Vite also reads `apps/web/.env.local` in desktop mode, so a LAN development
+endpoint there must be overridden by `VITE_WEBSOCKET_URL` in the build environment
+or `apps/web/.env.desktop.local`. The build rejects incompatible endpoints before
+producing an executable. `bun run dev:desktop` continues to support plain WebSocket
+development servers without changing packaged WebView security settings.
+CI runs shared web/desktop TypeScript checks and tests once. `desktop-dev.yml`
+then runs Rust tests and a `--no-bundle` build in the same release profile and
+with the same `tauri/custom-protocol` feature. Both desktop workflows build the
+frontend before Rust tests; `tauri.ci.conf.json` skips rebuilding it during
+packaging. Normal local builds retain their frontend build hook. Dev CI disables
+LTO and uses 16 codegen units to reduce compilation and cache overhead.
+Its `weblink-windows-x64` artifact contains `weblink-desktop.exe`; the target
+machine needs WebView2 installed. Only public registry dependencies are cached.
+
+For an opt-in Windows x64 build optimized for size, install the pinned nightly
+toolchain and its standard-library sources, then use the size build command:
+
+```sh
+rustup toolchain install nightly-2026-10-17 --profile minimal --component rust-src
+bun run build:desktop:size --no-bundle
+# Or generate the NSIS installer:
+bun run build:desktop:size --bundles nsis
+```
+
+This command applies `.cargo/desktop-size.toml` and rebuilds `std` with
+[Cargo's nightly `build-std`](https://doc.rust-lang.org/cargo/reference/unstable.html#build-std).
+It uses size optimization, full LTO, one codegen unit and symbol stripping;
+capture, WebRTC and remote input retain `opt-level = 3`. Panic unwinding and
+debug formatting remain available: input cleanup relies on `catch_unwind` to
+release other owned inputs after a device operation panics. The static MSVC
+runtime required by WebRTC is preserved. Nightly is pinned independently of the
+normal stable toolchain, and the existing development and release CI profiles
+remain unchanged. Validate streaming performance before adopting this preset for
+production; a successful build and smaller executable do not establish latency.
+
+The command forwards Tauri options and optional Cargo arguments after `--`, and
+overrides the dev CI environment's release optimization settings with this preset.
+Its default output directory is `target/desktop-size/x86_64-pc-windows-msvc/release`
+(including `bundle/nsis` for installers); an explicit `CARGO_TARGET_DIR` is
+respected. This separate cache also contains the rebuilt standard library.
+
+Stable `vX.Y.Z` web release tags instead call `desktop-production.yml`, using the
+workspace's full release optimizations. A single Tauri build produces both the
+executable and the NSIS installer, with the same application version as the Web
+frontend. The workflow also compresses that executable into a portable ZIP:
+
+| Actions artifact                | Release asset                      | Contents                                                                    |
+| ------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| `weblink-windows-x64-installer` | `Weblink-windows-x64-setup.exe`    | NSIS installer, including WebView2 setup when needed                        |
+| `weblink-windows-x64-portable`  | `Weblink-windows-x64-portable.zip` | `weblink-desktop.exe`; extract and run with WebView2 120+ already installed |
+
+The marketing site's single desktop download entry opens
+`https://github.com/99percentpeople/weblink/releases/latest`. The production
+workflow also runs `scripts/generate-release-notes.mjs`, saving `release-notes.md`
+in the `weblink-release-notes` artifact. It combines an English download table
+with the matching version's CHANGELOG content. Write new release entries in English.
+Download links use that release's
+tag, so historical release notes remain tied to their own binaries.
+
+To publish, extract the outer Actions artifact archives and attach the installer
+`.exe`, its `.exe.sig`, the portable `.zip`, and `latest.json` with their names
+unchanged to the matching tag's GitHub Release. Use the generated `release-notes.md` as the release description and mark
+the stable release as Latest. The portable ZIP contains the application executable and a `weblink-portable`
+marker (keep both files together), and requires WebView2 120+ to be installed already. These workflows save artifacts
+without publishing a GitHub Release.
+
+To prepare the same release description locally, replace the example tag with
+the version in `apps/web/package.json`:
+
+```sh
+bun scripts/generate-release-notes.mjs v1.1.0 .tmp/release-notes.md
+```
+
+Desktop builds use Vite's `desktop` mode and default to `wss://ws.webl.ink`.
+The platform mode is separate from the release channel: `desktop-dev.yml` sets
+`WEBLINK_BUILD_CHANNEL=dev`, while `desktop-production.yml` sets it to `stable`.
+Both reuse the Web frontend's build metadata logic. Dev About, copied version
+information and `version.json` report `<package-version>-dev.<short-commit>`;
+stable builds keep the package version. `GITHUB_SHA` supplies the CI commit, with
+local Git as a fallback. Local desktop development uses the dev channel by default;
+packaged builds default to stable unless `WEBLINK_BUILD_CHANNEL=dev` is set.
+CI builds read `VITE_WEBSOCKET_URL` and `WEBLINK_STUN_SERVERS` from GitHub
+Environment variables in `Preview`/`production`, matching the web channel.
+Optional static/HMAC TURN settings use the `VITE_TURN_SERVERS` secret; managed
+TURN credentials come from the signaling backend. Public variables also configure
+pull-request builds without deployment secrets.
+Put deployment-specific `VITE_*` / `WEBLINK_*` values in `apps/web/.env.desktop.local`.
+`VITE_SHARE_URL` sets the public frontend URL used by room links and QR codes.
+The `Preview` and `production` GitHub Environments can override it; their desktop
+workflows default to `https://dev.webl.ink` and `https://webl.ink`, respectively.
+Local desktop builds default to `https://dev.webl.ink` for the dev channel and
+`https://webl.ink` for stable. Set this variable to your own frontend URL
+when self-hosting, so invitations never use the desktop window's internal origin.
+Root `WEBLINK_WEBSOCKET_URL` only overrides development, so localhost settings
+do not become the packaged signaling endpoint.
+
+## Saving received files {#saving-received-files}
+
+Desktop attachment, file-library, preview, gallery and QR-code downloads use the
+platform file saver instead of WebView blob-link navigation. Manual downloads open
+a native Save As dialog starting in the system Downloads directory. The existing
+automatic-download preference saves completed
+receives to the system Downloads directory, choosing a numbered filename when a
+file already exists.
+
+The frontend sends bounded binary chunks through an opaque save ID; it never passes
+an arbitrary destination path to a write command. Native code stages the file beside
+the selected destination and commits it only after the declared byte count is
+complete. Cancelled or failed saves remove their temporary file, and page reload or
+application shutdown clears pending saves. Cancelling the picker is silent; write
+failures produce a localized error. Browser builds retain ordinary download links.
+
+## Desktop updates {#desktop-updates}
+
+Settings → About provides a manual update check and a persisted “Automatically
+check for updates” switch, enabled by default. The desktop checks once per app
+startup and every hour while the app is running and automatic checks are enabled.
+Automatic and manual checks share an in-flight request; checks are skipped during
+installation. Each version is announced at most once per app session.
+Finding a new stable version sends an update intent through the existing
+notification service: a foreground toast or a permitted background system notice.
+An undelivered reminder remains pending while the app is hidden and is shown as a
+toast when it becomes visible, including after failed checks or a long suspension.
+Only the native notice expires after 24 hours; the pending in-app reminder follows
+the last confirmed update until a successful check supersedes it, installation
+starts, automatic checks are disabled, or the application scope is disposed.
+Delivered system notices are never replayed as foreground toasts.
+The “Application updates”
+notification category, OS permission, background-only and sound settings apply
+to system notifications. Clicking either notification opens Settings → About;
+checks never download or install automatically. Background failures and current
+versions do not produce notifications. Disabling automatic checks immediately
+clears the timer and withdraws pending reminders, while manual checks remain
+available. Re-enabling starts a new hourly timer. The timer is also cleared when
+its application scope is disposed.
+
+Only stable Windows x64 builds check
+`https://api.github.com/repos/99percentpeople/weblink/releases/latest`.
+Checks compare the release's `tag_name` with the installed semantic version and
+read its notes and attachment URLs from the API response. They do not download
+`latest.json`, signatures or installers. Drafts, prereleases and older or equal
+versions are not offered. A release without an updater manifest still supports
+manual downloads when the matching Windows package is present.
+Development builds and unsupported platforms report that in-app updates are
+unavailable. The shared application controller serializes startup/manual checks
+and installs and retains progress when settings are closed. The Rust service
+accepts installation only for the version it most recently checked. After the
+user confirms installation, it fetches `latest.json` from that specific release,
+validates that its version and installer URL match the checked release, and uses
+Tauri's updater plugin to verify the package signature before running
+NSIS. Installing closes active sessions and restarts Weblink. Native capture,
+remote input and keyboard resources are released before the Windows updater exits.
+
+An NSIS installation is recognized by the adjacent `uninstall.exe`. The portable
+ZIP includes a `weblink-portable` marker that overrides this detection. Raw
+executables without an uninstaller are also treated as portable. Portable updates
+link to the matching release's ZIP for manual extraction and replacement; they do
+not run an installer. Builds without a public key offer manual downloads only.
+
+Before the first stable desktop release, generate a persistent signing key with
+the [Tauri signer](https://v2.tauri.app/plugin/updater/#signing-updates):
+
+```sh
+bun run --cwd apps/desktop tauri signer generate -w "$HOME/.config/weblink/updater.key"
+```
+
+Configure the GitHub `production` Environment (or repository settings):
+
+| Name                                 | Kind     | Value                                                  |
+| ------------------------------------ | -------- | ------------------------------------------------------ |
+| `WEBLINK_UPDATER_PUBLIC_KEY`         | Variable | Contents of `updater.key.pub`, not its path            |
+| `TAURI_SIGNING_PRIVATE_KEY`          | Secret   | Contents of the private key file                       |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secret   | The signing key password; empty for an unencrypted key |
+
+Keep the private key outside the repository and retain a secure backup. Future
+releases must be signed by the same key trusted by installed clients. The signing
+key is separate from Windows Authenticode code signing.
+
+`desktop-production.yml` validates the key configuration before building, generates
+a temporary Tauri configuration containing only the public key, enables
+`createUpdaterArtifacts`, and keeps the installer signature when renaming assets.
+`weblink-windows-x64-installer` includes both the installer and its signature;
+`weblink-updater-manifest` contains `latest.json`. The manifest embeds the signature
+contents and a download URL pinned to the release tag. Publish all four assets
+listed above together, using the generated release notes, and mark the stable
+GitHub Release as Latest. The workflow creates Actions artifacts but does not
+publish the Release. The first release introduces update checking; an actual
+upgrade needs a later, higher-version signed release for Windows verification.
+
+## Runtime boundaries {#runtime-boundaries}
+
+- The Rust shell is organized by feature. `lib.rs` assembles services and application
+  lifetime; `capabilities.rs` queries feature implementation availability. Input and
+  keyboard availability do not grant OS access: starting an operation must still
+  check its native environment. Capability queries do not create input actors or hooks.
+- `remote_control/` contains shared IPC, owner lifetime, host protocol/consent,
+  bounded transport queues and local capture binding. Its orchestration compiles on
+  every host. `desktop-input::session::Session` is the native actor boundary;
+  Windows retains its serialized queue, authorization engine, safety hooks and
+  input-release behavior. An unimplemented backend cannot open an input owner.
+- `preview` and `keyboard` expose common command signatures and select their
+  native implementations inside the feature. Windows retains shared-buffer preview
+  for CPU consumers; normal preview uses the shared GPU presentation service.
+  Notifications use the Windows backend for permission queries, presentation
+  and actions. Only Windows is a supported desktop target; other platforms retain
+  unavailable implementations for host compilation and shared-logic tests.
+- Native capture and media still share `desktop-capture`. Its `media/recording`
+  core owns borrowed input ports, codec validation, recording lifetimes, pause
+  segments, bounded queues and binary IPC without an OS, WebRTC or Tauri dependency.
+  `media/webrtc` adapts the SDK's sender audio observer and capture clock; Windows
+  binds the video port to Media Foundation and supplies WASAPI PCM as the fallback.
+  The core consumes a single backend-normalized monotonic clock and never closes
+  the original sender. Its lifecycle and binary-contract tests use test inputs
+  without a GPU or WebView.
+  D3D frames, source enumeration, device capture and physical desktop geometry
+  still target Windows.
+- `apps/web/package.json` is the single application version source for Web and
+  desktop. Vite uses it for About, copied version information and `version.json`;
+  Tauri reads the same file for native runtime metadata, executable resources and
+  installer versions. The native build watches the manifest for version changes.
+  `apps/desktop/package.json` has no independent version. Rust crate versions are
+  internal dependency metadata and do not control the application release version.
+- Desktop builds omit the PWA manifest, service worker, share target and web
+  update prompt. Updates currently mean installing a newer desktop package;
+  automatic updates need a separate signed release channel.
+- The shared `@weblink/platform` contract has browser and desktop adapters.
+  `runtime_capabilities` reports Windows native capture support when available;
+  Windows remote input is available with explicit local approval.
+- Only the local main window can query native capabilities, control native screen sharing
+  and open HTTP(S) or mail links. External links open in the system browser. The window cannot
+  navigate to a remote page or create another privileged webview. There are no
+  filesystem, shell execution or input-control IPC permissions.
+- The main window uses native window controls. Closing it asks by default in an
+  app-styled web dialog, with choices to hide to the tray, quit, or cancel. “Remember
+  my choice” saves hiding or quitting before performing the action; cancel does not
+  change preferences. Settings → Application can restore “Ask every time” or
+  select direct exit or hiding; existing saved choices are preserved. The tray restores
+  the window, revokes control of this device, or quits the application. A second
+  instance also shows and focuses the existing window. If tray creation fails,
+  hiding is disabled and the close prompt offers only quit or cancel.
+- File selection, camera and microphone use existing WebView browser APIs. Remote clipboard
+  access uses the platform adapter described below. Native
+  drag/drop interception is disabled so the app's existing HTML drop handlers
+  receive files. The host automatically grants camera and microphone access only
+  to the local application origin (or the configured development origin). Windows
+  refreshes those two WebView profile grants at startup, including older saved
+  denials. AppState skips browser permission queries and temporary permission
+  probes on desktop; opening a device menu never starts capture. The normal
+  microphone/camera controls start capture, and actual OS denials or missing
+  devices still update the shared state. Refreshing the list rechecks missing
+  devices; a successful capture clears a previous OS denial. Speaker selection uses exposed devices
+  or retains the default output without requesting microphone access. OS privacy
+  settings remain in force. File selection/download still requires WebView2
+  acceptance; Windows screen sharing uses the native path below.
+- IndexedDB and local storage belong to the application WebView profile under
+  the OS application-data directory. Browser history is not automatically
+  imported; development and packaged origins have separate storage.
+
+## Application window behavior {#application-window-behavior}
+
+“Hide window after approving remote control” is off by default and applies to the
+host, including approval through a remembered client permission. Only a successful
+native grant hides a visible, non-minimized window. Native grant termination
+restores the window only if that grant automatically hid it; a manual show/hide
+cancels automatic restoration. Replaced or stale grants cannot restore another
+session's window. This does not depend on WebView status polling. Stopping the
+controlled capture explicitly closes its control channels and invalidates its
+input binding before capture teardown; other shared displays remain available.
+Hiding or minimizing does not dispose room, media, or host input owners. Controller-side keyboard capture still stops on loss of
+foreground focus. Explicit room leave, page reload, window destruction and process
+exit keep their existing cleanup behavior; choosing Quit in the tray always exits.
+
+Presentation consumers share one native visibility subscription and combine it with
+their document's visibility. Hiding or minimizing pauses video/session diagnostic
+sampling and releases speaking-indicator audio analysis; showing resumes with fresh
+statistics baselines. Focus loss alone keeps a visible PiP active. Observation does
+not stop borrowed tracks, remote sharing or lease renewal, and the last consumer or
+page reload releases its subscription.
+
+The renderer subscribes to the native control owner's initial status and subsequent
+consent, grant and closure changes. Status observation does not renew or revoke
+control. Leaving releases the watcher; late events and asynchronous decisions from
+an older owner cannot update a replacement room. Failed subscription setup retries
+without replacing the native owner or replaying grants.
+
+The main page subscribes to native close requests. Repeated close attempts share one
+prompt, and replies must match both the page subscription and pending request.
+Reloading releases the subscription. Before the page subscribes, or if its channel
+rejects delivery, normal native close remains available. The tray's Quit command
+can always exit independently of the renderer.
+
+Windows WebView2 is started with background timer/process throttling disabled;
+the desktop renderer also holds a shared Web Lock for its lifetime to resist
+background freezing. Capture leases remain active and still expire if the renderer
+actually stops responding. These measures rely on WebView runtime behavior, so
+background operation must be checked when changing the supported runtime.
+
+Picture-in-picture preferences live in Application settings and import the former
+meeting preference. Browsers keep their existing PiP lifecycle and permission rules;
+the automatic toggle is disabled where document PiP is unsupported. On desktop,
+PiP turns the main window into a resizable, always-on-top window with a custom drag
+bar and compact meeting controls, retaining the current grid or featured layout.
+Manual entry remains available without a pinned source or live video, including
+multi-participant avatar grids. The toolbar entry reflects native window support,
+not the current main-view selection; only automatic entry requires live video.
+It retains the same renderer, media players and control session. Window bounds animate
+on entry and return, and follow the system reduced-motion preference. Native frames
+are cancellable and only one is queued at a time; hiding invalidates pending frames
+without changing the compact bounds or frame. Restoration is deferred until the next
+show, before the window becomes visible; reloading a visible window restores immediately.
+The return button restores the previous
+size, position and window flags. The close button and native close requests follow
+the same Application close behavior as the main window: ask, hide to the tray or
+quit. Tray Show also restores the main window.
+Dialogs, including close confirmation and joining a room, stay in the compact
+window. Cancelling close keeps PiP active; closing to the tray preserves the compact
+native bounds and flags until the main window is shown again.
+Source removal, room leave and page reload release native presentation ownership.
+
+Desktop automatic PiP activates when an eligible video view loses foreground focus
+or is minimized. Active dialogs, source pickers and an explicit hide-to-tray prevent
+automatic entry. Focusing the small window keeps it usable; use its return button to
+restore the main window. Explicit host-control auto-hide keeps its existing behavior.
+
+Application settings also contain the existing auto-join preference and a desktop
+launch-at-login switch. Auto-join keeps its existing profile value and room behavior.
+Launch at login reads the OS registration rather than storing a second preference;
+only changing that switch or explicitly repairing the entry changes registration.
+Keyboard forwarding and exit shortcuts remain in Remote control settings alongside
+touch input preferences.
+
+On Windows, startup preferences are read when the app opens and refreshed on focus.
+An existing startup entry targeting another executable (or an ambiguous unquoted
+path with spaces) leaves the switch off and disabled and exposes a Repair button.
+Repair registers the currently running executable with a quoted path and
+`--autostart`, enables launch at login, and reads back the resulting status. Missing
+entries remain ordinary disabled startup preferences that can be enabled normally.
+Reads never rewrite an entry automatically; a failed repair remains retryable.
+
+Login startup uses `--autostart`. Its native configuration defaults to hiding in
+an available tray and can instead show the main window; manual launches always
+show the window. An unavailable tray or unreadable startup configuration falls
+back to a visible window. Changing the startup display preference does not enable
+OS registration.
+
+Both debug and release Windows executables use the GUI subsystem, including when
+launch-at-login points at a development build. Launch at login registers the
+current executable directly with `--autostart`; no terminal or shell wrapper is needed.
+
+Windows single-instance ownership is scoped to the normalized executable path.
+Repeating a manual launch of that path restores its existing window; a duplicate
+`--autostart` launch leaves it in the background. Different executable paths,
+including development and release builds, can run concurrently. The application
+identifier and existing profile/configuration locations are unchanged.
+
+## System notifications {#system-notifications}
+
+Notification preferences are shared by the Web and desktop UI: messages, control
+requests, speed-test requests and completed file transfers are enabled by default, only while the
+window is unfocused. Content preview and sound can be disabled separately. Browser
+permission is requested only by explicit header or settings actions. New-message events follow
+durable insertion; loading history, duplicate delivery and ACKs do not notify.
+Transfer completion requires an observed state transition in the current session.
+
+In-app toast delivery is reserved for update reminders, control and speed-test
+approvals, and remote clipboard/file-drop transfer feedback. Chat messages and
+ordinary file-transfer completion use system notifications only; they are not
+replayed as toasts when the app becomes visible. For events with in-app feedback,
+an undelivered, still-valid notice can appear on return to the foreground. An event
+already delivered through a system notification does not automatically produce a toast.
+Explicitly clicking a control or speed-test notification body brings the app
+forward and opens that request's existing toast, including its combined action
+buttons. This is not triggered by an ordinary focus change. The same notification
+owner retains cleanup, expiry and duplicate-action handling after the handoff;
+clicking native approve/decline buttons still responds directly.
+Update reminders retain the pending lifetime described in Desktop updates above;
+other requests and transfers keep their existing expiry and validity checks.
+
+Browser permission is reconciled from Notifications and Permissions APIs and
+refreshed automatically on focus, visibility, page restoration and permission changes;
+settings do not expose a manual permission refresh. An
+unresolved prompt is not treated as a grant or retried repeatedly. Android installed
+apps may require changing the app's own notification settings; website permission
+cannot establish the OS notification-channel or Do Not Disturb state.
+
+Message previews include the sender's avatar and name; group titles also identify
+the room. UI fallback avatars use a shared SVG with consistent gradients, initials
+and glyph alignment; notifications rasterize that same SVG to a small PNG. Disabling previews hides identity as well
+as message content. Avatars are bounded PNG data URLs; the desktop validates and
+materializes them locally for the OS and removes them when the notification ends.
+An invalid image falls back without suppressing the message. Windows displays the
+avatar in its circular app-logo slot; browser icon presentation follows the OS.
+The Windows notification source separately registers the bundled Weblink icon in
+the app identity, leaving the sender avatar in the content area. Its PNG stays in
+the application's local data directory across individual notification lifetimes.
+Web notifications supply a separate monochrome app badge where supported, and use
+the app icon for notices without a sender avatar; the browser controls source branding.
+
+The browser uses Web Notifications, with Service Worker actions when available;
+otherwise clicking opens the application conversation. Worker actions target the
+creating page and subscription, never another tab. Windows uses native WinRT
+Toast notifications with inline message replies and approve/decline buttons.
+Windows approval notifications use the reminder scenario so their banners remain
+until answered, manually dismissed or the request expires. Native deadline cleanup
+also removes an already visible reminder while the background WebView is throttled;
+request cancellation and subscription teardown retract it immediately. Ordinary
+message and reply notifications retain the default banner behavior.
+Windows notification status queries are read-only. For a fresh unpackaged app,
+`ToastNotifier.Setting` can return `ERROR_NOT_FOUND` before its first notification.
+That maps to `unknown`, distinct from granted, denied and unavailable. The first
+real notification may still be dispatched without a permission prompt; Windows
+enforces its own notification settings. Only dispatch registers the app identity.
+No temporary notification is sent to discover status. Other native failures remain
+errors; settings distinguish loading, retryable failure and unsupported environments.
+Other desktop systems report notifications as unavailable. OS notification settings
+can suppress presentation or sound on Windows.
+
+Actions require a live subscription and unexpired notification. Approval also
+rechecks the exact pending consent through the existing control service; cancelling
+that request retracts its notification. Actions are consumed once before asynchronous
+work. Replies use the regular messaging service and never clear another draft;
+failed local acceptance retains the reply in the conversation draft. Delivery
+failure after acceptance belongs to the stored message and its existing retry flow.
+Speed-test notifications share the exact pending approval with the in-app toast and
+panel, including its original 20-second deadline. Approve/decline settles that
+request once; opening the notification shows the existing approval toast.
+Cancellation, connection loss, expiry or an in-app response retracts the notification.
+A late action cannot approve a newer request from the same peer. Speed-test alerts
+have their own category switch and follow the common permission, focus, preview and
+sound preferences; disabling alerts does not disable in-app approval.
+Declining from either the in-app toast or a system notification closes the request
+without opening the speed-test panel.
+Reloading/closing releases callbacks and retracts notifications on Windows and in
+browsers.
+This is notification of live local events, not push delivery while the app is closed.
+
+## Native screen sharing {#native-screen-sharing}
+
+The meeting screen-share button opens a display/window picker on supported
+Windows systems. The picker separates screens and windows, lists sources in a
+single column with their dimensions and supports window search. Selecting a source
+loads its thumbnail in the adjacent preview pane; sources are not captured for
+thumbnails before selection. Capture methods
+are configured in Settings and read by the picker for the selected source type. Screens
+can use DXGI Desktop Duplication or Windows Graphics Capture (WGC); windows use
+WGC. Availability is probed in the current interactive session. While DXGI capture
+is active, queries reuse that running session as evidence of support; they must
+not attempt a second duplication of an output already owned by this process.
+After capture stops, availability is probed again. Auto prefers DXGI
+for screens and can fall back to WGC on startup failure. Windows select WGC
+explicitly by default; unavailable choices fail instead of
+silently capturing through a different backend. Defaults remain 1080p / 30 fps. Settings → Audio & video
+controls resolution (up to 2160p), frame rate, bitrate and degradation.
+Desktop frame-rate choices use connected displays' current refresh rates, including
+high-refresh choices above 60 FPS. Common lower rates remain available; unknown
+display information and browser builds use 15/24/30/60 FPS. Reopening the controls
+refreshes display information, and a saved unavailable rate is lowered to the
+nearest offered rate. Browser builds hide native capture and encoder controls.
+These are upper limits, not throughput guarantees. Camera and browser screen
+capture use the same resolution/frame-rate preferences. Resolution, frame rate,
+bitrate and degradation changes update active browser and native streams without
+recreating capture or WebRTC connections. Rapid edits are coalesced and native
+preview tracks are never constrained or re-encoded by the WebView. Codec, encoder
+and capture backend changes apply to the next share. Audio consent and mute state
+are preserved. Invalid live limits are rejected before commit; constraint and sender
+parameter failures are reported to the user.
+
+Software formats come from libwebrtc's sender capabilities. Hardware H.264 and HEVC encoders
+come from optional NVIDIA NVENC session initialization and Media Foundation
+hardware-transform enumeration followed by activation and input/output type negotiation,
+not GPU model names. Automatic encoding exchanges
+browser/WebView decoder MIME capabilities in the existing authenticated media hello.
+Each connection intersects local encoding formats with its own receiver's capabilities.
+Unknown/legacy receivers use H.264/VP8 and Opus/PCMU/PCMA compatibility baselines,
+without restricting other receivers.
+Native selection prefers available hardware, then AV1, HEVC, VP9, H.264 and VP8;
+browser selection uses this format order. Audio prefers Opus, then G.722, PCMU and
+PCMA. This is a deterministic preference policy, not a device performance benchmark;
+SDP still negotiates profiles/levels and actual decoding is monitored separately.
+An empty common set suspends the affected browser senders or rejects native offers,
+without ending local capture. Manual browser choices retain WebRTC fallback ordering;
+manual native video formats remain fixed; manual audio choices remain preferences.
+Neither rewrites saved user preferences.
+
+Joining or leaving does not change the formats or restart the streams of existing peers.
+A changed capability report reevaluates only that receiver's choices. Browser senders
+renegotiate on their existing connections; native senders replace only the affected
+receiver's screen publication when its resolved format changes, retaining capture,
+raw preview and the room connection. Each pending publication carries its
+selected formats. Its input channels rebind to the replacement publication.
+The sender selects the corresponding hardware or software encoder and shares
+capture pixel conversion across viewers.
+Settings combines encoder and format into one selector with Auto and detected
+hardware/software format combinations. Stored settings accept fully automatic encoding or a concrete encoder/format pair.
+Other combinations use the automatic default; unavailable saved concrete pairs
+are marked instead of silently replaced. Each remote peer owns its encoded-frame
+source and RTP connection, with independent bitrate and keyframe feedback. Native
+H.264/H.265 viewers start with independent hardware workers and bandwidth feedback.
+Viewers can share one encoded bitstream when their backend, codec, dimensions, frame
+rate, colour, preset and preview mode match and their allocations settle in the
+same bitrate band for two seconds. The pool uses geometric 1.5× bands only to
+decide membership. The encoder follows the lowest positive allocation of its
+active consumers, capped by their settings. A suspended viewer skips frames
+and resumes on a keyframe without pausing the other viewers.
+Short excursions across a band boundary leave the current bitstream intact.
+When viewers' budgets diverge by a factor of 1.5 or more for two seconds, a
+viewer can move to a separate worker. Compatible streams can rejoin after their
+budgets settle again. Each viewer retains its RTP sender. A sole viewer or a
+whole group changing rate together adjusts the active encoder in place.
+Hardware frame timestamps follow capture time, not worker submission time, so
+queueing, conversion retries and driver readiness do not rewrite the media cadence.
+Static refreshes advance on the frame's preparation time and timestamps remain
+monotonic across retries and group changes.
+Browser and native
+software encoders remain managed by WebRTC and are not part of this pool. An explicitly selected
+codec restricts negotiation to that format: incompatible receivers fail instead
+of silently switching codecs. Driver/session limits and accepted resolution/rate
+combinations still apply. The Windows local preview does not create an encoder or
+WebRTC connection; encoder selection and bitrate govern remote publication.
+Camera and microphone still use browser codec preferences. Saved bitrate and browser
+codec preferences retain their existing storage keys.
+
+On NVIDIA capture devices, automatic hardware encoding first tries native NVENC
+with D3D11 NV12 textures. Discovery checks the installed driver's API, codec, input
+format, asynchronous output and dynamic bitrate support, then initializes a session.
+The optional driver DLL is loaded from Windows System32; neither CUDA nor NVIDIA
+SDK binaries are required or bundled. The pinned API 12.2 header retains its NVIDIA
+MIT notice in `crates/desktop-capture/vendor/nvcodec`.
+
+The native preset vocabulary is `balanced`, `quality` and `latency`. NVENC maps
+these to P3/ultra-low-latency/no AQ, P4/low-latency/spatial AQ strength 5, and
+P1/ultra-low-latency/no AQ respectively. Balanced and quality analyze the current
+frame at quarter resolution before encoding it at full resolution. Their one-frame
+VBV follows the live transport bitrate so abrupt scene changes spend fewer bits
+on a constrained connection. Latency uses single-pass encoding. All three use
+CBR with frame reordering, B frames, lookahead and temporal AQ disabled.
+Settings offer the three intents for backends with verified preset support, remembering each encoder ID
+separately (including auto). Missing preferences default to balanced. Changes
+apply to the next share; live resolution/bitrate updates and codec negotiation
+preserve the session's preset. Encoder groups include preset intent in their key.
+Preset intent is independent of codec, resolution, frame rate and bitrate limits.
+Media Foundation maps the intents to quality/speed values 33, 67 and 0 and
+requests low latency and zero B frames. Discovery initializes each preset.
+Non-default MF choices also require matching control readback. Native software
+VP8, VP9, H.264 and AV1 expose the same three intents through the SDK's
+software preset API. Balanced preserves upstream defaults. On a shared room
+connection, each software screen sender owns its preset and live VFR target.
+Changing the FPS of one screen updates its encoder's per-frame bitrate budget
+while other screens and the camera retain their settings. Recreating an encoder
+for that sender reuses its profile.
+Quality selects VP8 complexity max (desktop speed -3), VP9 speed 6, OpenH264
+high complexity, and AV1 speed 8. Latency selects VP8 low complexity (desktop
+speed -6), VP9 speed 9, OpenH264 low complexity, and AV1 speed 11. Explicit
+VP9/AV1 speeds bypass dynamic speed changes; other trials remain intact.
+Defaults can already use the fastest setting, so latency and balanced need
+not differ for every codec/resolution. OpenH264 retains single-slice CBR and
+its existing threading/drop policy. Software presets do not change the user's
+degradation preference or stream limits. Browser WebRTC does not expose these
+controls. Auto tries the
+chosen intent on its selected backend. A rejected preset retries balanced before
+the existing same-codec backend fallback. The `encodingPreset` diagnostic records
+requested/effective application intent as 0/1/2 (balanced/quality/latency), plus
+failure status; it is not a driver readback. Other controls retain their own
+readback semantics. Presets describe a tradeoff, not a guaranteed quality gain
+or an end-to-end latency target.
+H.264 uses Baseline
+and HEVC uses Main 8-bit, preserving the existing RTP and recording packet formats.
+Missing/older drivers, unsupported configurations or exhausted encoder sessions
+fall back to MF with the same codec. An active NVENC failure also reopens MF and
+requests an IDR while retaining the sender and recording tap; that receiver does
+not repeatedly retry NVENC. If MF GPU input fails, the existing memory-input path
+remains available. These are compatibility fallbacks, not guarantees that every
+driver supports every resolution or that MF can recover a lost GPU device.
+Manual MF selections stay on MF. Saved `nvenc:h264` / `nvenc:h265` selections can
+use a same-codec MF fallback when NVIDIA hardware is no longer available.
+
+The Media Foundation path is vendor-neutral: AMD, Intel and NVIDIA hardware
+depend on the installed GPU and driver exposing a compatible H.264 or HEVC transform.
+A CPU brand alone does not establish hardware encoding support. HEVC uses Main
+8-bit NV12 input and the H.265 RTP codec. Only a session with a detected HEVC
+hardware backend opts into the Cargo fork's external-HEVC factory; normal/software factories
+do not advertise an encoder they cannot provide. Existing H.264 encoder IDs stay
+stable; HEVC IDs include a codec suffix for multi-codec driver registrations.
+Receivers must negotiate H.265 support. A rejected video answer reports the
+format failure promptly without waiting for ICE. Automatic selection then tries
+the next common format for that receiver; a concrete encoder/format choice stays
+fixed. Native AV1 hardware publication is not implemented.
+
+Negotiation alone does not prove decoding. Receivers observe decoded-frame progress
+while video RTP is arriving. A sustained stall first requests a fresh connection
+and keyframe. Two stalls without sustained decoded progress allow automatic
+selection to probe the next common video format. This is scoped to that
+publication/receiver, not a browser-wide codec ban. Network failures without a
+decode-stall report retain the same format and bounded transport retry path. Hidden
+or frozen pages, interrupted sampling and reset RTP counters start a fresh
+observation window, so background time cannot exhaust the video recovery window.
+Explicit codec/playback rejection immediately excludes that format from automatic
+selection for the affected receiver. The replacement uses the existing capture
+and encoder pool; other viewers and recording keep their current workers.
+Failed formats are not retried until the publication/session resets. Exhausted
+common formats and explicit choices remain terminal, with the error shown in the
+existing source card. Cards use publication identity across media reconnection.
+Transport retries remain bounded, with their budget reset only after sustained
+decoded progress or a change of format. Additive `receiver-status` messages report
+healthy/unsupported receivers; `retry.reason=decode` distinguishes decoder stalls
+from network interruptions. Older senders can ignore the reason and use their
+existing bounded retry policy. `stop.retry` preserves the card during transport repair.
+Explicit stop also clears that retained card during backoff or an unfinished offer.
+
+Browser/WebView decoding follows the runtime's negotiated receiver capabilities,
+not the sender's GPU or Windows media-file codec extensions. A runtime must expose
+H.265 in WebRTC to receive HEVC; browser and WebView versions can differ. WebRTC
+does not expose a per-receiver switch that forces GPU decoding. Keep browser GPU
+acceleration enabled and inspect the actual decoder implementation and decode
+time in stream statistics when available. Chromium can hide the implementation
+and hardware-efficiency fields in receive-only contexts; missing fields do not
+prove software decoding. Native screen receivers already request zero additional
+audio/video jitter buffering, subject to the browser's loss-recovery and A/V sync
+requirements. Experimental codec flags are not enabled by the application.
+
+Native screen sharing sets a per-viewer RTP video limit and a transport-wide
+maximum for bandwidth probes. On a room connection the maximum sums the live
+limits of all outgoing screens and cameras, plus an allowance for each outgoing
+audio track (128 kbps by default). A camera awaiting its first bitrate setting
+uses the default meeting video budget. Stopping the last screen restores the
+room transport's default. The dedicated screen path budgets its own video and audio.
+
+When applying the remote SDP, the room sender gives only its outgoing screen
+video sections a starting estimate of up to 1 Mbps, bounded by each viewer's
+video limit. Incoming video and camera tracks retain their negotiated parameters.
+Without a finite transport maximum, the bundled engine defaults bandwidth
+probes to 5 Mbps. Native screen factories also opt into periodic ALR probes
+so recovery can continue during low activity, with the engine's default cadence
+and scale. No minimum bitrate is forced and changing the ceiling does not reset
+the starting estimate. Available bandwidth remains an estimate of that peer's
+path, rather than the link speed or a promise to send at the configured maximum.
+
+Hardware encoding keeps the selected frame cadence independent of WebRTC's
+observed input frame rate, so motion can resume after static content. Remote peers
+start conservatively and apply bandwidth reductions immediately. Upward updates
+are coalesced over 50 ms and then follow the latest allocation directly, without
+an additional multiplicative recovery ramp. The hardware controller rounds the
+actual budget down in 16 kbps steps, preserving smaller positive allocations.
+Frame admission obeys the current network budget. WebRTC controls congestion and
+pacing, and individual keyframes may exceed a single frame's byte budget. Where
+the driver supports it, Media Foundation requests a one-frame HRD/VBV budget
+at the configured bitrate ceiling before negotiating media types. Some drivers
+latch this capacity at initialization and silently ignore later writes. Using
+the ceiling instead of the conservative startup estimate leaves room for bitrate
+recovery. A driver that rejects the early request gets another attempt after type
+negotiation. Hardware also requests the low-complexity quality/speed setting (33),
+favoring interactive latency at a potential cost to compression efficiency.
+Both controls are optional and their readback remains visible in diagnostics.
+A lower ceiling limits the transport target immediately. A higher ceiling lets
+the target follow the available bandwidth. A change to the negotiated frame
+rate, dimensions or input device can require a new media type.
+Bitrate feedback and bitrate ceiling edits keep the running
+encoder. NVENC reconfigures the existing session. Media Foundation negotiates
+the configured ceiling at initialization and requests the transport target on
+that same instance. Intel MFTs use unconstrained VBR when the driver accepts
+it, so the mean bitrate can follow WebRTC feedback during encoding. Other MFTs
+use CBR. If the driver ignores live writes, the encoder keeps its
+last confirmed rate. Frame admission can reduce the delivered frame rate on a
+slower link. Statistics report the confirmed encoder setting separately from
+the transport target and actual transmitted bitrate.
+
+MF and NVENC share one driver-update scheduler, separate from this admission
+budget. It learns blocking cost per encoder instance: the current call's cost or
+half the previous estimate, whichever is larger. Changes below 10% of the last
+confirmed rate use twenty times this cost (50 ms to five seconds); larger
+increases use ten times the cost (50 ms to three seconds). Reductions of at least
+10% instead use twice the cost (50–500 ms). With queued input or in-flight work,
+admission debt of at least one configured frame interval, or no delivered output
+for two frame intervals, shortens this to one call's estimated cost (50–250 ms).
+The output-gap deadline also wakes an otherwise sleeping worker; idle capture
+without pending work is not treated as a stall. Debt pressure remains latched
+until the cut completes, is cancelled, or pending work drains. Admission debt is
+never forgiven by a driver update. Cheap drivers therefore
+keep a short 50 ms coalescing window, without a vendor-wide multi-second delay.
+Failed writes retry after five seconds without claiming a confirmed setting.
+Zero pauses admission without a driver write. Output already available is
+delivered before changing the driver rate, and a timer applies pending updates
+even when capture is idle. Reopening an encoder resets the cost estimate and
+confirmed rate. Capture cadence, frame admission, delivery, shutdown and wake
+predicates remain shared; backend readiness, completion events and watchdogs
+retain their backend-specific implementations.
+
+After the first encoded frame binds the source to its sender, transport rate
+feedback reaches the source independently of subsequent frames and wakes the
+hardware worker. The notification holds only a weak worker reference and is
+cleared on all worker exits. A zero allocation pauses raw input without writing
+an invalid zero bitrate to MF; positive feedback resumes it and requests a fresh
+keyframe. Existing byte debt survives pause and recovery. Fixed codec controls
+are read back on transform initialization, not on every rate update.
+
+Native screen colour settings apply to the next share. Automatic conversion uses
+the BT.709 YUV matrix for a fixed H.264/H.265/VP9/AV1 codec and BT.601 when automatic
+format selection can negotiate VP8. This matrix remains fixed during membership
+changes. Explicit BT.709 or full range excludes VP8 from automatic selection.
+Explicit BT.601/BT.709 and limited
+or full range use matching libyuv conversion, raw-preview metadata, MF input/output
+attributes and RTP colour metadata. The RGB primaries and transfer remain sRGB;
+choosing BT.709 changes the YUV matrix, not the source gamut or transfer curve.
+Hardware H.264/H.265 SPS colour descriptions are normalized before transmission:
+accepting MF attributes does not guarantee that a driver writes matching VUI
+tags. This changes only metadata, preserves picture/timing data and performs no
+additional encoding. Unsupported or truncated SPS syntax fails the encoder with
+an explicit error instead of transmitting contradictory colour descriptions.
+VP8 stays BT.601 limited range. Its UI selection preserves other-codec colour
+preferences, while incompatible direct native requests are rejected. Unrestricted
+offers with incompatible explicit colour settings exclude VP8.
+
+The current capture and transport path is 8-bit YUV 4:2:0 SDR. Full range retains
+256 luma levels instead of limited range's 220, but does not provide 10-bit precision
+or recover chroma detail lost to subsampling/compression. HDR and 4:4:4 are not
+advertised as enabled formats. HDR requires a float/10-bit capture path, matching
+encoder profile, negotiated decoder support and HDR presentation or tone mapping;
+an HDR colour tag alone cannot implement that pipeline. Copied native statistics
+include the actual colour description, bit depth and chroma subsampling.
+
+Select the encoder/codec first; its advanced options show the supported matrix
+and range. Changing colour preferences never changes the encoder or codec.
+Legacy RGB/4:4:4 preferences are ignored; all native shares use YUV 4:2:0.
+Restart sharing to apply colour or encoding changes.
+
+The **Show stream statistics** action is available in the main picture's controls
+when it has video. Its overlay is temporary state for that picture, defaults to
+off, and is discarded when the picture is removed or replaced. It is not saved
+in application preferences. The overlay samples only while displayed. It keeps
+each peer and local preview separate; rates and
+per-frame processing times use successive counter differences. Unavailable values
+remain absent. Actual bitrate is RTP payload byte growth over the report interval,
+independent of display FPS. Sender rows separately show the WebRTC target, the
+last bitrate successfully applied to the encoder, and the selected transport's outgoing
+bandwidth estimate when available. These are budgets, not measured traffic or
+guaranteed capacity. Each receiver has its own encoder and congestion feedback;
+compare its sender row with that same receiver, not another peer's bitrate. A
+receiving browser's outgoing bandwidth estimate describes the reverse path and
+is not displayed as incoming video capacity. Native hardware encode time measures input preparation through output,
+including conversion, driver and worker latency, rather than WebRTC's encoded-frame passthrough.
+Hardware input wait is measured separately. Capture-to-encoded time starts at
+arrival in the application's capture callback; cached static repeats are excluded.
+Packet-send queue delay uses packet counts, not frame counts. RTT belongs to the
+selected ICE candidate pair. Neither RTT nor a sum of these overlapping stage
+measurements is a glass-to-glass latency measurement. Only small counters cross
+Tauri IPC; statistics never change capture, transport or borrowed track lifetimes.
+Copying statistics includes the latest two raw counter samples for each stream.
+Native `captureFrames` counts converted frames available to preview, excluding
+static repeats. Hardware `replacedInputs` counts pending inputs replaced by newer
+frames; `rateLimitedInputs` counts inputs skipped to respect the encoder budget.
+Receiver frame, packet loss, NACK, PLI and freeze counters remain separate from
+player drops. Cumulative decoder frame intervals and their squared sum also
+preserve timing variation that average FPS hides. Compare interval deltas while
+the source is moving; a static desktop can legitimately send fewer frames than
+the configured FPS.
+
+Native capture retains the original GPU texture. H.264 and H.265 hardware encoders
+share a D3D11 texture input path: GPU shaders scale, rotate, composite the DXGI
+cursor and convert SDR BGRA to NV12 with the selected matrix/range. NVENC registers
+these textures on the capture device. The MF backend must advertise D3D11 support
+and accept that device through an `IMFDXGIDeviceManager`; its inputs wrap NV12
+textures with `MFCreateDXGISurfaceBuffer`.
+Raw desktop pixels are not mapped or uploaded again. This eliminates the
+GPU-to-CPU-to-GPU round trip, while retaining GPU copies needed for capture
+ownership and format conversion. Compressed output still passes through CPU memory.
+
+Automatic encoder selection resolves the capture texture's DXGI adapter LUID when
+the encoder opens. `MFTEnum2` with a `MFT_ENUM_ADAPTER_LUID` blob prioritizes that
+adapter's encoders for the already negotiated codec; unusable candidates do not
+hide the next candidate. Manual MF settings retain their existing IDs and
+only select that transform, preferring its activation on the capture adapter.
+Capability discovery includes secondary adapters while keeping duplicate transform
+IDs out of the settings list. Enumeration runs during discovery or encoder
+initialization/reconfiguration, never per frame.
+
+Adapter enumeration is optional at runtime. Missing APIs, failed enumeration or
+unusable matching encoders retain the legacy selection and GPU-to-memory fallback.
+Memory fallback remembers the capture adapter and prefers the actual encoder that
+was running. While using textures, a replacement GPU device refreshes the adapter
+identity without replacing the WebRTC sender or recording subscription. This does not add cross-GPU
+texture sharing. Pipeline diagnostics expose each encoder's `selection`: requested
+and actual IDs, name, capture/encoder adapters with LUIDs, whether they match, and
+the reason for using legacy selection. An unknown legacy adapter is left unset.
+
+GPU admission and CPU conversion have separate workers, notifications and bounded
+pools. Hardware peers share immutable BGRA snapshots (up to four). Each capture
+memoizes up to eight NV12 results by output size and effective colour matrix/range,
+so compatible H.264/H.265 workers issue one conversion of that frame. Cache lookup
+and publication are serialized per capture; encoding and driver completion never
+run under that lock. Different formats and fresh captures remain isolated. A full
+cache still converts additional formats without retaining them in the capture.
+Each conversion worker's pool is bounded to eight surfaces. Shared leases keep
+their pixels immutable until the capture and all consumers release them, without
+keeping the source capture or producing worker alive through a reference cycle.
+Tracked MF samples retain their surface lease until
+the MFT releases its last sample reference. NVENC caches texture registrations and
+keeps at most four inputs in flight; it unmaps each texture before releasing its
+lease. A dedicated completion-event waiter only wakes the shared worker, which
+copies the compressed output and publishes transport before the bounded recording
+queue. Recording writes never run in that waiter or the encode worker.
+NVENC uses an infinite GOP with on-demand IDRs, retaining the single-frame VBV
+budget without periodic full-picture quality pulses. Startup, new consumers,
+receiver keyframe feedback and recording start/resume still request recovery
+IDRs with parameter sets. Bitrate-only changes do not reset the GOP.
+The NVENC registration cache remains bounded to eight entries even when shared
+inputs originate from different conversion pools. It retires only the least
+recently used idle registration; pending input mappings are never evicted.
+A full pool coalesces pending input and
+wakes on release instead of blocking the capture or recording producer. Shader
+command batches hold the D3D multithread lock so preview scaling and encoder
+conversion cannot interleave context bindings. Static refreshes reuse the cached
+NV12 surface. Size/device changes replace pools without reusing outstanding leases.
+GPU setup, conversion or texture input/output failures select memory input for
+that encoder, retain the same WebRTC sender and recording tap, and request CPU
+readback plus a new
+keyframe. This fallback is retained until the peer's encoder is recreated.
+
+Capture frames may include dirty rectangles in unrotated texture coordinates;
+the texture is still complete. Missing metadata means unknown/full damage, while
+an empty list means unchanged pixels. DXGI folds move regions into changed bounds;
+WGC uses optional ReportOnly support. Metadata errors retain full-frame processing.
+Damage accumulates through capture pacing and each receiver's input replacement or
+rate limiting, and is acknowledged only after successful admission/input. Separate
+cursor bounds, rotation, scaling and NV12 alignment are included conservatively;
+first frames, invalidation and encoder keyframes use full damage. GPU AVC/HEVC input
+offers the Media Foundation dirty-region hint only when its optional control is
+accepted; rejected hints disable that feature and retry the full texture. Software
+and memory fallback retain full-frame input. This does not enable partial GPU copies
+or change the encoded recording tap.
+
+CPU readback is requested only by a software sender, a hardware encoder using
+memory fallback, or a visible preview waiting for its next frame. An outstanding
+preview notification suppresses further preview-only readbacks until acknowledged,
+while retaining the bounded staging pool and cursor-composition buffer for reuse.
+Acknowledgement resumes from the newest retained source; it does not allocate a
+new desktop-sized buffer for every preview frame.
+For unrotated sources, a D3D11 shader scales to the selected dimensions before CPU
+readback and color conversion. DXGI cursor coordinates and pixels follow that scale.
+Unsupported GPU processing falls back to CPU scaling; rotated displays retain the
+existing rotation path. The original texture preserves detail when increasing live
+resolution while the screen is static. Capture coalesces new content into one
+retained GPU source. The CPU conversion worker admits copies at the selected
+frame rate into one, two (default), or three reusable staging slots, selected by
+**GPU readback buffers** in the native capture settings for the next share.
+More slots allow overlapping work but consume more graphics memory and can add
+latency; they do not increase PCIe bandwidth. GPU copies overlap CPU
+conversion. D3D11 completion events wake the worker for nonblocking Map attempts
+outside the capture mutex. If Map still reports pending work, the worker registers
+another completion event; there is no periodic GPU polling. Notification setup
+failures are reported, and a two-second operation deadline detects stalled
+readbacks without providing a polling fallback. Frame-rate admission and static
+repeats keep their own deadlines. The worker processes the newest completed copy
+and preserves the latest
+source when all slots are busy, including the final update before a static scene.
+Readback timing includes asynchronous GPU wait; overlapped stage times are not a
+throughput estimate. Source size/device changes preserve in-flight ownership,
+and stopping releases pending slots without publishing late frames. Software and
+hardware share variable-frame-rate scheduling: the selected FPS caps new content,
+missed deadlines do not accumulate a burst, and new content starts promptly after idle.
+Hardware input/output readiness wakes its shared worker through Media Foundation
+or NVENC completion events; there is no second encoder FPS gate. NVENC additionally
+detects output stalled for three seconds and retries temporary input backpressure
+without blocking capture. Each encoder keeps only its latest pending input. Reconfiguration and
+shutdown release callback state without retaining the capture session. On Windows versions supporting
+WGC's minimum update interval, capture requests updates at a 1 ms minimum interval
+and the worker enforces the selected output rate; older Windows versions retain
+the OS default. The worker preserves the latest pending frame without
+losing the final update when a screen becomes static. GPU mapping/conversion runs
+outside the async executor. Both encoding paths periodically refresh static content
+twice per second, also respecting lower FPS limits. A hardware keyframe request
+additionally schedules retained pixels at the next permitted frame, without
+waiting for this refresh deadline. Joining, transport readiness and decoder
+requests use the same path; demand survives worker wakeups until pixels are
+submitted. Refreshing does not
+repeat GPU readback or the shared BGRA-to-I420 conversion. The shared WebRTC encoder
+adapter keeps the configured FPS for per-frame budgets during sparse input for H.264, VP8,
+VP9 and AV1. Live FPS changes update that budget before the next encode without
+resetting the encoder, raising bitrate allocations or disabling transport and
+encoder frame limits. Software H.264 uses the real-time rate-control preset. Its
+single-stream OpenH264 encoder delegates frame dropping to WebRTC rather than
+also skipping consecutive frames inside the codec
+after large scene changes. OpenH264 still controls quantization; WebRTC retains
+its frame dropper, bitrate adjustment, congestion control and pacing. Limited
+bandwidth can still reduce frame rate or quality according to the selected
+degradation preference. This policy is scoped to the native screen factory's
+software H.264 backend. Hardware pass-through disables the encoder-input rate
+dropper because its inputs are already compressed reference frames. Pre-encoded
+RTP senders also disable raw-frame resolution/FPS adaptation from creation through
+live settings updates. Otherwise WebRTC's initial quality scaler can discard the
+startup IDR before the pass-through encoder is active, delaying a static viewer.
+Factories for external encoders start on pass-through immediately, including
+H.264, without waiting for the sender's backend selector to switch a software
+encoder. Software factories retain their own startup policy.
+Capture settings and the shared encoder pool own adaptation before encoding;
+transport bitrate feedback, congestion control and pacing remain enabled. Hardware
+workers apply transport bitrate feedback to the active backend and account for actual encoded
+bytes with a bounded 50 ms burst allowance. When a driver overshoots its accepted
+target, the worker retains the newest raw frame and its accumulated damage until
+the budget recovers. It wakes at that deadline even if capture has gone idle.
+Newer inputs can replace the waiting frame. Idle time cannot bank an unbounded
+burst, and bitrate reductions retain existing byte debt. Pipeline diagnostics expose `encodedBytes` and
+`rateLimitedInputs` separately from input replacement and player drops. This
+preserves bitrate limits rather than promising the requested FPS for arbitrarily
+complex content at insufficient bandwidth.
+The configured `maxBitrate` is the video bitrate ceiling; the current encoder
+budget follows transport feedback up to that ceiling. Live setting changes update
+both the RTP sender and hardware worker. There is no additional fixed Mbps cap:
+the 50 ms burst allowance is converted to bytes at the current budget, and startup
+estimates do not prevent later recovery toward the user's selected maximum.
+Native screen receivers
+request minimal playout buffering where the browser supports it; network jitter,
+encoding and decoding can still add delay.
+Native senders additionally advertise a negotiated RTP playout-delay range of
+0–0 ms for interactive screen viewing. Chromium then decodes complete frames and
+presents the latest frame without an additional presentation queue. A zero minimum
+with a positive maximum selects its low-latency renderer, whose
+[fixed 60 FPS frame-duration assumption](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/modules/mediastream/low_latency_video_renderer_algorithm.h)
+can discard decoded frames from higher-rate streams; a positive minimum instead
+adds timestamp-based presentation scheduling. Receivers without the extension
+keep their normal buffering. This hint prioritizes freshness over jitter smoothing
+and audio/video synchronization delay; packet arrival, decode and display refresh
+still limit playback. It is not an end-to-end deadline or a zero-drop guarantee.
+The video pacer has 1.5× burst headroom relative to its bandwidth estimate;
+encoder bitrate limits, congestion control and retransmission remain active.
+Both options belong to the native screen session's factory, not process-global
+settings. The binding changes and upstream versions are documented in the fork's
+[WEBLINK.md](https://github.com/99percentpeople/rust-sdks/blob/bf9999f9314ff677830ee342973f495d20a474ff/WEBLINK.md).
+Update the fork first, then the full Cargo revision and lockfile together; normal
+builds never follow the branch tip. Preserve upstream license notices and verify
+native-to-browser RTP when upgrading the bindings.
+The local preview reads packed I420 frames through a read-only WebView2 shared
+buffer and submits VideoFrames directly to a generated video track where WebView2
+supports it. This avoids the Canvas draw/recapture round trip; older runtimes keep
+the Canvas capture fallback. Both preserve existing layout and playback ownership,
+and neither is sent through browser RTC. One request/submission is allowed in
+flight: the WebView copies shared memory into a VideoFrame before requesting
+another write, and unchanged pixels are not recopied. The generated track retains
+only the latest frame and repeats it at most twice per
+second during static content, so a newly attached player can display it without
+another shared-memory copy. Closing releases the writer and retained frame.
+Frame notifications are coalesced until the presenter acknowledges a shared-buffer
+read. New-frame notifications drive the next serialized read directly, without
+waiting for a WebView animation tick; duplicate visibility notices do not request
+another frame. Static content causes no repeated IPC frame queries; only generated tracks
+need the sparse local repeats above. Canvas previews sleep until a frame or
+visibility event arrives.
+Hiding or minimizing the native window pauses local preview requests, pixel copies
+and static-frame refreshes. Showing it resumes from the latest frame using the same
+stream and shared buffer. Native visibility notifications also cover tray hiding
+and automatic hiding after control approval; a visible, unfocused PiP keeps its
+preview running. Capture, remote publication, system audio and control ownership
+remain active while local presentation is paused. When there are no remote peers
+requiring CPU pixels and no visible previews, the CPU conversion worker sleeps and
+releases its staging and composition buffers; GPU hardware senders keep running.
+Capture retains the latest GPU source, including an unpublished final update,
+so a static screen can resume without another capture arrival.
+The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
+only its available dimensions and preview-submission counters (including static
+refresh submissions) are shown. The overlay separates submitted/encoded/decoded
+FPS from the video element's presentation FPS, using cumulative compositor
+counters where supported. Player
+drops and receive-to-presentation timing are shown only when available. These are
+browser presentation measurements, not physical display scan-out or end-to-end latency.
+MCP presentation samples include document visibility: cumulative player drop
+counters can include background frames and must not be interpreted alone as
+foreground stutter. Browser receive diagnostics expose first-packet-to-decoded
+processing time, target/minimum jitter-buffer delay and the power-efficient decoder
+flag when supported; missing fields remain unavailable rather than zero.
+Closing or navigating releases both shared-buffer mappings. A silent local audio
+track carries consent, mute and ownership through existing controls; actual system
+audio remains native.
+The preview has no network feedback and cannot throttle remote senders. Window resize
+updates are observed after the source repaints at its new size.
+
+`capture_pipeline_stats` exposes bounded rolling mean/P95/max timings for lock wait,
+GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
+input/readback dimensions, GPU fallback reason and active peer/encoder counts.
+It also reports capture wait, per-group hardware input wait, input-to-output and
+capture-to-encoded distributions, replaced input counts and in-flight samples.
+Each encoder's `stages` separates CPU preparation (excluding `contextLock`),
+immediate-context lock acquisition, backend `input`, `outputWait` (input return
+to output-event observation), `eventDispatch` (event observation to worker output
+processing), `output` (extraction/copy/bitstream normalization), `delivery` and
+live `bitrateUpdate` calls. Each stage reports cumulative `samples`/`totalSeconds`
+and rolling `meanMs`/`p95Ms`/`maxMs`. Preparation/input count accepted inputs;
+Output stages count matched completed packets for both MF and NVENC. NVENC
+records completion before publishing its ready flag and starts output timing
+before locking the bitstream; its bounded per-slot timestamps use the same Rust
+monotonic clock as input timing. Zero samples means unobserved or unsupported,
+not a measured zero. GPU preparation times measure CPU command submission, not GPU execution.
+`outputWait` also includes GPU dependencies and callback scheduling, so it is not
+pure hardware encode time. The existing aggregate `encode`/`encodeMs` retains
+its conversion-start-to-output semantics. Stages with different sampling windows
+must not be summed into an end-to-end latency estimate.
+`outputInterval` measures intervals between delivered encoder outputs, including
+capture/idle gaps; it is a cadence diagnostic, not an additional encoding stage.
+`hardwareEncoders` counts unique workers. Each entry has a stable `groupId` and
+current `consumers` (peer IDs or `recording:<id>`), so membership changes do not
+look like encoder restarts.
+Per-peer statistics start a new sampling baseline when that peer changes groups,
+preventing counters from different workers from producing spurious rate/latency spikes.
+Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` distinguish actual texture
+submission from memory input and identify a fallback reason. CPU pipeline frame
+counts can remain zero while a hardware-only stream is encoding normally.
+`sourceFrames`, `sourceAgeMs`, `sourceIntervals` and `sourceCopy` measure actual
+OS frame arrivals and the source-copy path independently of CPU readback and
+preview visibility. A long source interval with a short encode time identifies
+an upstream gap; replaced inputs with a normal source cadence identify encoder
+backpressure. Neither alone proves the user's screen was continuously moving.
+Automation samples `capture.status` explicitly for fresh frame count, FPS and
+frame age even outside detailed mode. Lifecycle subscriptions intentionally omit
+counter ticks; failed diagnostic reads report unavailable instead of stale FPS.
+Hardware controls include the requested value, setter result and driver readback;
+an accepted setter alone does not establish that a low-latency/CBR/buffer request
+was honored. Unsupported optional controls remain diagnostic and do not silently
+disable otherwise usable hardware encoders.
+Preparation times measure CPU submission; GPU completion wait appears in Map.
+These diagnostics exclude network transit and presentation latency.
+
+An opt-in synthetic benchmark exercises 1080p GPU input, hardware H.264,
+RTP and a native receiver in the same process at 60 and 120 FPS:
+
+```sh
+cargo test --locked -p weblink-desktop-capture --lib synthetic_native_stream_latency -- --ignored --nocapture
+```
+
+It requires a working hardware encoder and prints `LATENCY_PROBE` JSON.
+Optional `WEBLINK_PERF_CODEC=video/h265`, `WEBLINK_PERF_FPS=60` (30/60/120), and
+`WEBLINK_PERF_PRESET=latency` select a focused run; defaults remain H.264,
+60/120 FPS, MF and balanced. `WEBLINK_PERF_ENCODER` selects an exact encoder ID
+(for example `nvenc:h265`). In encoder-only mode,
+`WEBLINK_PERF_DYNAMIC_BITRATE=1` supplies small and large target changes at 10 Hz
+and emits a baseline snapshot for interval stage comparisons.
+`offeredFps` exposes producer timer/scheduling shortfalls
+separately from encoded throughput. `WEBLINK_PERF_TIMER_MS=1` requests 1 ms timer
+resolution only for the probe process, for controlled scheduling comparisons.
+`WEBLINK_PERF_ENCODER_ONLY=1` bypasses WebRTC and decoding and prints
+`ENCODER_STAGE_PROBE` using the same synthetic textures and hardware worker.
+Run serially with other GPU workloads idle. The pattern is precomputed, each
+stream warms up for three seconds, and RTP/receiver counters cover the remaining
+seven seconds. Pipeline distributions retain their latest 120 samples. Compare
+the same machine, build profile and workload; these intervals and overlapping
+stage times must not be summed as end-to-end latency. This benchmark captures no
+desktop pixels and excludes OS capture, a real network path, browser rendering
+and display scan-out. It checks delivery, without asserting timing thresholds.
+
+DXGI acquisition/release owns a dedicated D3D device. A second device on the same
+adapter receives frames through one reusable NT-shared texture with keyed ownership;
+the sink copies each borrowed frame into its retained source before releasing it.
+Only the second context is shared with asynchronous readback and is multithread
+protected. This adds one GPU copy but prevents waiting for a desktop update from
+blocking conversion or the final static frame. The bridge adds no frame queue and
+validates sharing before announcing capture readiness. A failed or timed-out
+handoff ends capture without accessing an unowned surface.
+`AcquireNextFrame` waits for arrivals instead of polling every millisecond. Its
+50 ms timeout checks for shutdown on a static desktop; new frames return immediately.
+The API cannot cancel an outstanding wait, so this bound is retained. DXGI handles display
+rotation and its separate color/monochrome cursor. Display
+mode changes, disconnection or access loss end the capture and require selecting
+the source again. Software and unsupported GPU encoders retain CPU readback and
+libyuv conversion; supported H.264/H.265 encoders use the shared texture path above.
+Recording continues to subscribe to already encoded packets after transport
+publication, with its own bounded queue. Local native recording selects AVC/HEVC
+through the same hardware-first codec priority as streaming, constrained by the
+packet recorder's supported formats and the user's explicit codec choice. It
+holds its own encoder lease in the configured ceiling's bandwidth bucket, sharing a matching
+worker when possible and creating one otherwise, even without viewers.
+Viewer joins, departures and bandwidth changes cannot retire the recorder's worker.
+Live recording bitrate changes reconfigure that worker in place; changes to the
+bitstream configuration retain the muxer's existing validation rules. Stopping a
+recording releases only its lease; the final consumer releases the worker.
+Recording audio uses capture PCM on the same clock and the muxer's audio encoder,
+so it also survives the departure of every viewer. Browser screen sharing and
+microphone/camera behavior are retained.
+
+The native source picker defaults “Share audio” on for each new selection.
+It captures system playback for both display and window shares, excluding the
+Weblink process tree so received meeting audio is not sent back. Windows process
+loopback requires Windows build 20348 or newer; disabling audio keeps video-only
+capture available. Startup failures are reported instead of silently omitting
+requested audio. PCM is captured on a dedicated WASAPI worker and sent directly
+to native WebRTC/Opus; PCM crosses Tauri IPC only for local recording. Audio capture ends with the
+screen session. The worker waits on packet-ready and explicit stop events, with
+no periodic stop check; stopping also wakes a silent audio device. Preview audio
+is excluded from browser re-publication and local
+playback, while received audio belongs to its screen's existing mute controls.
+
+Settings → Audio & video → Audio capture includes “Mute this device while sharing”,
+off by default and saved for the next screen capture with audio. Windows mutes the
+playback endpoints active at capture startup; process loopback continues supplying
+the outgoing audio. Each endpoint's original mute state is restored after its last
+requesting capture ends, including startup failures and cancellation. Already-muted
+endpoints and manual unmuting are preserved. Microphone and outgoing-audio mute
+controls remain independent. Browser capture requests `suppressLocalAudioPlayback`
+through `getDisplayMedia`; support depends on the browser and shared source
+(typically browser tabs), and the setting is disabled when unsupported.
+
+Audio capture defaults are explicit: 48 kHz, stereo. Legacy null sampling preferences
+resolve to these same values. Browser constraints express them as preferences, so the
+device may supply a nearby format; they are not advertised as automatic negotiation.
+Native system-audio formats are discovered independently of microphone and preview
+tracks, which may be fixed at 48 kHz. WASAPI probes 8, 16, 24, 32, 44.1, 48, 88.2,
+96, 176.4 and 192 kHz in mono/stereo; only successful rate/channel pairs are offered.
+Selecting a native sample rate retains the current channel count when supported,
+otherwise selects a compatible count in the same settings update.
+These are capture formats, not promises about the physical device or encoded stream.
+WebRTC resamples to the negotiated codec, and local PCM recording resamples to 48 kHz
+for Opus while retaining capture timestamps. Rates such as 22.05 kHz are excluded
+because the native WebRTC source requires whole 10 ms frames.
+Device pickers use “System default”. Capture-backend Auto remains a real selection and
+fallback policy; it is independent of codec negotiation.
+
+Display and window inventories/backend dispatch live separately in
+`crates/desktop-capture/src/backend/windows/{screen,window}.rs`. `CaptureOptions`
+is independent of `MediaOptions`. Native consumers can use
+`CaptureService::start_with_sink` and `surface::FrameSink` without a media session:
+the callback borrows a GPU texture, rotation and optional cursor metadata until it
+returns. A consumer must copy retained frames and keep its own queues bounded.
+This is the capture boundary for future remote desktop; it grants no remote input
+capability. The service owns a persistent WinRT apartment so repeated capability
+queries cannot invalidate WGC activation factories.
+
+Each remote peer receives video directly from Rust over its own send-only WebRTC
+connection. Raw local presentation is independent and its tracks are excluded
+from browser senders. Streaming pixels never use Tauri invoke/event payloads;
+only the WebView2 shared-memory mapping exposes preview pixels to the local page.
+The picker separately requests one PNG thumbnail (at most 640×360) over binary IPC.
+Monitor thumbnails use a single GDI transfer directly into a small bitmap,
+independent of the streaming backend; no WGC/DXGI session is opened. Window thumbnails
+use WGC with OS-approved border suppression and release resources after one frame
+or a two-second frame timeout. If border suppression is unavailable or denied,
+the window preview stays unavailable instead of starting a capture with a border.
+Neither path replaces an active share. The preview frame stays 16:9 and preserves
+the image aspect ratio. The UI
+keeps one request in flight, discards stale results and releases image URLs on
+selection changes or close; a preview failure does not prevent sharing.
+The native connection uses the existing ICE/TURN credential
+loader and relay-only setting; raw local preview does not use ICE or TURN.
+Initial room binding, late join and capture changes all use this same publication
+path; reconnecting must never republish the local preview through a browser encoder.
+
+Windows owns one native room PeerConnection per remote member. The authenticated
+media DataChannel carries screen publication IDs, acknowledgements, quality
+requests and receiver status. Peers advertise `roomTransport/1` before enabling
+native screen sharing. Both directions require this capability when connecting
+to the current Windows app. Older clients can still use chat, files and ordinary
+meeting tracks. They must upgrade to exchange native screen publications.
+
+Each screen's video and optional audio share a WebRTC stream ID derived from
+its publication ID. Input channels carry the same ID in their labels. Adding or
+removing a screen renegotiates transceivers on the room connection. The room
+keeps its ICE transport, data channels and other publications. Each screen keeps
+its own quality settings, bounded retries and statistics.
+The native publisher owns its send-only audio and video sections. When a browser
+shares back, it places its local track on a separate media section if
+`addTrack` selected one of those incoming screen sections.
+Peers without this capability receive the first active publication; stopping it
+promotes the next one without replacing the room connection.
+Closing/replacing that channel releases its native senders and remote receivers.
+An unexpectedly closed dedicated channel is reopened by its negotiation owner while
+the main room channel remains ready. A native input worker failure opens a fresh
+owner and rebuilds eligible media bindings; previous input grants are never replayed.
+Remembering an allowed peer leaves its existing transport and consent intact.
+ICE failure retries are bounded; stopping and restarting sharing resets them.
+
+Adding a native share retains existing screens and windows. Each capture owns
+its raw preview, encoder, remote peers and heartbeat independently (up to 16 captures).
+Explicit stop, source closure, application exit and a 60-second lost-client lease
+release the affected capture and transports; application exit releases all of them.
+Leaving a room releases its peer connections but
+retains an explicitly running local capture for rejoin. Pending selections cannot
+start in a replacement room. Stale session IDs cannot stop a newer capture.
+Capture owners subscribe to initial status and lifecycle, backend and size changes.
+Counter-only changes are not pushed; diagnostic consumers read status explicitly.
+These reads and subscriptions do not renew the lease. A separate 10-second renderer heartbeat renews each owned
+capture even while previews are hidden. Failed subscription setup or heartbeat IPC
+retries without treating a transport error as proof of capture termination. Reloading
+clears page subscriptions, and stopped sessions release theirs after a terminal event.
+Native terminal status retains its error and stop reason. Failed per-peer hardware encoders close only
+their own transport and retain bounded error diagnostics. Capture/readback and
+system-audio failures still terminate the affected capture with native diagnostics.
+
+**Settings → Advanced → Native screen capture test** remains a local diagnostic
+using the same capture service with an independent session.
+It reports capture arrival statistics without mapping or transmitting pixels.
+Its 500 ms statistics sampler pauses while the window or document is hidden; status events
+and lease renewal remain independent of that sampler.
+Closing this diagnostic panel stops only the capture it owns.
+
+The native capture service waits on commands and coalesced lifecycle notifications.
+Backend closure/worker exit, media failure and source dimension changes wake the
+owner directly; steady frame arrivals only update counters. The only timed wait
+is the earliest active lease deadline, recalculated after renew/start/stop. With
+no active sessions it waits indefinitely for a command or shutdown. Status reads
+sample counters without scheduling a separate lifecycle poll or renewing a lease.
+Callbacks only notify the owner; stopping and joining resources stay on that owner,
+and delayed notifications from a retired backend cannot end its replacement.
+
+For a native smoke test, run this in an unlocked interactive Windows session:
+
+```sh
+cargo run -p weblink-desktop-capture --locked --example self_test
+```
+
+It creates and captures its own temporary window, checks frame delivery, resize,
+stop/restart and source closure, then removes the window. It does not capture
+existing windows or a display. `media_self_test` additionally accepts a temporary
+exchange directory, an optional codec MIME type (for example `video/vp8`), and
+an optional encoder ID (`software` by default, or a detected `mf:...` ID):
+it exercises 640×480 / 15 fps / 1 Mbps limits, writes `offer.sdp`, accepts a browser's `answer.sdp`, and
+responds to `resize` / `motion` / `done` marker files. The `motion` marker
+updates only the test window until removed, allowing receiver FPS checks. Use browser inbound RTP/decode counters
+to validate video delivery and resize before writing `done`; no personal desktop
+content is used by either harness. `display_self_test` separately exercises the
+available screen backends and their stop/restart lifecycle in an interactive
+Windows session. It counts borrowed GPU frames without reading, saving, encoding
+or exporting display pixels. Windows unit tests exercise synthetic hardware H.264 and HEVC
+when an activated hardware transform is available; this is distinct from proving
+all vendors, driver versions or a sustained target frame rate.
+
+`multi_media_self_test` takes a fresh exchange directory, creates two test windows
+and writes `offer-1.sdp` / `offer-2.sdp` for two browser receivers. Supply matching
+`answer-1.sdp` / `answer-2.sdp`; verify both decode, then write `stop-first`.
+After `first-stopped` appears, verify the second receiver still decodes at its new
+size, then write `done`. It checks independent raw previews, media handles,
+stop, live settings and source closure without capturing existing windows.
+
+`thumbnail_self_test` checks window/WGC and screen/GDI PNG snapshots, repeated requests,
+closed sources and preservation of an existing capture. Run it interactively:
+`cargo run -p weblink-desktop-capture --example thumbnail_self_test`.
+It decodes thumbnails only in memory and does not save or transmit them.
+
+The DXGI readback regression must run explicitly in an unlocked interactive
+Windows session. It captures the display into memory, checks software and
+available hardware encoding through two WebRTC receivers in the same process,
+and repeats stop/start. It does not save screenshots or send pixels to external
+peers. Ordinary tests skip it because an SSH or CI session has no interactive desktop:
+
+```sh
+cargo test -p weblink-desktop-capture --lib dxgi_readback_reaches_preview_and_remote_after_restart -- --ignored --nocapture
+```
+
+The GPU input checks also run in an unlocked desktop session with supported
+D3D11/NV12 hardware encoders. They cover both capture backends, color/rotation/cursor
+parity, tracked surface lifetime, preview/software demand, VFR, memory fallback
+and recording pause/resume with bounded consumers. H.264 uses a local WebRTC
+decoder; H.265 checks encoded packets. `WEBLINK_GPU_PROBE_DIR` optionally saves
+short captured elementary streams for an external decoder check; it is unset
+by default. No test sends pixels to external peers.
+
+```sh
+cargo test -p weblink-desktop-capture --lib gpu_ -- --include-ignored --nocapture --test-threads=1
+```
+
+The ignored `compare_interactive_presets_on_identical_1440p_input` benchmark uses
+synthetic NV12 inputs and real NVENC H.264/H.265 sessions. Set
+`WEBLINK_NVENC_COMPARE_DIR` to a new directory with an existing parent, then run
+it with `cargo test -p weblink-desktop-capture --release --lib
+compare_interactive_presets_on_identical_1440p_input -- --ignored --nocapture`.
+It compares all three intents at two bitrate budgets in reversed-order rounds,
+writes elementary streams and their exact eight-frame repeating NV12 reference,
+and reports input-to-output completion timing after warmup. It does not capture
+the desktop, alter active shares, measure maximum pipelined throughput or include
+capture/conversion/presentation latency. Concurrent GPU load affects timings;
+objective decoded-image metrics require an external decoder and are not a
+subjective picture-quality verdict.
+
+The ignored `native_dxgi_final_frame_survives_stop_and_readback_device_is_reusable`
+test also needs an interactive desktop. It checks bounded stopping and reads the
+retained frame after the acquisition device has closed. `native_dxgi_acquire_wait_cost`
+compares timed OS waits with the former one-millisecond polling loop on the current
+desktop; `synthetic_dxgi_transfer_cost` measures the extra handoff copy using synthetic
+1440p textures. Neither measurement includes browser presentation or display latency.
+
+## Attended remote control {#attended-remote-control}
+
+Input devices share the platform-neutral manager in
+`crates/desktop-input/src/devices.rs`. It owns keyboard, mouse, touchpad,
+touchscreen and gamepad resources for the current native authorization grant.
+Persistent input resources mount on first use; capability probes leave no devices
+mounted. A revoked grant, ended capture, disconnected peer, expired native lease
+or orderly shutdown releases input and attempts to unmount every owned device,
+even if another device fails cleanup. Uncertain cleanup closes the authority.
+Pausing input neutralizes held state; it does not revoke remembered consent.
+Keyboard and mouse are logical injection resources, not additional HID devices.
+
+The shared input engine passes physical desktop pixels and committed UTF-8 text
+to `Device`. Windows owns SendInput's absolute-coordinate grid, UTF-16 keyboard
+packets and cleanup of partially injected text. Each text backend rechecks the
+bound window and deadline between native submissions and implements `cancel_text`.
+The existing PC set-1 key identifiers and 120-units-per-detent scroll wire format
+remain unchanged; native backends translate these protocol values at injection.
+
+`NativeRemoteControl.devices()` probes local capabilities without opening a
+control owner. Native status snapshots include capabilities and mounted device
+states. Each backend reports `available`, `unsupported`, `driverRequired` or
+`unavailable` independently. New platforms implement the native backend and
+capability probe while retaining the shared authorization and lifetime manager.
+The additive `ready.inputDevices` and `input-capabilities` messages advertise
+these capabilities; older peers retain their existing keyboard/pointer protocol.
+
+Windows gamepads use the optional ViGEmBus driver through a statically linked
+Rust client. Settings → Remote control shows driver availability, the
+[official installation guide](https://docs.nefarius.at/projects/ViGEm/How-to-Install/)
+and a retry action. Installation requires administrator approval; the application
+does not install drivers, elevate itself or require the driver to start. ViGEmBus
+[has been retired](https://docs.nefarius.at/projects/ViGEm/End-of-Life/); its adapter
+is isolated from the portable contract so a replacement need not change sessions.
+Current driver support does not guarantee cleanup after forcibly terminating the
+host process; normal shutdown and remote-peer failure use native cleanup.
+
+During an active remote-control session, the foreground browser controller polls
+the Gamepad API when forwarding is enabled; surface focus and pointer lock are not
+required. It forwards up to four `standard` mapped controllers as complete states
+over the ordered control channel, with the existing grant/epoch/sequence checks.
+Each connection has a fresh identity independent of the browser index or player
+slot. Physical unplug, window focus loss and disposal send disconnects; native lease
+expiry covers lost connections. Unchanged states are renewed every 100 ms and
+the host neutralizes a controller after 500 ms without a report. Optional backend
+failure stops that controller without disabling keyboard or mouse. Nonstandard
+controller mappings are not implemented. Settings persist forwarding, basic
+vibration, vibration strength and stick dead zone; the former boolean forwarding
+preference migrates without changing its value.
+Local device discovery belongs to appState and continues while forwarding is off.
+The header shows the gamepad switch when a standard controller is connected.
+ViGEm's first report can return TargetNotReady or ERROR_BUSY during enumeration.
+Before the first accepted report, the backend tolerates these errors for at most
+two seconds and retries with fresh browser samples without blocking the input actor.
+After an accepted report, failures still trigger cleanup so a failed neutral state
+cannot leave previously pressed buttons held.
+
+ViGEm output notifications return basic two-motor rumble through the ordered
+control channel. The native owner polls nonblocking notifications every 16 ms
+only while an authorized gamepad is active. Feedback carries the grant, input
+epoch and per-connection gamepad identity. Nonzero output is renewed every 100 ms
+with a 300 ms playback duration, bounding vibration after transport loss. The
+browser rejects malformed or stale-session feedback, scales it by the local
+strength preference and uses `vibrationActuator.playEffect("dual-rumble", ...)`.
+Focus loss, hidden documents, unplug, disabled feedback and disposal reset active
+effects. Unsupported actuators leave input forwarding usable. This Xbox 360
+backend does not provide DualSense adaptive triggers or native advanced haptics.
+
+Windows display shares are view-only until the viewer requests control and the
+host approves this request or has saved an allow rule for the client. Browser viewers can request control even though they
+cannot host native input. Window shares and older clients remain view-only.
+Browser keyboard and mobile text/IME forwarding require the native peer's
+corresponding capabilities. The confirmation describes computer-wide
+input authority: a display rectangle maps the pointer, not an OS security sandbox.
+
+Secondary meeting views expose their supported remote-control, fullscreen and
+picture-in-picture actions. Activating one first promotes that existing tile to
+the main view, then starts the requested feature; input forwarding remains owned
+by the main view (a single tile is implicitly the main view). Switching or unpinning
+it while control is requested/active or a display mode is opening/active asks for
+confirmation; cancellation also cancels the requested new action. Confirming ends
+those modes before changing the view; it does not stop the shared tracks. Incoming shares preserve a busy main
+view. An approved avatar request follows its matching screen as the same control
+session; unrelated shares cannot take its place. A source disappearing or the
+room ending still performs normal cleanup without waiting for confirmation.
+
+The desktop composition layer binds each connection to its locally owned room,
+peer generation, client, capture session, publication and current display geometry.
+`crates/desktop-capture` supplies DataChannel ports; it never imports the independent
+`crates/desktop-input` authorization/input engine. One authority covers every peer
+and source on the computer. Remote messages cannot register a target or approve
+consent. Approval is a trusted local policy decision exposed only to the main
+desktop window. It does not require foreground activation or physical-click
+evidence. Incoming requests use a persistent toast with Approve/Decline actions.
+The split Approve button also offers approve-and-allowlist and reject-and-blocklist.
+Rules are local preferences keyed by the existing persistent client ID, not by its
+editable display name; they are not a separate authenticated device identity.
+Blocked clients receive no hosting capability, including after a rule changes on
+an existing connection. Native requests are also rejected and active control is
+revoked. Removing a rule returns future requests to manual approval.
+
+Settings → Clients & rooms uses the existing client/room preference records for
+control and file permissions. Connections are remembered automatically; existing
+local history is imported once. Each record opens its own settings. Forgetting a
+visible client or the active room restores defaults and retains the record;
+forgetting an offline record removes it without deleting conversation history.
+
+A capable desktop also advertises `hello.requestScreen` on the existing native
+screen signaling channel. The avatar/camera action can send `control-request`,
+`control-cancel`, and receive `control-result`. Approval reuses the meeting capture
+owner to share the first monitor (and system audio) with the entire room; an
+existing controllable display is reused. No capture starts before approval. The
+request then hands off to that publication's ordinary native pointer. A one-use
+approval binds the client, peer generation and source for 30 seconds, preventing
+a second confirmation without carrying consent to other peers or captures.
+Cancellation, room/peer teardown and request expiry invalidate pending startup.
+Manual screen selection, automatic sharing for control requests and MCP
+`screen.start` use one application owner, serializing capture by physical source.
+An existing share keeps its audio and capture settings. Successful manual control
+requests, MCP screen.start and source-based control.acquire transfer their capture
+to the room. End control releases input; leaving or losing permission to control
+does not stop the picture. Close screen stops that source for the entire room.
+Manual remote control exposes only End control. Closing the picture is a local
+action on the sharing device, including pictures opened for a remote request.
+The controller can reacquire input through the retained picture after ending
+control or rejoining. The native screen channel does not advertise close permission
+and ignores legacy control-close messages. Successful handoff retains capture for
+the room and releases the temporary request lease; no peer close grant is retained.
+Pending cancellation and approval expiry still release captures that never completed
+the handoff. See AUTOMATION.md for the separate MCP screen.stop authorization.
+
+Capture shutdown notifies all native senders before closing their transports.
+Receivers allow a short transport-close grace period for the room's explicit stop
+signal before reporting connection failure. Stops and teardown cancel that timer;
+decoder failures and stalls retain their normal immediate handling.
+
+One native input grant remains authoritative across all monitors. The same verified
+device and connection can request control on another shared monitor. A manual
+request may also replace an automation-owned grant. The host approves the new
+request before releasing old held input and issuing the new grant. The native
+actor checks the exact previous grant, target validity and shared request replay
+budget before committing the replacement in one operation. Rejected admission,
+declining, cancelling or timing out leaves the old grant and held input unchanged.
+Native cleanup failure closes input without granting new control or restoring the
+old automation lease. Other devices cannot
+replace a manual grant. The optional `control.occupancy.takeover` capability enables
+this request on screen tiles and avatar actions; older hosts remain busy until control ends. An
+avatar takeover reuses the already controlled source and then uses ordinary native
+consent; it does not create a second capture or revoke the current grant in advance. Merely
+viewing another screen does not move input authorization.
+
+Public occupancy includes optional `controllerKind` (the grant owner type) and
+`automationActive` (whether automation is currently operating it), so third-party
+observers distinguish manual control, exclusive automation and automation borrowing a
+manual grant. These display fields never confer takeover permission. Borrowing keeps
+the manual owner and does not let another device replace that owner's grant.
+
+The toast lifetime
+is bound to the native consent ID: polling does not recreate it, and cancellation,
+expiration or owner teardown removes it. Failed responses remain retryable while
+that same request is current.
+
+For mutually capable peers, the native media offer includes `weblink-control`
+(ordered/reliable) and `weblink-pointer` (unordered, no retransmission) channels.
+The local capability hello precedes publication. Later capability changes rebuild
+affected display transports so an existing view-only share can gain control;
+unrelated window shares keep their connections. Superseded capability reads cannot
+overwrite a newer permission decision.
+Input goes directly from those native callbacks to bounded native queues, without
+per-event Tauri IPC. The latter is reserved for local owner lifetime, confirmation
+and status. Channel arrivals wake the host worker immediately; its periodic wait
+only services safety and liveness when no messages arrive. A congested native
+control sender resumes queued output on DataChannel buffer-drain notifications.
+Those callbacks only wake the owner; serialization and sending remain on the
+owner thread, and unrelated periodic ticks do not retry blocked output.
+Pointer samples already
+due are sent directly, while earlier samples coalesce until their next deadline.
+Messages are limited to 4 KiB, reliable queues to 128 entries and send
+buffers to 16 KiB. Pointer moves coalesce to at most 120 updates/s. Each input is
+bound to its grant, connection, geometry revision and activation epoch. Buttons
+and wheels include their position; moves have independent sequence numbers and a
+reliable-event barrier, so reordered moves cannot jump across a button transition.
+
+The host advertises additive `ready.persistentControl`: approval lasts for the
+current room/peer/media binding until explicitly revoked or that binding ends.
+A two-second remote heartbeat gap or stale input releases held input but keeps
+consent. Local keyboard/mouse activity is not monitored and does not pause or
+revoke control. The native sequencer suspends
+the old input epoch. After a fresh heartbeat the controller automatically requests
+a new activation epoch if the user still intends to control; interrupted input is
+never replayed. An explicit end/revoke cannot be undone by a late heartbeat or
+activation acknowledgement.
+Controllers include a required `activationSequence` on input packets. Each
+fresh epoch advances this counter; the native host retains its high-water mark
+and rejects retired counters, with no fixed recovery count or growing replay
+history. A reliable input sequence gap
+releases held input and reports the epoch inactive, allowing heartbeat-driven
+recovery instead of leaving healthy heartbeats attached to unusable input.
+
+Temporary ICE disconnection and DataChannel backpressure do not close control.
+While the reliable sender is congested, input is interrupted and unsent gestures
+are discarded; draining the buffer resumes with a fresh epoch and release barrier.
+Native reply queues preserve consent/revoke order, coalesce liveness observations,
+and acknowledge input transitions rather than every movement. An inbound network
+input burst clears delayed input and resets its epoch while retaining the channel.
+A terminal control-channel failure enters the existing media retry path, rebuilding
+the peer transport for the same capture; authorization is not carried to a new peer.
+
+Frontend status subscriptions observe native state and apply saved or one-use approvals. Native window/page teardown,
+room leave, channel/media closure and explicit revoke own the session lifetime;
+a delayed WebView timer or failed status read cannot revoke consent. Stopping a
+share or replacing the room/peer ends the grant, and rejoining never restores it.
+The header sharing status and the configured host emergency shortcut (Ctrl+Alt+Shift+F10 by default) provide explicit local revocation.
+Native control and input workers wake on queued commands, channel events and
+authorization changes. Idle workers have no periodic status loop; active sessions
+retain bounded desktop/geometry checks and exact consent/input lease deadlines.
+Keyboard delivery blocks on events, and foreground changes wake the hook thread;
+bounded desktop checks remain as a safety fallback.
+
+The viewing UI maps only the contained video content, excluding letterbox areas.
+The desktop tile action bar has one icon button for request, cancel request and end control.
+On mobile and coarse-pointer devices, tile actions share one dropdown button with
+labelled entries. Its portal stays inside the fullscreen container when fullscreen.
+Approval activates input automatically; there is no user-facing pause mode. Blur,
+hidden view, lost drag capture and settings changes release the current gesture
+using a fresh acknowledged epoch, without ending consent. The configured viewer
+shortcut releases captured pointer and keyboard input without ending consent.
+The existing video node, audio routing and statistics remain owned by the player.
+
+### Pointer capture and keyboard input {#pointer-capture-and-keyboard-input}
+
+In Local cursor mode, an approved controller's mouse over the video content hides
+the cursor composed into the shared screen video. Captured mouse drags keep it
+hidden until all buttons are released, including outside the video, where input
+coordinates clamp to its nearest edge. Fullscreen and viewport changes recheck a
+stationary pointer after layout; fullscreen remote tiles accept input even when
+not pinned. Leaving the video without dragging, touch input, window focus loss,
+capture mode, input suspension and ending control restore the cursor. This
+applies to the shared capture (including its preview and other viewers), not the
+host's physical cursor. DXGI can include the pointer in the desktop pixels during
+window drags. With the capture backend set to Auto, its first cursor-hide request
+starts a WGC display capture with
+cursor capture disabled before the first frame. The handover preserves the capture
+ID, media, preview and peer connections; status reports WGC as the active backend.
+WGC remains active until that share ends, and subsequent cursor changes only toggle
+its capture property. Failed handover leaves the original capture running. Explicit
+DXGI never switches to WGC: it hides only the separate pointer, so a pointer already
+embedded in the desktop image can remain visible. Explicit WGC stays on WGC and
+uses its cursor setting directly. Backend selection is retained per share when it
+starts; settings changes apply to subsequent shares. The optional
+`cursorVisibility` capability keeps older hosts compatible; cursor updates require
+the current grant, media generation, geometry and active input epoch.
+
+Windows hosts advertise `cursorShape` alongside cursor visibility. The pointer
+settings include **Sync remote cursor appearance**, enabled by default; disabling
+it restores the default local cursor and switches to an ownership-only subscription
+(`appearance: false`), which never captures or transmits image resources. Local mouse
+mode subscribes with `cursor-watch` while the mouse is over the active video or
+has a captured drag. `cursor-state` snapshots carry the grant, input epoch,
+watch ID, increasing sequence, `owner` (`host` or `viewer`) and shape. Windows cursor
+shape/visibility events and the existing native movement observer invalidate the
+snapshot. The control actor samples only after an invalidation, coalescing changes
+to at most one sample every 32 ms; an unchanged cursor has no sampling timer.
+Shape events invalidate bitmap caches even when Windows reuses a cursor handle.
+The actor sends only changes; congestion replaces
+queued snapshots with the latest one. Pause, revocation, disconnect and leaving
+the surface stop the subscription. Text-focus subscriptions are independent.
+
+The existing native input listener also observes mouse movement without consuming
+it. Only injected movements carrying this input session's marker count as viewer
+input; physical mouse movement and other local applications take cursor ownership
+on the host. The latest native movement wins. On host takeover, capture includes
+the original cursor before sending one ownership update; the viewer hides its CSS
+cursor, stops local animation and cancels pending decodes without echoing a visibility
+request. Subsequent host movement sends no coordinate or shape updates. The next
+native viewer movement restores its remembered cursor visibility preference and
+sends a viewer-owned snapshot, reusing cached resources. There is no idle timeout,
+poll request, acknowledgement or new input channel. A new watch ignores historical
+mouse activity, and ending a watch restores the captured cursor.
+
+Standard Windows cursor handles map to the viewer's native CSS cursor roles,
+including local wait/progress animation, without sending image resources.
+Private application cursors use the resource stream: static images use a local
+CSS cursor; animated custom cursors preserve their step
+order, per-step duration and hotspots and play on a local canvas. The canvas follows
+viewer mouse events without waiting for a host position and lives outside clipped
+video tiles, moving into the fullscreen container when needed. Touch and pointer-lock
+modes retain the captured video cursor. Website DOM/Canvas cursor effects remain
+part of the video rather than native cursor resources.
+
+Each `cursor-watch` owns 16 resource slots. On first use the host pushes ordered
+`cursor-asset` packets with `assetId`, `index`, `count`, `image` and `durationMs`,
+followed by a `cursor-state` with `shape: { type: "cached", assetId }`. The packets
+carry the same grant, epoch and watch IDs. Repeated frames use an earlier frame
+index as `image` instead of sending its PNG again. A resource has at most 64 steps,
+16–10000 ms per step and 256 KiB of PNG data (bounded by its base64 length).
+Each image is bounded to 128 × 128 logical CSS pixels and 16 KiB PNG, with at most
+1,048,576 source pixels across unique frames in a resource. The viewer validates
+the PNG header and decoded dimensions before use. Index zero replaces a slot;
+incomplete resources are never displayed. Reappearing resources need only a slot
+reference. Definitions precede references on the reliable ordered channel and are
+never coalesced away. Congestion
+defers a whole resource batch, reserving queue room for control messages; animation
+playback sends no frame updates, acknowledgements or cache-miss requests. A new watch
+starts with empty caches. Playback, pending decodes and canvas ownership end with
+the local cursor subscription. Usable local cursors stay visible while a new resource
+decodes, avoiding a video visibility toggle for each shape change.
+
+Windows sends the original PNG pixels, physical dimensions and hotspot, plus
+`sourceScale` (the cursor monitor's scale in percent, 100–500). Logical dimensions
+and hotspots are source pixels multiplied by `100 / sourceScale`, without rounding
+or shrinking the source PNG (for example, 64 pixels at 200% displays at 32 CSS
+pixels). Host scale changes invalidate the cached shape even when the cursor handle
+stays the same. Static cursors declare their source density with CSS `image-set`;
+if unavailable, the local canvas draws them at the same logical size. Animated
+cursors use a canvas with logical CSS dimensions and a backing store sized for the
+viewer's current `devicePixelRatio` (capped at 8 for memory). Viewer DPI or browser
+zoom changes redraw locally, without requesting assets again or changing logical
+size and hotspot. Standard system cursors continue to use the viewer's native style.
+Host-to-viewer control messages allow 24 KiB;
+viewer input retains the 4 KiB limit. Custom monochrome inverting pixels are
+converted to black with a white outline, preserving the shape and hotspot while
+approximating the background-dependent inversion that PNG cannot represent.
+Unknown, oversized or unsupported colored-XOR cursors keep the captured video
+cursor and hide the local cursor. Native animation metadata is obtained through
+the dynamically resolved user32 `GetCursorFrameInfo` export, with bounded sequence
+validation; its ABI is exercised by an off-screen ANI resource test. Unsupported
+animation sequences and browser decode/drawing failures fall back to the video
+cursor. Local playback starts when the resource is ready, without a remote phase
+synchronization round trip. Both endpoints use this resource stream directly,
+without an older-client negotiation branch.
+
+Settings → Remote control provides two pointer behaviors. **Local cursor** is the
+default: mouse coordinates map to the displayed video. Physical keyboard forwarding
+uses its own switch and does not require focusing the screen.
+**Capture and hide local cursor** uses [Pointer Lock](https://w3c.github.io/pointerlock/)
+after clicking the remote surface. The capture click is consumed locally. Movement,
+buttons and wheel then use the existing relative-pointer channel at the host's current
+cursor position; the frozen local coordinates are not sent. Both ends can move this
+same native cursor. Capture mode does not subscribe to cursor appearance or ownership
+updates, and switching into it cancels the local-mode watch and restores the video
+cursor. An unsupported or rejected
+capture allows another explicit attempt without changing keyboard forwarding.
+
+Keyboard and gamepad forwarding remain independent of pointer capture in both modes.
+The shared release shortcut (Ctrl+Alt+Shift+Q by default, customizable in keyboard settings)
+releases pointer capture and turns off keyboard forwarding, including when forwarding
+is already disabled. The keyboard switch resumes forwarding. The shortcut preserves
+the approved control connection. Browser Escape may also unlock the pointer.
+Blur, hidden documents, mode changes, lost control and teardown release capture and
+held input. A late lock completion is released; returning focus never recaptures.
+The host has a separate customizable emergency revocation shortcut, Ctrl+Alt+Shift+F10 by default.
+Both settings use a shared chord recorder: click, press a combination, then release
+its main key to save; Escape or focus loss cancels. Reset restores the default.
+Shortcuts require Ctrl, Alt or Meta with a letter, digit, F1–F11 or supported
+navigation key. Bare modifiers, F12 and reserved system chords are rejected.
+The host shortcut uses a passive low-level keyboard observer while the room input
+worker is alive, including in the background, and only acts on a current native
+control grant. Every event, including a matching chord, continues through the OS
+hook chain. It does not reserve a global hotkey; multiple processes can observe
+the same combination and other apps may respond to it. The observer does not
+register a process-wide Raw Input receiver. It ignores injected events,
+tracks physical left/right modifiers, and fires once per main-key press.
+Emergency notifications carry the grant generation so delayed input cannot revoke
+its replacement. Teardown removes the observer. Configuration updates change its
+matcher; a closed listener keeps the previous preference. Reload and recovery use
+the saved chord. Updating the host shortcut also ends controller keyboard capture
+so it cannot retain the old combination. Controller system-key forwarding remains
+an explicit capture mode and continues suppressing the keys it forwards.
+
+The keyboard forwarding preference is enabled by default. The keyboard
+switch in the room header appears only while controlling a remote screen that supports
+keyboard input; hosting a share or merely viewing one does not display it. On mobile
+devices it stays hidden until supported keyboard activity outside local editors is
+observed. Browsers cannot reliably enumerate physical keyboards; this observation
+lasts for the page session and does not gate the soft-keyboard entry point.
+It toggles the same saved preference immediately;
+disabling it releases keyboard input and closes the soft keyboard, while pointer
+control and consent remain active.
+
+Physical keys are forwarded during active control while the switch is on and the
+page is in the foreground. Local chat, settings text fields and other editors keep
+their normal input. Browser [physical key codes](https://www.w3.org/TR/uievents-code/)
+map to the existing Windows scan-code whitelist and use the remote keyboard layout.
+The receiver injects them through the existing [scan-code input path](https://learn.microsoft.com/windows/win32/api/winuser/ns-winuser-keybdinput).
+Letters, digits, editing/navigation keys, F1–F12, left/right modifiers and the numeric
+keypad are supported when the browser delivers those events. Pause, PrintScreen,
+unsupported international keys and OS-reserved secure sequences are unsupported.
+Local composition events are not forwarded as physical keys.
+
+Native `ready.keyboard: true` opts into reliable `key` packets containing `scanCode`,
+`extended` and `down`. They share the current grant, geometry, input epoch and ordered
+sequence checks; they never use the lossy pointer channel. Held-key repeats produce
+repeated downs with one owned release. Blur, transport interruption and teardown
+clear local key ownership; late releases/repeats do not replay old presses. Changing
+the keyboard preference releases owned keys immediately without ending consent.
+
+On Windows Tauri, Settings → Remote control also exposes system-shortcut forwarding,
+enabled by default. It uses a controller-side native keyboard hook only while the
+selected remote surface has active control, no local editor owns input, and the
+shared keyboard toggle is on. The
+foreground native window must also match. In that interval, supported scan codes,
+including Alt/Win combinations, come from the native channel and are suppressed
+before reaching the local OS or DOM. DOM forwarding stays available for events
+the hook passes through and while startup waits for preexisting keys to be
+released. Startup reconciles those keys outside
+the hook callback, including releases missed while the hook was being installed.
+Local editors, dialogs and the soft-keyboard editor use their
+usual paths. Turning off system shortcuts restores browser key handling.
+
+The [low-level hook](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc)
+runs on a dedicated message thread and only writes to a bounded queue; IPC delivery
+runs separately. Injected events are ignored to prevent input feedback. Keys held
+before capture remain local until released. Frontend consumption acknowledgements
+renew a 750 ms native lease every 200 ms, with at most 64 unacknowledged events;
+events older than 100 ms or a sequence gap stop forwarding and reset the input epoch.
+The Windows Tauri builder uses `DeviceEventFilter::Always` to disable Tao's unused
+Raw Input device stream. Its default foreground Raw Input registration can prevent
+this process's low-level keyboard hooks from receiving events while the WebView is
+focused ([wry#1761](https://github.com/tauri-apps/wry/issues/1761)). DOM input and the
+application's native input hooks own keyboard/mouse handling; do not enable Tao
+device events without rechecking focused-window shortcut interception.
+Late startup or delivery cannot attach to a different focused screen. Focus loss,
+window teardown and page navigation stop capture independently of the renderer.
+After stopping, the hook can drain only previously captured key releases for up
+to two seconds; it never captures new background presses. If capture fails or stops,
+ordinary DOM keyboard forwarding resumes without changing the shared keyboard toggle.
+Resetting the remote input epoch does not retry a failed capture in the same focus
+and preference interval; this keeps the DOM fallback usable.
+A new focus interval or toggling the keyboard switch retries native capture without
+revoking pointer control. The explicit exit shortcut still disables keyboard forwarding.
+
+The chosen exit chord is recognized natively, releases pointer lock and keyboard
+capture together, and its final key is not forwarded.
+The configured host emergency shortcut also ends controller input and invokes the local host's emergency
+revocation if this app is hosting control at the same time. This does not add secure
+desktop or Ctrl+Alt+Del support. Real Windows shortcut behavior requires manual
+acceptance; compilation and ownership tests do not prove OS shortcut interception.
+
+In either pointer mode, the keyboard action on an actively controlled screen
+synchronously focuses an invisible text editor within that screen, including in
+fullscreen. This explicit soft-keyboard path does not require pointer lock. Mobile browsers
+open their system keyboard from this user gesture; there is no custom input panel
+or key toolbar. The editor remains focusable, without taking space or intercepting
+pointer input. The tile action menu stays visible on touch devices, including
+landscape phones. The editor outlives menu content, and keyboard selection prevents
+menu close from restoring focus to its trigger. Hiding the keyboard does not end control.
+Pointer interactions with that same controlled screen retain the editor's focus,
+so clicking, dragging and scrolling can continue alongside text input. Other editors,
+dialogs and explicit keyboard dismissal retain their normal focus behavior.
+The configurable **Three-finger tap** shortcut defaults to **Show keyboard** in
+trackpad mode only. Direct mode forwards all contacts as native touch. Local gestures
+share contact, movement and timing detection. The shortcut requires exactly three
+overlapping contacts, at most 20 CSS pixels of movement and completion within 600 ms.
+The third contact cancels pending trackpad input. A valid three-finger sequence can
+complete on native `touchend` or `touchcancel`, because Android may cancel it instead
+of delivering releases. Other cancelled gestures, drags, holds and four-finger
+sequences do not open the keyboard or fall back to a click. Keyboard activation
+stays synchronous with the native event; pointer-only runtimes use pointer completion.
+Repeating the shortcut keeps an open keyboard open or requests it again after Back.
+Direct touches must begin inside the displayed video. Pointer capture retains them
+outside the picture until release, with coordinates clamped to the display edge;
+no scroll or window-drag conversion is applied.
+Explicit keyboard actions focus the editor with automatic keyboard policy on both
+HTTP and HTTPS. The optional secure-context
+[VirtualKeyboard API](https://developer.chrome.com/docs/web-platform/virtual-keyboard)
+only observes geometry; it does not drive keyboard show/hide. The editor stays
+inside the fullscreen container; showing the keyboard does not
+request an exit from fullscreen or change global viewport behavior. Keyboard geometry
+and visual viewport resizing track OS dismissal, including fullscreen Android Back
+when geometry events are absent. After a previously visible keyboard remains hidden
+for 180 ms, the editor releases focus and updates its visibility state, so touching
+the screen cannot reopen it. A transient zero rectangle does not end text input.
+Transient animation gaps, zoom and rotation do not dismiss input. Reopening cancels
+pending dismissal without issuing an intervening hide. A real DOM focus transfer,
+hidden page, control teardown or explicit dismissal releases input ownership and
+restores the editor's policy without hiding another input's keyboard. Both normal
+and fullscreen tiles keep playback and input active while their focused keyboard
+collapses the meeting grid; source removal and session teardown still disable them.
+Reopening after Android Back performs a fresh focus transition without ending the
+text-input session or disrupting composition. Ordinary screen taps suppress automatic
+keyboard reopening, including floating keyboards that do not resize the viewport.
+The editor stages IME candidates locally and sends
+only the committed value; it handles final input on either side of `compositionend`
+without sending intermediate composition strings or replaying `InputEvent.data`.
+This follows the [composition and input lifecycle](https://www.w3.org/TR/input-events-2/).
+Backspace, Delete and Enter use physical strokes, and pasted line breaks and tabs
+become Enter and Tab. Physical keyboard shortcuts in the focused editor continue
+to use the remote computer's keyboard layout. Invisible editing guards on both sides
+of the local caret allow repeated Left/Right and Backspace/Delete actions. IME
+selection-only cursor moves become remote arrow strokes only outside composition;
+the guards are never transmitted.
+
+Remote clipboard synchronization is independent of automatic keyboard visibility.
+`remoteKeyboard.clipboard` defaults to false and only the controller needs to enable it.
+The host serves clipboard requests under the existing remote-control grant; its own
+controller preference does not gate incoming requests.
+Windows desktop hosts expose plain text, HTML/RTF, PNG/common DIB images and local
+files. Folder selections are converted into ZIP files using the existing folder
+compression worker; the receiving side gets the archive, without automatic extraction.
+Arbitrary native application-private formats, virtual shell files and file move/cut
+semantics are not transported. Each operation uses the shared remote file limit (64 MiB by default, configurable up to 512 MiB) and at most 4096 entries. Text/image alternatives keep an independent 64 MiB limit.
+
+`remoteKeyboard.clipboardFiles` selects the destination for files copied from the host:
+`clipboard`, `cache` (File cache), or `off`. An unset preference stays unset until
+initial capability and permission discovery completes: choose Clipboard if file
+writing is available, otherwise File cache, then persist that choice. Saved choices
+are never replaced by later permission changes. The selector requires completed
+discovery and clipboard synchronization to be enabled. Web controllers label this choice
+Clipboard (limited): text and image contents use standard browser formats. A single
+copied PNG/JPEG file is decoded and written as PNG image content, not
+as an OS file list. PDFs, multiple files and other unsupported files produce a
+clipboard error. Clipboard and File cache remain separate destinations and never
+redirect into each other. Browser custom formats do not provide native file-manager
+paste, even over HTTPS, so this flow does not write file data into custom formats.
+Windows desktop controllers can write the original file list, including PDFs, to
+their native clipboard.
+File cache remains available without clipboard APIs;
+it uses the existing file-library import, deduplication and pinning flow. Off excludes
+files and directories before the native adapter reads their bytes. It does not affect
+text, images or files pasted into the host. Persisted preferences are not rewritten.
+Browser read requests include an optional `formats` list of writable non-file MIME
+types. Hosts filter alternatives before packing or transferring them; `files: false`
+also excludes files and directories before native file access. An empty `formats`
+list allows File cache to receive files without transferring unusable text/images.
+Omitting the list preserves native and older-client behavior. Older hosts may ignore
+the optional list, so controllers also filter unsupported alternatives on receipt.
+
+The portable `remote-clipboard` request binds a one-shot `operationId` to the current
+native `grantId` and its authenticated peer session. Explicit copy samples the host
+clipboard sequence before sending Ctrl+C, then waits for a newer sequence.
+The copy wait subscribes before rechecking the sequence and wakes on Windows
+clipboard notifications, with one completion deadline instead of periodic reads.
+It revalidates the control grant after waiting and before delivering content.
+Context menu copies use `watch`/`changed`/`unwatch` subscriptions and Windows
+clipboard change notifications. Notifications contain no clipboard data, require
+the current watch identity and do not echo application-owned clipboard writes.
+They never import an existing clipboard merely because control was granted.
+
+Clipboard bundles use the existing file sender, receiver, transfer registry,
+compression and backpressure. Text-only content (including HTML/RTF) never creates
+a task. Bundles containing files or images create tasks on both peers only when
+the packed payload exceeds one 128 KiB chunk. Smaller bundles stay out of the task
+list. The offer declares the content kind, which is checked again after unpacking.
+Transport caches are temporary. Only the explicit File cache destination imports
+received files into the library; clipboard operations do not create chat messages or
+clipboard history. Copy completes after the selected destination finishes writing or
+importing the files. Once Ctrl+C has been sent (or an existing clipboard read has
+started), Copy no longer depends on the input epoch: a focus reset during receipt
+or import does not cancel it. Before Ctrl+C, the original epoch must still be valid.
+Paste acknowledges only
+after the complete bundle is validated and written to the host clipboard; Ctrl+V
+then uses the original control grant and input epoch. Revocation, disabling the
+controller setting, changing the copy destination, switching sources, disconnection
+and task cancellation stop pending work.
+The native adapter independently enforces the live grant and current capture at
+clipboard access, including after asynchronous file preparation.
+
+Controllers probe read and write APIs independently and observe clipboard permission
+changes when the browser supports them. Capability checks never read or replace the
+clipboard, and do not infer support from the URL scheme or secure-context flag.
+Application-owned discovery publishes `appState.capabilities.clipboard`, reuses the
+existing runtime capability snapshot, and owns one observer per clipboard permission.
+Settings and remote inputs consume this shared state; mounting views does not probe
+again. Pending or unsupported permission queries remain distinct from denied access.
+Native capability is reported by the implemented backend. Without write capability,
+local clipboard writes are disabled; the File cache destination can still receive
+files and subscribe to changes. Otherwise the change subscription is disabled and
+ordinary remote Ctrl+C still works.
+Without programmatic read capability, Ctrl+V/system paste events remain supported
+through the focused remote input surface or soft-keyboard editor. Text and single-chunk
+copy/paste operations need no progress toast. A browser that refuses an automatic
+clipboard write keeps the received content pending and offers a Copy to clipboard
+button; clicking writes the existing bytes without another transfer. Cancellation,
+revocation, unmounting the control surface and the operation deadline dismiss this
+pending action. Clipboard file tasks show a cancellable progress
+toast in the foreground and use the existing transfer notification preference in the
+background, including completion or failure. Progress updates reuse the same toast;
+background notifications are not repeated for each chunk. Cancellation stops the existing
+task and removes its loading notice. No action-bar buttons or separate paste dialog are added.
+Failed clipboard tasks retain an expandable diagnostic error for troubleshooting.
+
+Controllers intercept Ctrl+C/Ctrl+V during keyboard forwarding outside local editors. Browser
+paste consumes the real paste event, preserving line breaks instead of typing Enter.
+The browser copy gesture starts a promised text ClipboardItem before the remote reply,
+preserving text write activation across the transfer. It then attempts supported
+rich/image formats automatically. Browser paste consumes formats and actual files
+exposed by the real paste event, without probing the async read API for custom bundles.
+A denied write does not create a separate save action; a later copy gesture requests fresh
+content. Browser controllers can write only formats supported by their clipboard
+API; they do not read or write Weblink custom clipboard formats. To receive copied
+files on the Web, select File cache and download them. The Clipboard (limited)
+destination remains selectable for supported text/image formats when browser write
+permission is prompt or unknown; it does not request native file lists. An explicit
+permission denial or missing write API disables that destination without replacing
+the saved preference. Windows desktop controllers
+write all supported formats and file-drop paths directly. Received
+files remain in local temporary directories while referenced by the clipboard;
+replaced snapshots have a 30-minute grace period and are collected on subsequent
+writes. Staging is bounded to 512 MiB / 128 snapshots and cleared on normal exit.
+Actual clipboard interoperability and mobile browser permissions still require
+device acceptance.
+
+Settings → Transfers → Remote files and clipboard groups remote file drag and
+drop, clipboard synchronization, copied-file destinations and the shared remote
+file size limit. These remain controller-side preferences.
+
+Remote file drag and drop is controlled by `remotePointer.fileDrop` (default off).
+Only the controller enables this preference; incoming operations require the existing
+remote-control grant. Web and desktop controllers use the same HTML file-drop surface,
+including HTTP browsers without clipboard APIs. Native hosts advertise `fileDrop` on
+the control channel; currently only Windows hosts implement it. Local files are dropped
+onto the remote video position, excluding letterbox margins. Directories use the existing
+ZIP worker. This feature supports copying into the remote computer, not dragging files
+out of a remote window into the controller's OS.
+
+Peers advertising `fileDrop.hover` also exchange `hover` requests during dragenter and
+dragover; leaving the video, cancellation or revocation cancels the native hover. The
+controller shows the target application's drag feedback through the video, without a
+local drop mask. Peers also advertising `fileDrop.hoverUpdates` acknowledge the initial
+hover, then send `remote-file-drop-position` notifications without per-position replies.
+Positions carry the operation ID, grant ID and an increasing sequence. The sender replaces
+positions waiting for transport submission; the host keeps only the latest pending position while
+native work runs and ignores duplicate/out-of-order updates. Notifications cannot start a
+drag. Prepare freezes the final drop position, discards pending position updates and follows
+any native update already in progress. Late notifications cannot move a prepared, cancelled
+or completed operation. Startup, prepare and final application remain acknowledged requests;
+native failures also propagate through cancellation. Peers advertising only `fileDrop.hover`
+retain acknowledged hover updates; peers without hover retain prepare/offer/cancel.
+Position streaming preserves the coordinates supplied by the browser; it does not increase
+the browser's drag event frequency or coordinate precision. Chromium exposes integer CSS
+pixel coordinates for file drag events, unlike fractional pointer-move coordinates. A scaled
+down remote video therefore makes fine drag positioning coarser. Enlarging the video reduces
+this effect; interpolating missing positions cannot recover the original pointer coordinates.
+
+The `remote-file-drop` exchange uses the same remote-content bundle,
+file channels, sender/receiver, temporary cache, backpressure and task feedback as remote
+clipboard files. The shared remote file size setting applies to both drop and clipboard files (default 64 MiB, configurable from 1 to 512 MiB per operation). The controller snapshots the limit at operation start and sends it to the host; both ends enforce total file bytes, including before and after folder compression. Bundle metadata has a separate 1 MiB budget; text/image alternatives retain their 64 MiB budget. There are at most 4096 entries; only multi-chunk transfers create
+tasks. Preparing directories shows a cancellable loading notice. No clipboard API access
+or Ctrl+V injection is used. The host stages real files and uses a shell IDataObject,
+IDropSource and OLE DoDragDrop on a dedicated STA. Browser file contents and names are
+protected until drop, so live hover uses bounded temporary MIME-based file hints. This
+preview can only produce DragEnter/DragOver/DragLeave, never Drop. It stays alive during
+transfer, then is cancelled and joined before real staged files start the final OLE
+operation. Only DROPEFFECT_COPY is allowed.
+The OLE loop continues sending local hover events while the target decides whether
+to accept the files, including asynchronous decisions by embedded web editors. It
+releases only after hover feedback allows copying, with a five-second deadline;
+initial DROPEFFECT_NONE feedback does not immediately end the drop. These events
+go only to the drop thread's OLE capture window, not the system mouse input queue.
+The authorized hover/drop position controls the cursor during OLE. Independent pointer
+traffic may arrive between hover updates; the drag corrects the cursor instead of
+cancelling on a position mismatch. Any position change or correction clears previous
+acceptance and requires fresh hover feedback before releasing files at the bound point.
+Acknowledgement and task completion require acceptance by the target application; this
+does not mean a target's later asynchronous import or copy has finished. Applications
+that do not accept OLE file drops fail without falling back to clipboard paste.
+
+Preparation binds the grant, capture source, media ID, geometry revision, physical point,
+application root-window identity and bounds. Child drop overlays may appear without
+invalidating the target. Before native application and during drag continuation,
+the host rechecks authorization and the target. A different window or changed bounds,
+revoked control, disconnected session, disabled controller setting or cancellation stops
+pending work. Input focus/epoch resets alone do not invalidate an approved drop. A target
+can change its internal document/folder without changing its window identity; avoid such
+changes while a transfer is pending. Accepted file paths retain a 30-minute grace period,
+with staging bounded to 512 MiB / 128 drops and cleaned on subsequent drops or normal exit.
+
+The independent `remoteKeyboard.autoShow` and `collapseControls` preferences default
+to false. Automatic keyboard control subscribes to `text-input-watch` while the
+local view has enabled keyboard control and is visible. The subscription carries
+the current `grantId`, `inputEpoch` and an opaque `watchId` (`null` unsubscribes).
+The authenticated channel and grant already bind the capture target and generation.
+Windows samples UI Automation on a dedicated MTA thread every 200 ms and publishes
+`text-input-state` only when its `focus` changes. Each update carries the subscription
+identity and an increasing `sequence`. Focus is `editable` with an opaque field ID,
+`none`, or `unknown`. Failed/unsupported detection is unknown, never proof of blur.
+No field contents, labels, passwords or native element IDs are transmitted.
+
+A short, stationary single-finger tap in either touch mode arms automatic opening
+and refreshes the subscription for a new snapshot after ordered native input settles.
+Editable focus opens the keyboard; confirmed non-text focus closes only an automatically
+opened keyboard. Switching fields resets staged composition. Unknown state preserves
+the current keyboard. A manual opening remains under user control; a manual dismissal
+suppresses automatic reopening until another tap, including across transient input
+epoch changes. Local focus transfers disarm opening. Hidden views unsubscribe, and
+pause, revoke, capture teardown or epoch replacement stop native observation. Stale
+subscriptions, epochs and non-increasing sequences are rejected.
+Browser restrictions, notably asynchronous focus on iPhone, may still require the
+keyboard button.
+
+The collapse preference temporarily overrides the toolbar and screen-list display
+only after keyboard geometry or viewport changes confirm visibility. Dismissal,
+focus loss or tile disposal restores the manual collapse preferences without writing
+over them. Manual and automatic keyboard opening use the same visibility lifecycle.
+Browsers that report neither floating keyboard geometry nor viewport changes cannot
+confirm that keyboard's visibility.
+
+Native `ready.textInput: true`, together with `keyboard: true`, opts into reliable
+`text` packets. Each contains at most 64 UTF-16 units, no control characters and no
+unpaired surrogates. A single editor commit is limited to 1024 UTF-16 units before
+any prefix is sent; larger pastes are rejected. Packets do not split surrogate pairs.
+Text shares the keyboard's grant, epoch and ordered sequence checks and is rejected
+by the native engine while a physical key or mouse button remains held. Transport
+backpressure stops a commit; unsent suffixes are never retried automatically.
+
+Closing the editor, hiding the page, changing the source or keyboard preference,
+and loss of active input discard unfinished composition.
+The editor is independent of the video node and does not restart the media session.
+OS keyboard/IME behavior still requires real phone acceptance; logic tests do not
+prove mobile keyboard presentation or candidate-window behavior.
+
+### Mobile touch input {#mobile-touch-input}
+
+Settings → Remote control stores viewer-side touch preferences. Trackpad mode
+uses relative single-finger motion, tap-to-click, two-finger right click/scroll/pinch zoom,
+and configurable long-press drag or right click. Long press is triggered by the
+phone browser's `contextmenu` event, with no application timer or delay preference;
+single-finger touch defaults are preserved so the browser can recognize it. It
+applies only to a stationary single-finger gesture. Mouse right clicks continue
+through pointer events, and direct touch leaves long-press recognition to Windows.
+Pointer/scroll speed, direction and gesture switches are local preferences. The
+touch sample rate (30/60/120/240 Hz, default 120 Hz) limits movement and scroll
+and pinch updates in both modes; actual delivery also depends on browser samples, timers
+and transport backpressure. Down/up/cancel transitions and their final movement
+flush bypass this limit. Changes release the current gesture and apply immediately.
+When available, actual coalesced pointer samples are processed in order for gesture
+recognition; predicted samples are never sent. Direct movement still coalesces to
+the latest complete contact frame at the selected rate, rather than replaying
+every historical position.
+
+Hosts advertise `ready.relativePointer` for native trackpad gestures. These use
+ordered `trackpad` input events: move deltas are fractions of the shared display,
+and buttons/wheels carry no cached absolute coordinate. The native input thread
+reads the actual physical cursor for each event, preserves subpixel motion and
+constrains output to the shared display. Deltas coalesce at the selected rate but use
+the reliable channel so individual displacement is never lost to packet loss.
+Older hosts retain absolute pointer emulation for movement and clicks.
+Two-finger scrolling requires the additive `ready.touchpadPan` capability and uses
+ordered `trackpad` pan start/update/end/cancel events. Updates carry cumulative
+CSS-pixel centroid displacement, coalesced at the selected rate, with the configured speed
+and natural-scroll direction. Windows uses a dedicated `PT_TOUCHPAD` device via
+`CreateSyntheticPointerDevice2` with physical-size and gesture-only flags; it
+handles scroll recognition and inertia. Capability detection checks the actual
+API/device availability. There is no wheel-emulation fallback for this gesture.
+Pausing, revoking, disconnecting or cancelling ends contacts and native inertia.
+Mouse wheels still use the ordinary wheel input path.
+
+Pinch zoom uses the same ordered pan lifecycle with an optional cumulative `scale`
+on updates (contact distance divided by the initial distance, clamped to 0.1–4).
+The native device varies its two-contact span around the translated centroid;
+Windows and the target application recognize the resulting zoom. Pure pinches
+send updates even when the centroid is stationary. Small span changes within
+8 CSS pixels are ignored until a pinch begins; scroll speed/direction never alter
+the zoom ratio. Scrolling and pinch zoom have independent viewer switches.
+Missing scale means 1 for older viewers; older hosts ignore the additive field,
+so zoom requires the updated desktop host. No protocol-version change is needed.
+
+Direct touch requires the host's additive `ready.touchContacts` capability. It
+sends real Windows `PT_TOUCH` contacts using a dedicated synthetic pointer device,
+not mouse emulation. Hosts without this capability can still use trackpad mode.
+Each ordered frame includes every active contact, with up to ten normalized
+positions and explicit down/update/up/cancel phases. Movement uses the selected
+sample rate; stationary updates preserve native press-and-hold recognition. Gesture
+interpretation belongs to Windows and the target application. Letterboxes never
+generate direct contacts; positions map to physical display pixels without an
+extra DPI scale factor.
+
+Direct mode's touch-property switch (disabled by default) forwards browser-reported
+pressure and contact area. Optional `pressure` is in [0, 1]; `width` and `height`
+must be a pair in (0, 1], normalized against the displayed video content. Unknown
+contact geometry (the browser's 1×1 default) is omitted. The host validates these
+fields, maps pressure to Windows' 0–1024 range and clips physical contact rectangles
+to the shared display. Injection sets only the corresponding `TOUCH_MASK_*` bits;
+absent properties retain native defaults. Stationary property changes still produce
+updates, and UP releases pressure after any final movement. These are additive
+fields: older senders omit them and older hosts ignore them. Trackpad mode continues
+to recognize mouse and scroll gestures locally; it does not forward raw touchpad
+contacts or touch pressure. Browser-reported properties may be fixed fallback
+values; forwarding them does not establish hardware pressure or area support.
+
+The native engine validates contact ownership and transitions before injection.
+Pause, cancellation, mode changes, revoke, session loss and lease expiry release
+owned contacts. Cancellation covers the whole gesture and destroys its dedicated
+device, producing canceled touch events rather than completing a tap/drop. A new
+device is created on the next gesture. Touch cannot mix with held mouse buttons or keys. The existing
+grant, epoch, bounded queue and stale-input rules also apply to touch. Synthetic
+pointer creation failure disables direct touch without disabling mouse control.
+
+`NativeCapture.displayLayout()` / `capture_display_layout` reads physical display
+bounds, virtual-desktop bounds, orientation and optional OS resource scale without
+opening capture. The scale is metadata, not a multiplier for these coordinates.
+The opaque revision changes on an observed layout change or failed query and is
+local to the capture service lifetime. Native `display_geometry(session_id)` also
+requires an active monitor capture and does not renew its lease. This inventory
+is not an authorization or a display-change subscription; input integration must
+invalidate ownership on topology/session events as well as query failures.
+The control owner subscribes to capture lifecycle/dimension changes and revalidates
+the bound geometry when notified, without a periodic capture-status query. Viewers
+of one capture share a subscription; the last peer leaving cancels it. Native input environment notifications separately
+invalidate topology/session changes that do not resize the captured source.
+Windows queries use [EnumDisplaySettingsExW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsexw)
+for physical pixels independent of DPI virtualization.
+
+Read-only Windows inventory check:
+`cargo run -p weblink-desktop-capture --example display_geometry`.
+The shared browser/Rust wire fixtures live in
+`test/fixtures/remote-control-signals.json`; run the Rust contract/lifecycle tests
+with `cargo test -p weblink-desktop-input` and the browser tests with
+`bun run --cwd apps/web test test/unit/remote-control.test.ts`.
+These checks do not constitute actual remote keyboard/mouse acceptance.
+
+### Native input worker {#native-input-worker}
+
+The native owner registers verified room/media bindings and physical display
+geometry. One worker serializes consent, grant validation, input and cleanup;
+The passive observer for the saved host emergency shortcut (default
+`Ctrl+Alt+Shift+F10`) starts before the worker can accept a grant. Observer or
+session-notification registration failure makes startup fail. Remote input never
+selects arbitrary HWNDs, scan codes outside the allowlist or system coordinates.
+The selected display constrains pointer mapping, not the OS keyboard foreground
+or application permissions.
+
+The reliable queue holds at most 128 commands. Pointer motion occupies one latest
+slot, ordered against reliable events by local enqueue order. Local revoke
+discards queued work; worker overflow, injection or cleanup failure closes the worker.
+Input older than 100 ms is discarded and interrupts the current input epoch,
+retaining consent until a fresh activation. Interruption preserves queued local
+status/consent calls while dropping queued input. The native wire sequencer checks network sequence,
+epoch and movement barriers before enqueueing input. Queue acceptance and successful `SendInput` submission
+do not prove that the target application rendered an action.
+
+An independent native thread pumps keyboard and system notifications; it never
+injects input or waits for the input worker. Display/settings/session messages and
+the desktop-switch WinEvent invalidate its environment. Shortcut reconfiguration
+and shutdown signal a waitable event, so this listener needs no periodic desktop
+enumeration. The input worker retains its bounded authorization recheck for external
+invalidation flags, and checks the two-second
+heartbeat deadline without frontend timers. The host does not use ordinary local
+input or idle time as an interruption signal: using this computer, including its Weblink window, does not
+interrupt remote control or prevent local approval. Explicit revoke and the
+emergency shortcut end consent. Cleanup releases presses recorded for the grant,
+in reverse order; unmatched remote key/button releases are ignored. Scan-code
+input distinguishes extended keys; committed Unicode text is bounded and cannot
+be mixed with held remote keys. Pause/PrintScreen are not in the scan-code allowlist.
+
+Display/session notifications, unavailable input desktop, or changed
+physical monitor inventory close the worker. Settings notifications recheck the
+actual desktop/layout rather than unconditionally closing it. Restart and new consent are required;
+unlock never restores a grant. Normal shutdown joins after cleanup. Failed OS
+release is reported as failure, not successful revocation; process kill and
+unavailable/secure-desktop cleanup are not guaranteed by in-process ownership.
+`SendInput` operates within Windows [UIPI limits](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput);
+this is not elevated or login-screen control.
+
+Run `cargo run -p weblink-desktop-input --example input_self_test` in an interactive
+Windows session. It creates its own test window, requires foreground ownership,
+restricts pointer injection to that window's client area, and closes its native
+worker before destroying the window. If Windows refuses activation, click the
+test window within 30 seconds and leave keyboard/mouse idle during the probe.
+The probe checks real window events and cleanup; simulated lifecycle/other-source
+input does not substitute for physical-device, lockscreen or crash acceptance.
+
+The desktop library's ignored `browser_pointer_attended` test exchanges SDP/ICE
+and test results through `WEBLINK_CONTROL_TEST_DIR` with a browser using the
+production `RemotePointer` receiver. Its local test owner approves only the
+guarded test session; it does not require physical-click evidence. It is opt-in
+and still restricts injection to its own foreground test window.
+Set `WEBLINK_CONTROL_TEST_TOUCH=1` for its native touch assertions; the browser
+driver must exercise multitouch, movement, lift and cancellation. The receiver
+checks `WM_POINTER*` messages and `PT_TOUCH`, not inferred mouse events.
+
+## Native screen reception {#native-screen-reception}
+
+Windows desktop can receive one current, trickle-ICE screen session through
+native libwebrtc. Runtime capability discovery adds installed Media Foundation
+H.265 Main 8-bit and H.264 decoders. VP9/AV1 use Media Foundation when the D3D11
+device exposes the matching NV12 decode profile; otherwise the bundled native
+software decoders remain available. VP8 uses libvpx. HEVC availability depends on
+the installed Windows decoder and driver; it is probed rather than assumed from
+the GPU name. This factory is opt-in and does not change publisher factories.
+
+The application chooses the native receiver before answering SDP. It keeps RTP,
+ICE, decode statistics and both authenticated control DataChannels native. The
+existing video element carries a dimension/lifecycle track; its video region is
+backed by a native D3D11/DirectComposition surface below WebView2. HTML controls,
+remote-input coordinates and layout remain in the existing component tree.
+Audio is decoded to bounded stereo PCM and presented through an AudioWorklet
+MediaStream destination, preserving the existing mute, volume and playback owner.
+Browser autoplay policy still applies; user interaction resumes suspended audio.
+
+### Meeting media {#meeting-media}
+
+Browser peers send ordinary WebRTC tracks directly to the Windows room peer.
+On Windows, WebView2 captures the local camera and microphone and passes frames
+and PCM to native media sources shared across viewers. Remote tracks use the
+existing hardware and software decoders, GPU renderer and audio playback path.
+Turning off a camera leaves the microphone and other tracks on the connection.
+Revoking receive permission releases the affected remote outputs.
+
+### Platform boundaries {#platform-boundaries}
+
+`packages/platform` owns the receive, presentation binding and recording contracts;
+the web application does not import Tauri or GPU APIs. Its media stream can carry
+either real video pixels or a lifecycle track bound to a native surface. The
+desktop adapter owns this distinction, audio playback and page layout observation.
+Only opaque source IDs and validated layout cross the presentation IPC boundary.
+
+The Tauri `receive` and `presentation` modules select their backend with target
+configuration. Windows implements them; unsupported desktop targets expose no
+native receive codecs and retain browser reception. Windows decoder failures
+remain on the native path. A future platform should advertise codecs only after
+its own decoder and presentation path are available, preserving this distinction.
+
+New desktop platforms can initially use their WebView's `RTCPeerConnection`
+and ordinary video elements for receiving. This reuses the existing signaling,
+codec negotiation, controls and recording path without implementing native
+decoding or a native compositor. Negotiate only formats reported by that WebView;
+do not assume HEVC support. Native sending and native receiving are independent
+capabilities, so native capture/encoding can be added before native reception.
+
+The current `desktop-capture` receive, surface and presentation modules are
+Windows-gated. Their D3D11 texture leases, DirectComposition target and recording
+readback pool are backend implementation details, not portable GPU interfaces.
+When adding another backend, split those internals by platform and retain the
+existing source-ID, lifecycle and recording contracts. Each backend must preserve
+bounded latest-frame admission, frame ownership through GPU completion, explicit
+recording demand and deterministic teardown. Local preview and received video
+must continue to share its presenter; other platforms need their own integration
+and lifecycle tests before being advertised as native-capable.
+
+### GPU presentation and recording {#gpu-presentation-and-recording}
+
+The receive factory requests zero playout delay and MF low-latency decoding.
+Its opt-in GPU mode publishes immutable D3D11 textures with their original MF
+sample leases. The complete frame, not merely a texture COM pointer, remains
+alive until the compositor's D3D11 completion query finishes. One GPU submission
+per view and a replaceable latest frame bound the queue. Resizing, hiding and
+removing views preserve in-flight leases until GPU completion. Decoder shutdown
+cannot invalidate a texture still held by a reader.
+
+The compositor waits on source/layout notifications, GPU completion events and
+the swap chain's frame-latency handle instead of periodically polling GPU work.
+A consumed swap-chain signal admits exactly one submission. A slow device-removal
+watchdog runs only while GPU or swap-chain work remains pending; an idle compositor
+sleeps until notified. Hidden or removed views cancel swap-chain waits while still
+retaining any in-flight sample until GPU completion.
+Video-processor input views are cached by texture and subresource, with at most
+16 entries and four distinct texture allocations per view; the cache retains COM
+resources, not decoder sample leases. An allocation is evicted before creating a
+replacement view, so cache misses do not temporarily exceed these limits.
+Software uploads use the same cache after acquiring a pooled texture lease.
+The output view is reused for the swap chain's logical back buffer. Device or
+size changes rebuild these caches, and crop/color state changes update only the
+affected processor parameters.
+Rebuilding a swap chain keeps the previous presented image attached. The
+replacement is attached only after its first successful Present, with content,
+transform and clip changed in the same composition commit. Frame admission or
+another view's layout commit must not expose an unpresented replacement.
+
+Local preview and native receive share the same window-owned compositor.
+Preview uses the encoding capture pool and GPU conversion, including rotation,
+cursor and color handling; merely showing a preview does not request CPU pixels.
+Hardware receive uses the decoder texture directly. Native software decode
+uploads its output for the same compositor, without browser decoding. Each
+source uses its own D3D11 device; the composition tree contains its swap chain.
+The software upload pool reuses one CPU NV12 packing buffer and at most four textures,
+including outstanding leases from old dimensions. NV12 input avoids I420 conversion;
+other software formats use the encoder's SIMD I420-to-NV12 packing routine.
+A texture returns only when the latest frame, compositor and recording readers
+release its complete owner. Exhaustion drops presentation work instead of queuing
+or blocking decoding; resize/device changes discard incompatible idle resources
+and late returns. Hardware decode retains its direct texture path.
+The swap chain limits queued presentation to one frame. Layout IPC contains only
+validated rectangles and visibility; pixels and native handles stay native.
+Page backgrounds and the black placeholder are masked in video regions, leaving
+HTML control and dialog overlays intact.
+The page-background opening covers the whole video element, including letterbox
+bars; only the black placeholder has the fitted-image cutout. This keeps a light
+page background out of the fractional-pixel join between video and black bars.
+Fullscreen keeps its backdrop transparent and hides the underlying page while
+preserving controls inside the fullscreen
+element; its original tile ancestors no longer clip the surface.
+Native PiP reuses the same WebView and compositor. Its meeting background must
+remain transparent while native video holes are active; the shared masked page
+background supplies the surrounding color without covering the GPU plane.
+Rounded clipping follows each container's padding edge, including border thickness
+and animated transforms; fitted video corners inside black bars remain square.
+Live background masks and native clip objects are reused during layout/fade changes,
+and each compositor iteration commits its latest layout updates together.
+Geometry observation sleeps while layout is static. Resize, scrolling, visibility,
+DOM layout changes and explicit WAAPI startup notifications wake it; animation
+frames are measured only until the relevant motion settles. Membership changes
+that preserve a video's playback state keep its native binding and mask alive.
+The black lifecycle track refreshes on attachment, playback recovery and source
+resize, independently of native presentation and recording frame delivery. An
+unbound live surface still renews its native lease without periodic pixel work.
+Hidden surfaces stop frame notifications to the compositor and dimension observer
+after the initial frame supplies dimensions;
+close/error notifications and independent recording demand remain active. Restoring
+visibility immediately refreshes retained dimensions and the latest frame.
+Presentation statistics share pending/recent IPC results across view and receive
+diagnostics. Hidden or unbound views renew at a sparse cadence while the separate
+receive heartbeat continues to protect the receiver lease.
+The native window backing is opaque black. Composition explicitly uses GPU linear
+interpolation for scaled preview and receive views, instead of DirectComposition's
+nearest-neighbor default; it adds no CPU readback or extra frame queue.
+Video action menus use the same translucent gradients for browser video, local
+preview and native reception. Their soft alpha contour and opening/closing opacity
+are rendered entirely by the page; they do not sample or blur the video background,
+upload masks to the compositor or trigger native repaints of static frames.
+The presentation limit remains even-sized
+SDR video up to 3840×2160. HDR/Main10 is not advertised.
+
+The shared-buffer receive transport remains available for native CPU consumers
+and comparison builds. Its event-driven readback leases a mapped staging texture
+as immutable NV12, eliminating the intermediate staging-to-NV12 copy. A bounded
+pool permits cross-thread delayed release and resumes the latest pending frame
+when a lease returns, including the final static frame. Horizontal crops retain
+the packed compatibility path because row slices must not extend beyond the
+mapping. Two read-only WebView2 slots pipeline native packing and presentation;
+lease returns use origin/capability-checked one-way Tauri string notifications.
+Busy slots coalesce new frames rather than queueing pixel copies.
+
+Persistent shared buffers must not appear in `VideoFrame`'s `transfer` list.
+Transfer can alias mapped pixels, so returning a slot after construction could
+corrupt a frame retained by Chromium. This transport depends on the constructor's
+independent pixel snapshot. GPU presentation avoids both shared-buffer copies;
+it does not change or weaken the shared-buffer ownership contract.
+
+Each incoming room video track owns its decoded output and render surface.
+Screen publications negotiate from the native receiver's supported formats.
+A native screen startup, presentation or decode failure excludes that screen
+format for the current application session. Automatic sender selection can
+negotiate another native format.
+Explicit fixed sender codec choices retain their existing failure semantics.
+An MF decoder that accepts successive inputs without output first flushes its
+compressed state and requests a fresh keyframe on the existing connection. Its
+last displayed texture stays valid during recovery. If decoding remains stalled
+or processing stays overloaded, the application's bounded recovery policy
+recreates the native receiver. Web and other
+platforms retain browser reception, and platform adapters that allow browser
+fallback retain the previous retry behavior.
+Native reception recovers when consecutive
+foreground statistics show interval receive-to-decode processing delay above
+250 ms for at least three seconds, even if frames continue decoding. Missing or
+reset counters, sampling gaps and visibility changes restart that observation
+window. Browser reception retains its stall-only recovery policy. Recording
+explicitly opens a bounded CPU readback consumer of the native surface. Each
+consumer has one read in flight, with at most two reusable staging textures and
+GPU completion events shared per source. Completion wakes the asynchronous reader;
+mapping uses `DO_NOT_WAIT`, without blocking the immediate context on GPU work.
+Resize or device changes replace incompatible idle slots. Closing a recording
+releases its pool ownership; pending copies retain their complete frame leases
+until completion, even after cancellation. Pixels are packed directly into the
+owned IPC response, which cannot be recycled while the page may retain it.
+The recording input replays its retained first frame after MediaRecorder attaches,
+then refreshes static pixels sparsely with fresh timestamps. These repeats do not
+request another GPU readback; generated tracks otherwise lose a pre-attachment
+frame and can produce empty output when recording stops.
+Each recording read waits for a source notification with a 500 ms static-refresh
+deadline, rather than polling for empty frames at display rate. Close and source
+failure wake pending reads; registration precedes the latest-frame check to avoid
+losing a racing publication. Active recording still admits at most 60 reads per
+second and honors writer backpressure.
+This pool is independent of the sender's **GPU readback buffers** setting: that
+setting only controls sender paths requiring GPU-to-CPU readback and applies to
+the next share. Recording supplies real pixels instead of recording the placeholder,
+without changing the GPU display path. Encoded receive pass-through is not
+provided by this backend. Close, page reload, application exit and lease expiry release the
+native receiver, audio sinks and shared buffer.
+
+Native inbound video reports include `nativeReceive` diagnostics. GPU mode
+reports decoded and presented frame counts, CPU-upload counts, decoded-frame age
+at submission and native submission duration. Shared-buffer mode retains the
+worker, packing, lease and renderer stage counters and bounded timing summaries.
+Detailed automation diagnostics export only known numeric fields. These are
+process-local durations, not end-to-end or physical display latency. A placeholder
+video's `requestVideoFrameCallback` does not measure native GPU presentation;
+comparisons must observe the same actual display boundary on both paths.
+
+## Receiver video quality {#receiver-video-quality}
+
+Each viewer can lower the resolution, frame-rate and bitrate limits of its own
+streams in Settings → Media → Receive quality. These receive defaults are saved
+locally, apply to current and future incoming publications, and remain separate
+from local capture settings. Each incoming video shows its effective limits.
+Publisher settings remain the ceiling. This does not require input control and
+never changes capture consent,
+room visibility, other viewers or local recording. Defaults follow the publisher's
+resolution and bandwidth adaptation; automatic FPS additionally follows stable
+foreground presentation cadence on the receiving display. Background scheduling
+gaps and video-content FPS are not display-refresh measurements.
+The browser keeps the highest consistently confirmed cadence for the current
+screen geometry and scale, rather than lowering the limit when animation
+callbacks slow down. Visibility changes retain that calibration; a change in
+screen geometry or scale starts a new one. Browsers cannot distinguish monitors
+with identical exposed screen properties using this fallback, so a manual FPS
+limit remains available.
+
+Quality discovery, requests and replies share the authenticated desktop-media
+channel. A source advertises its bounds and current transport identity; requests
+are bounded, coalesced and checked against that transport. Older peers that do not
+advertise bounds ignore receive defaults. Requests and effective limits belong
+to each publication; reconnecting or starting another publication reuses the
+viewer's saved receive defaults.
+
+Browser senders adjust only their RTP encoding parameters. Native hardware
+consumers with matching profiles share an encoder; changed profiles warm before
+replacing the viewer's output, retaining the old output on failure. Scaling and
+frame admission happen per encoding group; input-control coordinates remain
+normalized against the source display. Frame-rate limits are maxima, not a
+promise that static content or a constrained network will produce that many frames.
+
+## Windows acceptance {#windows-acceptance}
+
+On a Windows device verify install/start/relaunch, About version, room join,
+chat, file selection/drop/download, clipboard, camera/microphone and supported
+screen sharing. Test denial of media permission, disconnection/reconnection,
+minimize/restore, close during media use and starting a second instance. Confirm
+that confirming quit exits all application processes and stops active capture, external
+links open in the browser, and web PWA updates never replace desktop assets.
+
+Builds, host tests and ordinary Chromium runs do not establish WebView2 media,
+GPU capture, remote input or installer acceptance.
+
+References: [Tauri Vite integration](https://v2.tauri.app/start/frontend/vite/),
+[capabilities](https://v2.tauri.app/security/capabilities/),
+[WebView versions](https://v2.tauri.app/reference/webview-versions/).

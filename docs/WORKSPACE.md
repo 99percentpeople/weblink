@@ -1,252 +1,38 @@
 # Workspace development
 
-Weblink's original Git repository owns the applications, shared documentation
-and root tooling. The two signaling servers are Git submodules. The current
-web application is `apps/web`; the Tauri shell in `apps/desktop` reuses its frontend.
-The standalone marketing website lives in `apps/www` and builds independently.
+Implementation and maintenance notes remain in this repository and are not published on the user documentation site. / 本页链接到仓库内部实现与维护资料，不发布到用户文档站。
 
-## Checkout and dependencies
+- [English](en/development/workspace.md)
+- [简体中文](development/workspace.md)
 
-```sh
-git clone --recurse-submodules https://github.com/99percentpeople/weblink.git
-cd weblink
-bun install --frozen-lockfile
-```
+<a id="checkout-and-dependencies"></a>
 
-For a clone made without submodules, or after pulling a changed gitlink:
+Checkout and dependencies: [English](en/development/workspace.md#checkout-and-dependencies) · [中文](development/workspace.md#checkout-and-dependencies)
 
-```sh
-git submodule update --init --recursive
-```
+<a id="frontend-and-local-signaling-together"></a>
 
-Root workspaces cover `apps/*`, `packages/*` and `servers/*`, with one root
-`bun.lock` and an isolated dependency layout. A single `bun install` installs the
-frontend and both servers after submodules are initialized. The root package is
-private tooling; the application name is `@weblink/web` and its version remains
-in `apps/web/package.json`.
-Isolation keeps the frontend's and Worker's different TypeScript/Vitest versions
-from interfering with each other.
+Frontend and local signaling together: [English](en/development/workspace.md#frontend-and-local-signaling-together) · [中文](development/workspace.md#frontend-and-local-signaling-together)
 
-Use Bun **1.4.2**, matching `packageManager`, CI and the frontend Docker image.
-The combined development command uses Bun's built-in parallel script runner
-(introduced in Bun 1.3.9).
-The root override also pins the server's npm `bun` dependency to this version,
-so its older standalone runtime cannot shadow workspace commands.
+<a id="frontend-commands"></a>
 
-The PWA plugin and asset generator use the compatible **2.x** release lines,
-which support Vite 6 and require Node **20.19+** (CI uses 24). The asset generator
-uses `sharp` with npm-distributed native binaries; keep optional dependencies
-enabled when installing. No root `sharp` override is required.
+Frontend commands: [English](en/development/workspace.md#frontend-commands) · [中文](development/workspace.md#frontend-commands)
 
-Git submodules still pin server source revisions and retain independent release
-workflows. Workspace installs use root `bun.lock`; the servers' own lockfiles
-remain unchanged for standalone clones. Dependency changes need both the
-standalone lockfile and, after updating the gitlink, a refreshed root lockfile.
-Installing dependencies does not update submodule commits.
+<a id="desktop"></a>
 
-## Frontend and local signaling together
+Desktop: [English](en/development/workspace.md#desktop) · [中文](development/workspace.md#desktop)
 
-After the root install and submodule initialization:
+<a id="source-sync"></a>
 
-```sh
-cp .env.example .env
-bun dev
-```
+Source sync: [English](en/development/workspace.md#source-sync) · [中文](development/workspace.md#source-sync)
 
-`bun dev` loads root `.env` explicitly. It contains the Vite port
-(`WEBLINK_WEB_PORT`), server port/address (`PORT`, `HOSTNAME`) and local signaling
-URL (`WEBLINK_WEBSOCKET_URL`). The URL in the example expands `${PORT}`, so it
-follows server port changes. Existing server-specific settings and secrets
-remain in the server's own env files; root values take precedence when running
-`bun dev`.
+<a id="signaling-servers"></a>
 
-`bun dev` runs Vite and the Bun server with labeled output. Defaults are
-localhost:5173 and 127.0.0.1:9000. Ctrl+C stops both; a script exiting with an
-error stops the other. Vite fails on an occupied port instead of changing it.
-Stop existing services or select different ports in `.env` before starting.
+Signaling servers: [English](en/development/workspace.md#signaling-servers) · [中文](development/workspace.md#signaling-servers)
 
-Use `bun run dev:web` or `bun run dev:server` to start just one service. The
-root `WEBLINK_WEBSOCKET_URL` overrides the frontend endpoint only while serving
-Vite; production builds continue to use the app's `VITE_*` / `WEBLINK_*` settings.
+<a id="updating-a-submodule"></a>
 
-## Frontend commands
+Updating a submodule: [English](en/development/workspace.md#updating-a-submodule) · [中文](development/workspace.md#updating-a-submodule)
 
-Run these from the repository root:
+<a id="building-and-releasing"></a>
 
-```sh
-bun run dev:web
-bun run lint
-bun run test:unit
-bun run test:integration
-bun run build
-bun run build:dev
-bun preview
-```
-
-All existing `test:e2e:*` and `bench:browser:cache` commands remain available at
-the root. They delegate to the web workspace, preserving application-relative
-resource and test paths. Direct application commands also work:
-
-```sh
-bun run --cwd apps/web dev
-```
-
-Copy `apps/web/.env.example` to `apps/web/.env.local` for local configuration.
-Vite reads application env files from `apps/web`; root `.env` holds the combined
-development settings described above. Keep frontend build-time `VITE_*` / `WEBLINK_*` values
-in the application env files. Production and dev artifacts are written to `apps/web/dist`.
-Root `bun run clean` removes workspace dependencies, including the server
-dependencies, and frontend output. It does not remove env files.
-
-## Marketing website
-
-`apps/www` is a static HTML and TypeScript site with its own Vite configuration.
-It needs no application runtime, local signaling server, or env file.
-It shares the application's color, typography and radius tokens through
-`@weblink/theme` in `packages/theme/tokens.css`.
-The supported language list and browser-language matching rules are shared through
-`@weblink/locale` in `packages/locale`. Marketing copy lives in `apps/www/src/locales`.
-
-```sh
-bun run dev:www
-bun run lint:www
-bun run build:www
-bun run preview:www
-```
-
-Development uses port 5174; the production preview uses port 4174. The static
-build is written to `apps/www/dist` and can be hosted separately from `apps/web`.
-See [the site README](../apps/www/README.md) for content and deployment details.
-
-## Desktop
-
-`bun run dev:desktop` starts Tauri, its Vite server and local signaling using
-root `.env`. `bun run build:desktop` creates a native build for the host platform.
-Desktop prerequisites, Windows installer commands and current capability limits
-are documented in [DESKTOP.md](DESKTOP.md).
-Root `Cargo.toml` and `Cargo.lock` cover the Tauri shell and native Rust crates
-under `crates/`; `bun install` manages JavaScript dependencies only.
-
-## Source sync
-
-Install rsync 3.x on both machines and configure SSH key access. Set the target
-in root `.env` (paths with spaces can be quoted):
-
-```dotenv
-WEBLINK_SYNC_TARGET=user@host:/path/to/weblink
-# Optional when rsync is not on the remote PATH:
-# WEBLINK_SYNC_RSYNC=/usr/local/bin/rsync
-```
-
-```sh
-bun run sync --dry-run
-bun run sync
-bun run sync:watch
-```
-
-The target can be Linux, macOS or Windows. For Windows with the official
-[cwRsync portable package](https://itefix.net/cwrsync), use a target such as
-`yzzpc:/cygdrive/c/Users/name/Desktop/weblink` and set `WEBLINK_SYNC_RSYNC` to
-`C:/Users/name/AppData/Local/Programs/cwrsync/bin/rsync.exe`.
-
-The watcher performs an initial sync, checks Git-visible sources every second,
-then batches saves and sends only files changed since the last successful sync.
-Unchanged Rust files are not visited during frontend-only updates, preventing
-spurious Tauri restarts from Windows file-write notifications.
-Ctrl+C stops it; failed transfers retry after three seconds.
-It includes uncommitted files and initialized submodule sources. Git metadata,
-`.env` files, `.tmp`, dependencies and build outputs stay local to each machine;
-only `.env.example` is copied. Source symlinks are rejected.
-
-This is one-way sync. Remote-only files are kept; local deletions propagate only
-for files previously synced successfully. Replaced and deleted remote files are
-backed up under `.tmp/rsync-backups/` at the destination. Each target has its own
-local sync inventory and process lock. Sync does not install dependencies or
-restart commands; running development watchers react to source changes.
-
-The browser and desktop Vite servers use separate dependency caches by mode.
-Vite 6 reads the workspace's text `bun.lock` to validate cached dependencies on
-startup. After dependency changes, run `bun install` on the receiving machine
-and restart its development commands; ordinary source sync needs no server
-restart. Vite's file watcher waits for replaced files to settle.
-
-`src/bootstrap.ts` and the plain TypeScript application composition own context
-identities and service lifetimes. UI components refresh below that owner, so
-view updates retain the meeting, local capture and application controllers.
-Changes to context definitions or application composition propagate to the
-entry and rebuild the page through Vite's native dependency handling. There is
-no custom context refresh or dependency-cache plugin.
-
-## Signaling servers
-
-Initialize submodules and run `bun install` once at the root before these commands.
-
-Bun server:
-
-```sh
-cd servers/weblink-ws-server
-bun run test
-bun run build
-bun run dev
-```
-
-Worker:
-
-```sh
-cd servers/weblink-ws-worker
-bun run typegen
-bun run typecheck
-bun run format:check
-bun run test
-bunx wrangler deploy --dry-run
-bun run dev
-```
-
-For a standalone server clone, run `bun install --frozen-lockfile` in that clone
-to use its own lockfile. Use each server's env example and deployment instructions.
-Server secrets stay in the server environment, not in the frontend. Root `dev:server`,
-`dev:worker`, `test:server`, `test:worker` and `build:server` are convenience
-wrappers after the workspace dependencies are installed.
-
-The root `Signaling servers` workflow recursively checks out the pinned commits
-and installs from the root lockfile before running server checks. It does not
-publish either server; their own repositories retain their release workflows.
-Workflows nested inside a
-submodule do not automatically execute as workflows of the parent repository.
-
-## Updating a submodule
-
-A submodule checkout from a fresh clone normally has a detached HEAD. Before
-editing, create or switch to a suitable branch in that server repository:
-
-```sh
-git -C servers/weblink-ws-server switch -c my-server-change
-```
-
-Test and commit there, then push the branch or merge it through that repository's
-normal process. Once the selected commit is available from the configured remote,
-refresh the workspace lockfile and commit it with the parent pointer:
-
-```sh
-bun install
-git add servers/weblink-ws-server bun.lock
-git commit -m "chore: update Bun signaling server"
-```
-
-The Worker follows the same workflow under `servers/weblink-ws-worker`.
-`git submodule update --init --recursive` restores the parent-pinned version;
-`--remote` selects new upstream commits and is an intentional dependency update,
-not a normal installation step. Inspect local server changes before switching
-the pinned version.
-
-## Building and releasing
-
-See [DEPLOYMENT.md](DEPLOYMENT.md). Root CI reads release metadata from
-`apps/web/package.json` and root `CHANGELOG.md`, writes frontend env files into
-`apps/web`, and deploys `apps/web/dist`. Web release tags and channels retain
-their existing meaning.
-
-Initialize submodules before building the frontend Docker image or running
-Compose. The frontend image reads all workspace manifests and installs only the
-root tooling and frontend dependencies. Compose uses the pinned local Bun
-server submodule as its server build context, with that server's standalone lock.
+Building and releasing: [English](en/development/workspace.md#building-and-releasing) · [中文](development/workspace.md#building-and-releasing)

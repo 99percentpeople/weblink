@@ -1,0 +1,849 @@
+# Weblink P2P control protocol
+
+The control protocol is intentionally independent from Weblink's Solid UI,
+IndexedDB stores, signaling backend and browser `PeerSession` implementation.
+
+There are three distinct concerns:
+
+1. **Signaling** discovers room peers and exchanges SDP/ICE until a peer
+   connection exists.
+2. **P2P control protocol** exchanges typed JSON requests, replies and
+   notifications over a reliable message transport (ordering is optional).
+3. **Data protocols** such as file payload transfer and speed testing use their
+   own channels/state machines and are not encoded as control messages.
+
+A future desktop, mobile or native client should implement the wire contract in
+`apps/web/src/libs/domain/protocol/` and provide its own transport/session adapter. It
+does not need Weblink's `PeerSession`, Solid state, IndexedDB or UI services.
+
+## Portable client boundary {#portable-client-boundary}
+
+The TypeScript reference implementation exposes a minimal transport-agnostic
+contract:
+
+```ts
+type ProtocolSession = {
+  clientId: string;
+  targetClientId: string;
+};
+
+interface ProtocolTransport<S extends ProtocolSession> {
+  send(
+    session: S,
+    message: SessionMessage,
+    options?: MessageSendOptions,
+  ): Promise<void>;
+
+  onAny(
+    handler: (context: {
+      session: S;
+      message: SessionMessage;
+    }) => void | Promise<void>,
+  ): () => void;
+
+  onSessionClosed(
+    handler: (
+      session: S,
+      options?: { recoverable?: boolean },
+    ) => void,
+  ): () => void;
+}
+```
+
+`send()` must resolve only after the underlying transport has accepted the
+serialized message for sending. It must not resolve merely because a message was
+placed in a local queue.
+
+`onSessionClosed` cancels pending requests and handler lifetimes. By default it
+permanently retires the session object. Use `{ recoverable: true }` for temporary
+access withdrawal, including trust verification during reconnection, when the
+same session will be reused. New work receives a fresh request lifetime; the
+transport must continue enforcing permissions until access is restored. Late
+handler results from the interrupted lifetime must not send replies.
+
+The generic protocol state machine can then run on any client-specific session
+object:
+
+```ts
+const protocol = new P2PProtocol(myTransport);
+
+const session = {
+  clientId: "device-a",
+  targetClientId: "device-b",
+  nativeHandle: 42,
+};
+
+await protocol.call(session, "send-text", {
+  data: "hello",
+});
+```
+
+The browser implementation adapts `PeerSession` through
+`application/rtc/rtc-service.ts`. The WebRTC DataChannel send queue lives next
+to the session adapter in `domain/session-send-queue.ts`; it is deliberately
+not part of the portable protocol package.
+
+## Wire envelope {#wire-envelope}
+
+Every control message is JSON and has the same base envelope:
+
+```json
+{
+  "id": "message-id",
+  "type": "send-text",
+  "createdAt": 1760000000000,
+  "client": "sender-client-id",
+  "target": "receiver-client-id"
+}
+```
+
+Required base fields:
+
+| Field       | Type   | Meaning                                            |
+| ----------- | ------ | -------------------------------------------------- |
+| `id`        | string | Stable request/message identity. Retries reuse it. |
+| `type`      | string | Message discriminator.                             |
+| `createdAt` | number | Millisecond timestamp created by the sender.       |
+| `client`    | string | Sender client ID.                                  |
+| `target`    | string | Intended receiver client ID.                       |
+
+Local UI state such as `sending`, `received`, progress or persistence status
+is **not** part of the wire protocol. Those fields belong to each client's local
+message model.
+
+The envelope rejects the reserved local fields `conversationId`, `room`,
+`deliveries`, `roomTransfers`, `localSequence` and `lastReadSequence`. Local arrival order and read
+cursors belong to the receiving browser. A private `send-text` cannot attach these fields to
+bypass room capability and binding validation during history projection.
+
+The canonical TypeScript wire DTOs and request policy are in
+`domain/protocol/messages.ts`. Runtime validation is in
+`domain/protocol/validation.ts`.
+
+## Shared peer capabilities {#shared-peer-capabilities}
+
+Each side sends one `peer-capabilities` notification when the main message channel
+opens. `version: 1` identifies the capability-sync envelope; `revision` is only a
+state sequence number. The initial `update` is a full snapshot:
+
+```ts
+{
+  type: "peer-capabilities",
+  version: 1,
+  // Standard id, createdAt, client and target fields omitted.
+  update: {
+    kind: "snapshot",
+    generation: "connection-id",
+    revision: 1,
+    services: {
+      "messaging/1": {},
+      "files/1": { content: true, shared: true },
+      "room/1": { chat: true, files: true },
+      "screen/1": { decode: { video: null, audio: null }, trickleIce: true, multiScreen: true },
+      "control/1": { request: true, host: true, occupancy: { state: "idle" } },
+      "clipboard/1": { inlineText: true },
+      "fileDrop/1": {},
+      "speedTest/1": { busy: false },
+    },
+  },
+}
+```
+
+`services` is an open map of **service name / protocol major**, such as
+`acme.whiteboard/1`. Compatible optional fields stay within the same major;
+breaking changes use a new key. Each advertised major must have an implemented
+handler. This release implements only `/1` for each built-in feature and has no
+unversioned fallback. Existing payload format discriminators (for example,
+storage page version 3) are parts of the `files/1` contract, not additional
+negotiable feature implementations.
+
+Both sides select the highest common implemented major from the initial exchange,
+without a separate negotiation RPC. The selected major is fixed for this peer
+connection; an update can withdraw it but cannot switch an active operation to
+another handler. Reconnecting starts selection afresh. A future release that
+supports multiple majors must register their actual implementations and keep its
+set of implemented majors stable during a connection. Merely advertising an old
+major does not provide compatibility.
+
+The wire envelope validates bounded objects without interpreting unknown major
+payloads. Only a negotiated, implemented major runs through its own descriptor
+validator. Unknown versions and invalid descriptors disable their corresponding
+feature while leaving other features available. Consumers receive a typed map of
+negotiated descriptors under names such as `control`; the raw versioned offers
+remain in discovery. `PeerCapabilitiesService.protocol(session, service)` returns
+the exact selected handler ID, or `undefined` for unavailable, invalid or withdrawn
+offers. Extension dispatch uses this ID rather than inferring a version from its
+payload. Unknown extension names can be advertised and negotiated
+without changing the sync format; extensions supply their own handlers and
+payload validation.
+
+Message send and receive boundaries enforce the negotiated feature requirements.
+Chat, file transfer, room chat, native screen, control, clipboard, file drop and
+speed testing have independent gates. Room file operations additionally require
+`files`; remote clipboard and file drop require `control`. An incompatible control
+protocol does not disable screen viewing, and incompatible file protocols do not
+disable private or room text chat. Buttons use the same negotiated state. Replies
+to already-authorized requests remain receivable, allowing operations to settle
+after a capability withdrawal. Binary transfers retain their registered operation
+identity; capability announcements do not authorize unsolicited channels or data.
+
+The capability-sync envelope has an independent major. An unknown sync major is
+not interpreted as version 1: discovery settles as unavailable for that transport,
+without disconnecting the peer or blocking base profile/stream metadata. Supporting
+a future sync major requires a real envelope implementation too. Feature additions
+normally require no sync-envelope change.
+
+Service keys start with a letter, contain letters, digits, `.`, `_`, `/` or `-`,
+and are at most 128 characters; `constructor` and `prototype` are reserved. A
+negotiable key ends in a positive safe integer major with no leading zero.
+
+After discovery, only changed entries are sent with `kind: "patch"`. Each included
+entry replaces that service's entire value; omitted services remain unchanged.
+`null` explicitly removes a service. For example, this patch updates occupancy
+and removes an extension without retransmitting files, codecs or room features:
+
+```ts
+{
+  kind: "patch",
+  generation: "connection-id",
+  revision: 12,
+  services: {
+    "control/1": {
+      request: true,
+      host: true,
+      occupancy: { state: "controlled", clientId: "viewer", sourceId: "display" },
+    },
+    "acme.whiteboard/1": null,
+  },
+}
+```
+
+Before the first snapshot, remote support is unknown. A missing service in the
+merged state means unsupported. Consumers wait for discovery or disable
+the action; they do not probe by opening a data channel. File/profile and room
+messages no longer carry feature lists. Media channels use their DataChannel
+open event and the shared capabilities; there is no separate media `hello`.
+
+Announcements are scoped to the actual peer session and checked against both
+peer IDs and the first accepted generation. Each announcement increments the
+sender's revision; the receiver tracks the latest revision **per service**.
+An older patch for a different service still applies, while stale replacements
+or withdrawals for the same service are ignored. A snapshot establishes an
+absence baseline for all omitted keys, while preserving entries changed by newer
+patches. Patches arriving before the first snapshot remain buffered and do not
+expose partial discovery to consumers.
+
+Disconnection clears discovery, cancels waiters and queued announcements, and the
+next open sends a full snapshot. Local changes coalesce while a send is pending;
+patches are computed against the last successfully sent state. Normal updates
+need no receipt or discovery RPC. A failed send retries with a full snapshot.
+
+The merged state has at most 32 services and announcements are limited to 16 KiB.
+A patch can include up to 64 entries to replace a whole set with additions and
+withdrawals. An oversized patch falls back to a full snapshot. The receiver keeps
+at most 128 entry revisions, including withdrawals and updates arriving before
+discovery. If merged state or retained history exceeds those bounds, discovery
+becomes unknown and the receiver sends `update: { kind: "request-snapshot" }` to
+recover a complete baseline. Recovery requests retry while needed and are
+cancelled on recovery or disconnection. New capabilities use this same model
+rather than adding discovery handshakes. Versioned service entries are independently
+updated and withdrawn; changing `control/2` never overwrites `control/1`.
+
+Control discovery is evaluated separately for each peer. The remote-control
+exposure setting is enabled by default: unknown clients may discover `control/1`
+and request local consent. Turning it off limits discovery to clients marked
+`allow`, who retain automatic approval; unknown clients receive no control entry.
+Clients marked `deny` remain hidden in both modes. The switch and allow/deny
+records are local, persistent policy; the stored `remoteControlWhitelistOnly`
+flag is the inverse of the public exposure switch.
+List changes use the existing capability publisher: additions replace only
+`control/1`, withdrawals send `control/1: null`, and unchanged peers receive no
+update. Initial discovery always reflects the current policy.
+
+Hidden control requests are silently discarded before queuing or invoking
+handlers, including before discovery completes. Withdrawing permission cancels
+pending consent, removes native control bindings and revokes an active grant.
+It never prevents screen viewing, messaging or other independent features.
+
+The controlled host owns occupancy for all its screens. While idle, different
+clients may request control concurrently. Unanswered consent requests do not
+reserve occupancy. The host may approve any queued request; that selection
+atomically invalidates all other consent tokens and rejects the other requests,
+including requests from the avatar sharing flow. Declining, cancelling or expiring
+one unanswered request leaves the others available.
+
+`pending` means a controller has been selected and capture/native authorization
+is in progress; `pending` blocks competing requests. `controlled` blocks requests
+unless the host explicitly advertises `takeover: true` for that recipient. The
+status publisher broadcasts selection, cancellation, revocation and release;
+a newly connected client receives current occupancy immediately. The avatar
+flow reserves occupancy from approval through capture and native handoff, with
+expiry/cancellation clearing the reservation.
+The pending owner may complete that handoff. Other viewers retain the control
+action but cannot click it until the host reports `idle` or permits takeover.
+The same rule applies to screen tiles and avatar requests; an avatar takeover
+reuses the current source and proceeds through native authorization. A request guard also
+enforces this outside the UI; native arbitration resolves simultaneous requests.
+An occupancy update does not renegotiate media or replace existing input grants.
+
+`controlled` plus the matching client/source identifies the public owner. Optional
+`controllerKind: "remote" | "automation"` identifies the grant type and
+`automationActive: boolean` identifies current automation use, including a borrowed
+manual grant. The host sends both fields to every observer. Missing fields remain
+valid for older peers, but neither these fields nor a guessed type imply takeover
+permission. Control labels and icons use these fields without local-controller
+knowledge. The public status is
+not an input credential: only the requesting peer receives the native grant
+bound to its connection, source, media and geometry, and input starts after its
+activation acknowledgement. Grant IDs and input epochs never enter the public
+snapshot. Capability announcements also do not replace room tokens, file access
+checks, clipboard grants or speed-test consent. Speed-test busy state is checked
+before opening its data channel; the receiver still arbitrates concurrent starts.
+
+Small remote clipboard text/rich-text entries use one `remote-clipboard` request
+with `action: "inline"`, direction, operation/grant IDs and `{type, data}` entries.
+The encoded entry array is limited to 8 KiB and three unique text formats. Larger
+text, images and files use the existing bounded binary channel. Paste completes
+only after native clipboard application; selection copy still prepares a native
+clipboard sequence before injecting Ctrl+C. Retries, cancellation and revocation
+retain the same grant/operation checks.
+
+## Request types and ACK policy {#request-types-and-ack-policy}
+
+The request policy is defined once by `requestSpec`:
+
+| Request               | Reply behavior                                                         |
+| --------------------- | ---------------------------------------------------------------------- |
+| `send-text`           | `ack` mode `receive`                                                   |
+| `room-capabilities`   | `ack` mode `receive`                                                   |
+| `send-room-text`      | `ack` mode `receive`                                                   |
+| `send-room-file`      | `file-offer-result` for content offers; otherwise `ack` mode `receive` |
+| `request-room-file`   | `ack` mode `send`                                                      |
+| `send-clipboard`      | `ack` mode `receive`                                                   |
+| `send-file`           | `file-offer-result` for content offers; otherwise `ack` mode `receive` |
+| `request-file`        | `ack` mode `send`                                                      |
+| `request-shared-file` | `ack` mode `send`                                                      |
+| `resume-file`         | `ack` mode `receive`                                                   |
+| `request-storage`     | `storage` response                                                     |
+
+A typed result completes its original request directly; it is not a reverse
+request and receives no additional ACK. A lost result is recovered by retrying
+the original request ID; the receiver replays the cached result without repeating
+the handler. The result of a file offer confirms offer acceptance or reuse, not
+binary transfer completion.
+
+An ACK means the receiving request handler completed successfully. The portable
+protocol itself does not guarantee durable storage, file-transfer completion,
+clipboard permission or that a human read a message.
+
+The browser private and room chat handlers additionally wait for their local
+IndexedDB write before returning. Their receipts confirm successful local persistence
+at that instant; it does not imply a read receipt, server history, or retention
+after the user deletes browser data.
+
+Typical use:
+
+```ts
+const receipt = await protocol.call(session, "send-text", {
+  data: "Hello",
+});
+
+const page = await protocol.call(
+  session,
+  "request-storage",
+  {
+    pageIndex: 0,
+    pageSize: 25,
+    search: "report",
+    sort: [{ field: "fileName", desc: false }],
+  },
+);
+
+const stopHandling = protocol.handle(
+  "request-storage",
+  async ({ session, message, signal }) => {
+    // Apply local authorization/policy here.
+    return {
+      items: [],
+      totalCount: 0,
+      pageIndex: 0,
+      pageSize: message.pageSize,
+      sharingEnabled: false,
+    };
+  },
+);
+```
+
+`request-storage` returns a `StoragePage`, not a metadata array. It never exposes a
+browser `File`, IndexedDB record or cache implementation.
+
+### Online room text chat (version 1) {#online-room-text-chat-version-1}
+
+`room-capabilities` and `send-room-text` require
+`P2P_ROOM_CHAT_PROTOCOL_VERSION` (currently 1). They use the existing point-to-point
+control DataChannel: `client` and `target` remain the actual session's peer IDs.
+The signaling protocol, presence records, and private `send-text` envelope do not
+change. Private and room text share nonblank validation and a 65,536 UTF-16 code-unit
+limit. Never turn an unsupported room message into a private message.
+
+After the message channel becomes ready, both peers send `room-capabilities`
+with `{ roomId, token }`. Each token is fresh for that local room/channel binding.
+The peer acknowledges only an offer belonging to its active room and actual
+session. A client is supported after receiving the peer's token and the ACK to
+its own offer. A later incoming offer can restart a failed initial negotiation;
+this permits different room-initialization timing. A missing/unsupported version
+or a peer that cannot complete negotiation is not a supported room-chat peer.
+The browser waits for both parts even when an unordered channel delivers the ACK
+before the reciprocal offer. Negotiation waits are bounded and cancelled when
+the room/channel binding ends.
+For peers that explicitly advertise room chat, a failed handshake is retried on
+the live connection with exponential backoff (1 second up to 10 seconds). Late
+capability availability also restarts negotiation. Recovery stops after success,
+capability withdrawal, room exit or channel replacement; it never reuses a retired
+binding. Peers without advertised support retain the bounded compatibility probe.
+
+`send-room-text` carries:
+
+```ts
+{
+  roomId: string;
+  senderToken: string;
+  recipientToken: string;
+  senderName: string;
+  senderAvatar: string | null;
+  data: string;
+}
+```
+
+Room IDs are nonempty and at most 256 UTF-16 code units; binding tokens are at
+most 128. Names are at most 128, avatars at most 256 Ki, and nonblank text at most
+64 Ki UTF-16 code units. Receivers validate both binding tokens, the active room,
+and the session identity before writing history. Session replacement, room
+changes and channel closure retire the old binding. Names and avatars are
+sender-provided display snapshots, not independent identity authentication.
+The browser sends `senderAvatar: null` on room text requests; peer avatars already
+use the separate profile exchange. It may retain its own avatar in local history,
+but does not repeat a potentially large base64 image in every text frame. The
+character bounds do not override a transport's negotiated maximum message size;
+a transport rejection remains a visible failed delivery for that recipient.
+
+The browser sender stores one logical message and snapshots the peers whose
+channels are ready at send time. The same message ID, sender and creation time
+identify each recipient's copy. Each recipient has its own
+`sending` / `delivered` / `failed` / `unsupported` state; one ACK cannot complete
+the whole group. Fan-out runs with bounded concurrency so one failed peer does
+not stop all other recipients. Manual retries target only original failed peers
+that are currently connected to the same room. A replacement session uses its
+new binding tokens while retaining the logical message ID, time and content.
+
+There is no offline outbox, late-join history transfer, server message archive,
+or automatic replay to newly joined members. History and organization labels
+belong to the local browser. Conversation IDs include the signaling namespace
+and room ID locally; the namespace is not sent as an authentication claim.
+The application store persistently deduplicates matching logical room messages
+and rejects conflicting IDs. This supplements the protocol's bounded,
+session-local request cache; it does not provide globally ordered history or
+cross-device exactly-once delivery.
+
+### Room file offers and explicit downloads (version 1) {#room-file-offers-and-explicit-downloads-version-1}
+
+Room text and capability envelopes remain version 1. The shared peer snapshot
+advertises room file support as `services.room.files`. The room handshake still
+binds requests to current room tokens. A room ACK alone does not establish file
+support. Unsupported room offers are never converted into private messages.
+Explicit local forwarding creates a new private copy with a fresh file ID;
+the original room attachment keeps its room-only scope.
+
+`send-room-file` uses `P2P_ROOM_FILE_PROTOCOL_VERSION` (currently 1). Its payload
+contains `roomId`, `senderToken`, `recipientToken`, `senderName`, `senderAvatar`,
+`fid`, `fileName`, `fileSize`, `chunkSize`, and optional `mimeType` / `lastModified`.
+Only these fields and the standard envelope are accepted; no file bytes belong
+in the offer. Filenames contain 1–1024 UTF-16 code units, MIME types at most 255,
+file size is a nonnegative safe integer, and chunk size is a positive safe
+integer. Room/token/profile bounds match room text. The recipient durably stores
+the offer before ACKing it. That ACK means metadata was received, not downloaded.
+The receiver may opt in locally per room to request newly received small files
+up to the application-wide size limit in Transfer settings (default 5 MiB,
+auto-download off for each room). This uses the same
+`request-room-file` flow as a manual download, without changing the protocol or
+replaying offers from history. Duplicate receipts and paused or failed transfers
+do not automatically start another request.
+
+An explicit download uses `request-room-file` version 1 with the room and current
+binding tokens, `offerId`, `fid`, `resume`, and optional chunk `ranges`. It does
+not repeat file metadata: the authorized original offer and provider cache are
+authoritative. Structural range validation happens at the protocol boundary;
+the application must check range bounds against the authorized file's actual
+chunk count. The offer ID and request envelope ID must differ. Each new or resumed
+download attempt uses a fresh request ID; transport retries repeat the same
+request. Reusing a completed request's ID/time can replay its cached ACK without
+starting another transfer. The `send` ACK acknowledges download setup, not binary
+completion.
+
+Both sides validate the current room/session and binding tokens. The provider
+also validates the stored offer's sender, room namespace, file identity and
+original recipient snapshot. Room-only attachments must not bypass this check
+through legacy `request-file` / `resume-file` entry points. Reconnection requires
+fresh binding tokens and a new download request; a saved offer does not guarantee
+that its provider is online or its file remains available.
+
+Room files and text share local history and per-recipient offer delivery states.
+Sender-side per-peer transfer status/progress lives separately in local
+`roomTransfers`, which is rejected on the wire. Receipt and transfer writes are
+serialized per logical message. Duplicate file offer IDs must retain the same
+sender, scope, timestamp, file identity and metadata. A reload marks interrupted
+delivery attempts failed and active per-peer transfers paused; an offer that has
+never been downloaded does not become a paused transfer merely by being loaded.
+
+### Shared directory contract (version 3) {#shared-directory-contract-version-3}
+
+`request-storage` and `storage` require `version: 3` (the message factory supplies
+it). Peers advertise `services.files.shared` in the shared snapshot before
+browsing or fetching. Earlier directory versions and full-cache responses are rejected;
+unsupported peers are reported without falling back to cache enumeration.
+The binary data protocol and signaling remain unchanged.
+
+Query payload:
+
+```ts
+type StorageQuery = {
+  pageIndex: number; // zero-based non-negative safe integer
+  pageSize: number; // integer in [1, 100]
+  search?: string; // at most 256 UTF-16 code units
+  sort?: {
+    field:
+      | "fileName"
+      | "fileSize"
+      | "createdAt"
+      | "lastModified"
+      | "mimetype";
+    desc: boolean;
+  }[];
+};
+```
+
+Providers filter the **entire visible directory** before sorting and slicing.
+Search is a filename substring after NFKC normalization, trimming and lowercasing
+on both sides of the comparison. Sorting uses the requested field order; absent
+sorting defaults to filename ascending. Text sort keys use the same normalization;
+numeric fields use numeric comparison. Missing optional values sort as zero/empty
+string. File ID ascending is the final deterministic tie-breaker, using code-unit
+comparison rather than locale collation. Duplicate/unknown sort fields are rejected.
+
+The `storage.data` response is:
+
+```ts
+type StoragePage = {
+  items: ProtocolFileMetadata[];
+  totalCount: number; // matches after search, before slicing
+  pageIndex: number; // actual page, clamped to the last valid page
+  pageSize: number;
+  sharingEnabled: boolean;
+};
+```
+
+An empty or denied directory has zero items/count and page index zero. A denied
+response has `sharingEnabled: false` and reveals no underlying count. A request
+re-checks per-peer `provideFileList` every time. This flag also authorizes directory
+fetches; disabling it stops that member's active directory uploads. Explicit chat
+attachment grants remain independent.
+
+Only complete, verified content with a locally enabled sharing flag enters the
+index, once per content identity. IDs refer to independent shared references,
+never original private or room attachment IDs. Each item includes its BLAKE3
+fingerprint. Explicit DTO projection excludes `file`, `chunkCount`, `isComplete`,
+`isShared`, and `isMerging`.
+The browser index is updated by committed cache events; page queries do not flush
+or scan every IndexedDB file database. Query-time CPU still filters/sorts the
+in-memory metadata index; this is not a persistent database pagination index.
+
+### Shared file downloads {#shared-file-downloads}
+
+`request-shared-file` version 1 carries `fid` (shared reference), `fingerprint`,
+`chunkSize`, `transferId` (a fresh `shared-transfer_` UUID for local receive
+storage), optional inclusive `ranges`, and `have`. A `have: true` request checks
+current authorization without opening a binary channel, allowing verified local
+content to be reused. A cache miss sends only `have: false`, combining authorization
+and sender preparation in one request; it does not first probe with `have: true`.
+The receiver creates its binary channel only after this response. A verified
+local copy or a follower of an existing download still requires authorization.
+For `have: false`, the provider creates a read-only transfer alias,
+validates the request against its shared content, and acknowledges setup. Binary
+channels use `<transferId>-0`. New attempts and resumes use fresh control request
+IDs; a resumed task keeps its transfer ID and cached chunks.
+
+Both enumeration and fetching require a current connected member session and
+permission. Fetching also validates the shared reference, fingerprint and chunk
+size. Unsharing or deleting content terminates its directory uploads. Unknown
+IDs, room attachment IDs and private reference IDs cannot be used as shared IDs.
+Legacy `request-file` requires a matching outgoing private message to that peer;
+`resume-file` requires a matching incoming private message. Neither can fetch an
+arbitrary cache. Shared fetches create tasks and local library references on the
+receiver, never chat messages on either peer.
+
+### Directory invalidation {#directory-invalidation}
+
+`storage-changed` is an envelope-only notification. It carries **no payload**:
+no file IDs, metadata, deltas, counts, revisions or sharing state. Receivers
+invalidate their active query and request its current page again with the same
+page size, search and sort. Do not send unsolicited `storage` responses.
+
+The provider coalesces visible directory changes over 100 ms, and does not publish
+chunk progress. It notifies only ready peers permitted to list files. A sharing
+policy change also sends one empty invalidation, including when access is disabled;
+subsequent hidden directory changes do not notify that peer.
+
+`FileCatalogService` owns provider/notification lifetime. `RemoteFileCatalog`
+coordinates one active page: concurrent invalidations coalesce, changes during a
+request force a follow-up query, superseded query responses are discarded, and
+query changes/disposal cancel pending work. Requests retain the standard protocol
+send/reply deadlines. Failures leave an explicit stale/error state; user refresh,
+a later notification, or reconnect can retry. Notifications themselves have no
+receipt or durable delivery guarantee.
+
+A browser directory view fetches pages only while the current route is exactly
+`/client/:id/sync` for its peer (a trailing slash is allowed), the peer is online,
+and its message channel is ready. Leaving that route or losing the connection
+removes the view's subscription and cancels pending work, even if the component
+remains mounted. Notifications elsewhere do not trigger directory queries.
+Reopening the view or recovering the connection always requests a fresh page.
+Disconnected peers show an empty state instead of a stale table; the header's
+client-settings entry remains available. Refresh is beside the table's View control.
+TanStack Table controls pagination,
+search and sorting with `manualPagination`, `manualFiltering`, `manualSorting` and
+remote `rowCount`; it does not re-slice or re-sort each returned page. Search input
+is debounced 250 ms, and search/sort/page-size changes reset to page zero. Provider
+clamping is applied to controlled pagination without issuing a duplicate query.
+Local download state remains a display column, not a remote query filter.
+
+## Notifications {#notifications}
+
+Notifications do not wait for a remote ACK:
+
+- `client-profile`
+- `stream-state`
+- `read-text`
+- `storage-changed` (envelope-only directory invalidation)
+
+```ts
+await protocol.notify(session, "client-profile", {
+  profile: {
+    name: "Alice",
+    avatar: null,
+  },
+});
+
+await protocol.notify(session, "stream-state", {
+  mode: "media",
+  videoSources: [
+    { mid: "0", kind: "camera" },
+    { mid: "2", kind: "screen" },
+  ],
+  audioSources: [
+    { mid: "1", kind: "microphone" },
+    { mid: "3", kind: "screen", videoMid: "2" },
+  ],
+});
+```
+
+`stream-state` carries complete video and audio source snapshots. Both arrays are
+required, including when empty. `videoSources` maps the
+negotiated RTP `mid` of each published video transceiver to `camera` or `screen`.
+`audioSources` identifies each microphone MID or links a shared-audio MID to its
+screen's `videoMid`. An audio MID occurs once and cannot also be a video MID;
+each shared-audio owner must appear as a screen in the same video snapshot.
+The receiver independently records `RTCTrackEvent.transceiver.mid` for each
+local received track and joins the two views by MID; `MediaStreamTrack.id` is not
+used as a wire identity. This keeps the participant/avatar (and microphone
+ownership) separate from shared-screen tiles without depending on track labels
+or event ordering. Video and audio tracks themselves still travel over negotiated
+RTP transceivers. A participant may publish several video tracks at once; receivers
+aggregate tracks from all signaled streams, including streamless tracks.
+Removing one source renegotiates only the changed senders. Local capture tracks
+are borrowed by each peer connection and are stopped only by the application's
+capture owner, so closing a peer or a screen does not stop the remaining
+publications.
+
+Presentation streams attach microphone audio to the participant's camera/avatar
+and each display's audio to its own screen tile. Tile mute affects only that
+source; member mute applies to all that member's sources, including future ones.
+Unmuting one tile after a member mute enables only that tile. Global playback
+mute remains independent. Rendering and source mute never stop capture tracks
+or play the same audio in multiple video elements.
+
+The `client-profile` notification carries
+`P2P_PROFILE_PROTOCOL_VERSION` (currently 1). The historical
+`RTC_PROFILE_PROTOCOL_VERSION` name remains an alias. Profile versioning belongs to
+the wire protocol; profile normalization and UI placeholders remain local client
+policy.
+
+## File-control DTOs {#file-control-dtos}
+
+File control messages carry metadata only. The actual bytes use the separate
+file-transfer protocol.
+
+`send-file` and `request-file` use:
+
+- `fid`: logical file ID
+- `fileName`
+- `fileSize`
+- optional `mimeType`
+- optional `lastModified`
+- `chunkSize`
+
+`request-file` additionally carries:
+
+- `resume`
+- optional chunk ranges, where each item is either one numeric index or an
+  inclusive `[start, end]` pair
+
+`storage.data.items` uses portable metadata with `mimetype`. Browser-only fields such as `File`, cache handles and
+transfer progress are never part of the control protocol.
+
+## Timeouts, cancellation and retries {#timeouts-cancellation-and-retries}
+
+| Option          |   Default | Meaning                                          |
+| --------------- | --------: | ------------------------------------------------ |
+| `sendTimeoutMs` | 10,000 ms | Maximum wait for the transport to accept a send. |
+| `timeoutMs`     |  5,000 ms | Reply deadline after send succeeds.              |
+| `retries`       |         0 | Additional attempts after reply timeout.         |
+| `retryDelayMs`  |    250 ms | Delay before another attempt.                    |
+| `signal`        |      none | Cancels send waiting, reply waiting and retries. |
+
+The application message store does **not** own a second send timeout. Request
+lifetime is owned only by the P2P protocol.
+
+An expired or cancelled unsent request must not be sent later when the transport
+recovers. After a message has already been sent, cancellation cannot undo the
+remote operation.
+
+Retries preserve the exact same frozen payload, ID and timestamp.
+
+## Deduplication and session lifetime {#deduplication-and-session-lifetime}
+
+Requests are scoped to the actual local session handle, not globally to an ID.
+
+Successful request results are retained in a bounded in-memory dedup cache:
+
+- TTL: `PROTOCOL_DEDUP_TTL_MS` (10 minutes)
+- maximum retained entries: `PROTOCOL_DEDUP_MAX_ENTRIES` (512)
+
+A duplicate completed request replays the cached reply rather than rerunning the
+handler. A duplicate received while the first handler is still running does not
+run a second handler.
+
+This is not persistent exactly-once delivery. Reloads, new sessions, dedup
+expiry and process restarts can all allow the operation to run again.
+
+Closing a session immediately rejects its pending calls, aborts handler
+lifetimes and retires that session handle. A reply belonging to a retired
+session cannot settle a replacement session.
+
+## Errors {#errors}
+
+Protocol errors use `P2PProtocolError` and `P2PProtocolErrorCode`,
+exported from the portable protocol module.
+
+Codes:
+
+- `already-pending`
+- `timeout`
+- `send-timeout`
+- `aborted`
+- `closed`
+- `remote-error`
+- `send-failed`
+- `invalid-message`
+
+Invalid timeout/retry configuration raises `RangeError`.
+
+## Validation and trust boundary {#validation-and-trust-boundary}
+
+All incoming network control data must pass
+`validateSessionMessage()`/`parseSessionMessage()` before handlers run.
+
+Validation checks:
+
+- envelope IDs and timestamp
+- sender/target identity against the owning session
+- message-specific payloads
+- numeric file metadata
+- chunk ranges
+- client-profile shape/version
+- storage metadata
+
+The protocol implementation snapshots outgoing request data before retries so
+callers cannot mutate the payload after the first attempt.
+
+## Weblink application integration {#weblink-application-integration}
+
+The portable state machine has no concept of chat history or IndexedDB.
+
+Weblink adds those concerns above the protocol:
+
+- `application/messaging/conversation-messaging-service.ts` is the shared
+  conversation-scoped text/file submission and retry interface. A submission
+  resolves after durable local acceptance and exposes network completion separately.
+  Completion reflects persisted recipient outcomes, including partial room failures.
+  Failure before acceptance creates no message; subsequent delivery failures stay
+  on the original message and retries retain its identity.
+- `application/messaging/peer-messaging-service.ts` maps tracked protocol
+  requests to durable message-history state and handles private text reception.
+  Both private and room receivers persist before ACKing. Failed writes are not
+  cached as successful requests and can be retried. Text requests with conflicting
+  content under the same identity are rejected, including cached request replays.
+- `application/messaging/room-messaging-service.ts` owns room capability
+  negotiation, binding lifetime, recipient snapshots and per-peer receipts.
+- `application/messaging/message-store.ts` owns reactive chat/file history.
+- `application/messaging/conversation-message-store.ts` owns shared durable
+  insertion, duplicate identity checks and ordered receipt/progress writes. Private
+  and room deliveries interrupted by reload become retryable failures; there is no
+  automatic offline replay. Metadata delivery and binary-file completion are distinct.
+- `application/messaging/message-repository.ts` is the persistence port.
+- `infrastructure/storage/indexeddb-message-repository.ts` is the browser
+  persistence adapter.
+- `application/rtc/rtc-service.ts` adapts browser `PeerSession` events to
+  `ProtocolTransport<PeerSession>`.
+- `application/rtc/rtc-protocol.ts` is only the Weblink composition/factory
+  wrapper around the portable `P2PProtocol`.
+
+## Module ownership {#module-ownership}
+
+Portable protocol package:
+
+- `domain/protocol/index.ts`: public export surface.
+- `domain/protocol/messages.ts`: complete wire DTOs and request/ACK policy.
+- `domain/protocol/validation.ts`: network validation and immutable snapshots.
+- `domain/protocol/errors.ts`: portable errors and call options.
+- `domain/protocol/transport.ts`: minimal session/transport ports.
+- `domain/protocol/request-manager.ts`: pending calls, reply matching, dedup and teardown.
+- `domain/protocol/protocol.ts`: generic `P2PProtocol` facade.
+- `domain/protocol/constants.ts`: protocol-owned bounds.
+
+WebRTC adapter:
+
+- `domain/session-send-queue.ts`: browser DataChannel queue; not portable protocol.
+- `application/rtc/rtc-service.ts`: PeerSession transport adapter.
+- `application/rtc/rtc-protocol.ts`: Weblink singleton composition.
+
+## Cross-client implementation checklist {#cross-client-implementation-checklist}
+
+A non-Web client should:
+
+1. Use the same JSON field names and message discriminators.
+2. Validate `client` and `target` against the owning peer session.
+3. Preserve request `id`, `createdAt` and payload across retries.
+4. Implement the ACK modes exactly as `requestSpec` defines them.
+5. Treat `request-storage` as a typed response flow, not a generic ACK.
+6. Deduplicate completed requests within a bounded session-local cache.
+7. Abort pending calls when its peer session closes/replaces.
+8. Keep file bytes and speed-test traffic outside the control message stream.
+9. Keep local message/UI/persistence fields out of the wire envelope.
+10. Treat signaling as a separate rendezvous protocol.
+
+## Testing {#testing}
+
+Protocol unit/integration coverage and the real-Chromium DataChannel smoke test
+are documented in [TESTING.md](../development/testing.md). Keep portable contract behavior in
+unit/integration tests; use the browser E2E smoke only for behavior that depends
+on a real RTCDataChannel.

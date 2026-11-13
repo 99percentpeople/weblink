@@ -1,0 +1,405 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 676"
+  lang="zh-CN"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">媒体传输与录制通路</title>
+  <desc id="desc">
+    采集内容经过编码和
+    WebRTC，由接收方解码呈现。录制根据实际来源选择浏览器录制器或编码包封装器，两者均通过有界存储写入，停止时完成输出文件。
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="674"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    媒体传输与录制通路
+  </text>
+  <path
+    class="edge data"
+    d="M280 140L325 140"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 140L620 140"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M155 184L155 284"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M450 184L450 284"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M155 372V416H450V456"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M450 372V456"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 498L620 498"
+    marker-end="url(#data-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="96" width="250" height="88" rx="12" />
+    <text
+      x="155"
+      y="134"
+      class="node-title"
+      text-anchor="middle"
+    >
+      采集
+    </text>
+    <text
+      x="155"
+      y="158"
+      class="detail"
+      text-anchor="middle"
+    >
+      摄像头 / 麦克风 / 屏幕
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="96" width="250" height="88" rx="12" />
+    <text
+      x="450"
+      y="134"
+      class="node-title"
+      text-anchor="middle"
+    >
+      编码与 WebRTC
+    </text>
+    <text
+      x="450"
+      y="158"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP：直连或 TURN
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="96" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="134"
+      class="node-title"
+      text-anchor="middle"
+    >
+      解码与呈现
+    </text>
+    <text
+      x="745"
+      y="158"
+      class="detail"
+      text-anchor="middle"
+    >
+      接收端需支持相应编码
+    </text>
+  </g>
+  <text x="155" y="248" class="label" text-anchor="middle">
+    浏览器 API 通路
+  </text>
+  <text x="450" y="248" class="label" text-anchor="middle">
+    可以获取编码包时
+  </text>
+  <g class="node">
+    <rect x="30" y="284" width="250" height="88" rx="12" />
+    <text
+      x="155"
+      y="322"
+      class="node-title"
+      text-anchor="middle"
+    >
+      浏览器录制器
+    </text>
+    <text
+      x="155"
+      y="346"
+      class="detail"
+      text-anchor="middle"
+    >
+      MediaRecorder
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="284" width="250" height="88" rx="12" />
+    <text
+      x="450"
+      y="322"
+      class="node-title"
+      text-anchor="middle"
+    >
+      编码包录制器
+    </text>
+    <text
+      x="450"
+      y="346"
+      class="detail"
+      text-anchor="middle"
+    >
+      保留原编码并封装
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="620" y="284" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="322"
+      class="detail"
+      text-anchor="middle"
+    >
+      封装不等于转码。
+    </text>
+    <text
+      x="745"
+      y="346"
+      class="detail"
+      text-anchor="middle"
+    >
+      容器需适配实际编码。
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="456" width="250" height="84" rx="12" />
+    <text
+      x="450"
+      y="492"
+      class="node-title"
+      text-anchor="middle"
+    >
+      有界 VFS 写入
+    </text>
+    <text
+      x="450"
+      y="516"
+      class="detail"
+      text-anchor="middle"
+    >
+      保持原有存储挂载点
+    </text>
+  </g>
+  <g class="node success">
+    <rect x="620" y="456" width="250" height="84" rx="12" />
+    <text
+      x="745"
+      y="492"
+      class="node-title"
+      text-anchor="middle"
+    >
+      停止后收尾
+    </text>
+    <text
+      x="745"
+      y="516"
+      class="detail"
+      text-anchor="middle"
+    >
+      发布完整录制文件
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="584" width="836" height="66" rx="12" />
+    <text
+      x="450"
+      y="611"
+      class="detail"
+      text-anchor="middle"
+    >
+      每次录制跟随一个视频来源及其关联音频。
+    </text>
+    <text
+      x="450"
+      y="635"
+      class="detail"
+      text-anchor="middle"
+    >
+      浏览器录制器与编码包录制器是按来源选择的不同通路。
+    </text>
+  </g>
+</svg>

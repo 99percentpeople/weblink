@@ -1,0 +1,402 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 812"
+  lang="zh-CN"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">从身份验证到操作授权</title>
+  <desc id="desc">
+    新连接先通过身份签名或经过验证的配对密钥恢复进行认证。成功的信任决定先持久化，再应用权限；无效身份证明会隔离关系，显式配对可修复。具体操作仍需有作用范围的权限。
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="810"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    从身份验证到操作授权
+  </text>
+  <path
+    class="edge control"
+    d="M450 150L450 195"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M320 240H155V325"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M580 240H745V325"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M155 413L155 610"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 413L745 468"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M620 512H450V369H280"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M280 654L325 654"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M575 654L620 654"
+    marker-end="url(#control-arrow)"
+  />
+  <g class="node">
+    <rect x="305" y="76" width="290" height="74" rx="12" />
+    <text
+      x="450"
+      y="107"
+      class="node-title"
+      text-anchor="middle"
+    >
+      当前连接的证明
+    </text>
+    <text
+      x="450"
+      y="131"
+      class="detail"
+      text-anchor="middle"
+    >
+      身份验证 / 配对密钥恢复
+    </text>
+  </g>
+  <g class="node decision">
+    <path d="M450 195L580 240L450 285L320 240Z" />
+    <text
+      x="450"
+      y="246"
+      class="node-title"
+      text-anchor="middle"
+    >
+      身份验证通过？
+    </text>
+  </g>
+  <text x="220" y="226" class="label" text-anchor="middle">
+    通过验证
+  </text>
+  <text x="682" y="226" class="label" text-anchor="middle">
+    证明无效
+  </text>
+  <g class="node success">
+    <rect x="30" y="325" width="250" height="88" rx="12" />
+    <text
+      x="155"
+      y="363"
+      class="node-title"
+      text-anchor="middle"
+    >
+      保存信任决定
+    </text>
+    <text
+      x="155"
+      y="387"
+      class="detail"
+      text-anchor="middle"
+    >
+      已验证的密钥与绑定
+    </text>
+  </g>
+  <g class="node warning">
+    <rect x="620" y="325" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="363"
+      class="node-title"
+      text-anchor="middle"
+    >
+      不可信 / 隔离
+    </text>
+    <text
+      x="745"
+      y="387"
+      class="detail"
+      text-anchor="middle"
+    >
+      取消受保护活动
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="468" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="506"
+      class="node-title"
+      text-anchor="middle"
+    >
+      手动配对
+    </text>
+    <text
+      x="745"
+      y="530"
+      class="detail"
+      text-anchor="middle"
+    >
+      确认当前连接的身份
+    </text>
+  </g>
+  <text x="360" y="354" class="label" text-anchor="middle">
+    双方明确确认
+  </text>
+  <text x="174" y="519" class="label" text-anchor="start">
+    保存成功
+  </text>
+  <text x="745" y="584" class="detail" text-anchor="middle">
+    拒绝或过期：继续保持不可信
+  </text>
+  <g class="node">
+    <rect x="30" y="610" width="250" height="88" rx="12" />
+    <text
+      x="155"
+      y="648"
+      class="node-title"
+      text-anchor="middle"
+    >
+      检查操作权限
+    </text>
+    <text
+      x="155"
+      y="672"
+      class="detail"
+      text-anchor="middle"
+    >
+      按需询问批准
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="610" width="250" height="88" rx="12" />
+    <text
+      x="450"
+      y="648"
+      class="node-title"
+      text-anchor="middle"
+    >
+      限定授权范围
+    </text>
+    <text
+      x="450"
+      y="672"
+      class="detail"
+      text-anchor="middle"
+    >
+      设备 + 来源 + 有效期
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="610" width="250" height="88" rx="12" />
+    <text
+      x="745"
+      y="648"
+      class="node-title"
+      text-anchor="middle"
+    >
+      执行操作
+    </text>
+    <text
+      x="745"
+      y="672"
+      class="detail"
+      text-anchor="middle"
+    >
+      撤销或断开后停止
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="733" width="836" height="54" rx="12" />
+    <text
+      x="450"
+      y="766"
+      class="detail"
+      text-anchor="middle"
+    >
+      普通传输超时只撤回实时访问权，不会因此隔离已记住的身份。
+    </text>
+  </g>
+</svg>

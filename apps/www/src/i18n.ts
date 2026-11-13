@@ -105,6 +105,18 @@ export function setupLanguage(signal: AbortSignal): I18n {
           );
       }
     }
+    const docsBase = new URL(
+      locale.startsWith("zh-") ? "zh/" : "",
+      import.meta.env.VITE_DOCS_URL,
+    );
+    for (const link of document.querySelectorAll<HTMLAnchorElement>(
+      "a[data-docs-path]",
+    )) {
+      link.href = new URL(
+        link.dataset.docsPath ?? "",
+        docsBase,
+      ).href;
+    }
     const name =
       preference === "system"
         ? i18n.t("theme.system")

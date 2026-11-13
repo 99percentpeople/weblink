@@ -1,0 +1,449 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 784"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Commit, recover, and publish a file
+  </title>
+  <desc id="desc">
+    The receiver commits payload bytes before recording a
+    chunk checkpoint. On reopening, storage verifies
+    checkpoints and requests missing chunks. Complete
+    content is verified before publication. Failed
+    verification or publication retains partial data.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="782"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Commit, recover, and publish a file
+  </text>
+  <path
+    class="edge data"
+    d="M205 166L205 224"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M205 294L205 352"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M205 422L205 480"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M205 550L205 608"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M325 259L545 259"
+    marker-end="url(#retry-arrow)"
+  />
+  <text x="435" y="247" class="label" text-anchor="middle">
+    Crash / reopen
+  </text>
+  <path
+    class="edge retry"
+    d="M685 294L685 352"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M685 422L685 480"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M825 515H855V131H325"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M325 515H400V643H545"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M325 643L545 643"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="435" y="631" class="label" text-anchor="middle">
+    Publication failed
+  </text>
+  <g class="node accent">
+    <rect x="85" y="96" width="240" height="70" rx="12" />
+    <text
+      x="205"
+      y="125"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Receive chunk
+    </text>
+    <text
+      x="205"
+      y="149"
+      class="detail"
+      text-anchor="middle"
+    >
+      Original file bytes
+    </text>
+  </g>
+  <g class="node">
+    <rect x="85" y="224" width="240" height="70" rx="12" />
+    <text
+      x="205"
+      y="253"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Commit payload
+    </text>
+    <text
+      x="205"
+      y="277"
+      class="detail"
+      text-anchor="middle"
+    >
+      Write at the chunk offset
+    </text>
+  </g>
+  <g class="node success">
+    <rect x="85" y="352" width="240" height="70" rx="12" />
+    <text
+      x="205"
+      y="381"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Commit checkpoint
+    </text>
+    <text
+      x="205"
+      y="405"
+      class="detail"
+      text-anchor="middle"
+    >
+      Index + BLAKE3 digest
+    </text>
+  </g>
+  <g class="node">
+    <rect x="85" y="480" width="240" height="70" rx="12" />
+    <text
+      x="205"
+      y="509"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Verify full content
+    </text>
+    <text
+      x="205"
+      y="533"
+      class="detail"
+      text-anchor="middle"
+    >
+      Compare expected fingerprint
+    </text>
+  </g>
+  <g class="node success">
+    <rect x="85" y="608" width="240" height="70" rx="12" />
+    <text
+      x="205"
+      y="637"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Publish complete file
+    </text>
+    <text
+      x="205"
+      y="661"
+      class="detail"
+      text-anchor="middle"
+    >
+      Finalize name + metadata
+    </text>
+  </g>
+  <g class="node">
+    <rect x="545" y="224" width="280" height="70" rx="12" />
+    <text
+      x="685"
+      y="253"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Open the partial file
+    </text>
+    <text
+      x="685"
+      y="277"
+      class="detail"
+      text-anchor="middle"
+    >
+      Read metadata + footer
+    </text>
+  </g>
+  <g class="node">
+    <rect x="545" y="352" width="280" height="70" rx="12" />
+    <text
+      x="685"
+      y="381"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Verify checkpoint digests
+    </text>
+    <text
+      x="685"
+      y="405"
+      class="detail"
+      text-anchor="middle"
+    >
+      Compare with actual bytes
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="545" y="480" width="280" height="70" rx="12" />
+    <text
+      x="685"
+      y="509"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Request missing chunks
+    </text>
+    <text
+      x="685"
+      y="533"
+      class="detail"
+      text-anchor="middle"
+    >
+      Reuse verified chunks only
+    </text>
+  </g>
+  <g class="node warning">
+    <rect x="545" y="608" width="280" height="70" rx="12" />
+    <text
+      x="685"
+      y="637"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Retain partial data
+    </text>
+    <text
+      x="685"
+      y="661"
+      class="detail"
+      text-anchor="middle"
+    >
+      Retry verification / publication
+    </text>
+  </g>
+  <text x="587" y="115" class="label" text-anchor="middle">
+    Continue receiving missing chunks
+  </text>
+  <text x="228" y="458" class="label" text-anchor="start">
+    All chunks available
+  </text>
+  <text x="228" y="585" class="label" text-anchor="start">
+    Verified
+  </text>
+  <text x="417" y="589" class="label" text-anchor="start">
+    Failure
+  </text>
+  <g class="node note">
+    <rect x="32" y="718" width="836" height="42" rx="12" />
+    <text
+      x="450"
+      y="745"
+      class="detail"
+      text-anchor="middle"
+    >
+      Uncheckpointed bytes and preallocated space do not
+      count as resume progress.
+    </text>
+  </g>
+</svg>

@@ -1,0 +1,417 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 780"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Room handshake and reconnect</title>
+  <desc id="desc">
+    A client joins signaling, receives the join
+    acknowledgment before members and cached signals, then
+    negotiates with another client. WebRTC content bypasses
+    signaling. A resumed connection retains healthy peers; a
+    fresh join retires old peer state.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="778"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Room handshake and reconnect
+  </text>
+  <path class="lifeline" d="M140 132V468" />
+  <path class="lifeline" d="M450 132V468" />
+  <path class="lifeline" d="M760 132V468" />
+  <g class="node">
+    <rect x="35" y="68" width="210" height="64" rx="12" />
+    <text
+      x="140"
+      y="94"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Client A
+    </text>
+    <text
+      x="140"
+      y="118"
+      class="detail"
+      text-anchor="middle"
+    >
+      Joining / reconnecting
+    </text>
+  </g>
+  <g class="node">
+    <rect x="345" y="68" width="210" height="64" rx="12" />
+    <text
+      x="450"
+      y="94"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Signaling
+    </text>
+    <text
+      x="450"
+      y="118"
+      class="detail"
+      text-anchor="middle"
+    >
+      Server / Worker
+    </text>
+  </g>
+  <g class="node">
+    <rect x="655" y="68" width="210" height="64" rx="12" />
+    <text
+      x="760"
+      y="94"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Client B
+    </text>
+    <text
+      x="760"
+      y="118"
+      class="detail"
+      text-anchor="middle"
+    >
+      Already in the room
+    </text>
+  </g>
+  <path
+    class="edge control"
+    d="M140 178L450 178"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="166" class="label" text-anchor="middle">
+    1 · Open WS / WSS
+  </text>
+  <path
+    class="edge control"
+    d="M450 222L140 222"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="210" class="label" text-anchor="middle">
+    2 · connected
+  </text>
+  <path
+    class="edge control"
+    d="M140 266L450 266"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="254" class="label" text-anchor="middle">
+    3 · join (+ identity proof)
+  </text>
+  <path
+    class="edge control"
+    d="M450 310L140 310"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="298" class="label" text-anchor="middle">
+    4 · joined · resumed: true / false
+  </text>
+  <path
+    class="edge control"
+    d="M450 354L140 354"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="342" class="label" text-anchor="middle">
+    5 · Members + cached signals
+  </text>
+  <path
+    class="edge control"
+    d="M140 398L450 398"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="386" class="label" text-anchor="middle">
+    offer / ICE
+  </text>
+  <path
+    class="edge control"
+    d="M450 398L760 398"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="605" y="386" class="label" text-anchor="middle">
+    Forward to B
+  </text>
+  <path
+    class="edge control"
+    d="M760 442L450 442"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="605" y="430" class="label" text-anchor="middle">
+    answer / ICE
+  </text>
+  <path
+    class="edge control"
+    d="M450 442L140 442"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="430" class="label" text-anchor="middle">
+    Forward to A
+  </text>
+  <path
+    class="edge data"
+    d="M140 506L760 506"
+    marker-end="url(#data-arrow)"
+    marker-start="url(#data-arrow)"
+  />
+  <text x="450" y="494" class="label" text-anchor="middle">
+    After pairing: WebRTC content
+  </text>
+  <rect
+    class="panel"
+    x="32"
+    y="550"
+    width="836"
+    height="184"
+    rx="12"
+  />
+  <text
+    x="450"
+    y="580"
+    class="section"
+    text-anchor="middle"
+  >
+    When signaling reconnects
+  </text>
+  <g class="node success">
+    <rect x="54" y="603" width="375" height="106" rx="12" />
+    <text
+      x="241.5"
+      y="638"
+      class="node-title"
+      text-anchor="middle"
+    >
+      resumed: true
+    </text>
+    <text
+      x="241.5"
+      y="662"
+      class="detail"
+      text-anchor="middle"
+    >
+      Keep healthy peer connections
+    </text>
+    <text
+      x="241.5"
+      y="686"
+      class="detail"
+      text-anchor="middle"
+    >
+      Recover failed connections
+    </text>
+  </g>
+  <g class="node accent">
+    <rect
+      x="471"
+      y="603"
+      width="375"
+      height="106"
+      rx="12"
+    />
+    <text
+      x="658.5"
+      y="638"
+      class="node-title"
+      text-anchor="middle"
+    >
+      resumed: false
+    </text>
+    <text
+      x="658.5"
+      y="662"
+      class="detail"
+      text-anchor="middle"
+    >
+      Retire old peer state
+    </text>
+    <text
+      x="658.5"
+      y="686"
+      class="detail"
+      text-anchor="middle"
+    >
+      Apply the fresh member roster
+    </text>
+  </g>
+  <text x="450" y="759" class="detail" text-anchor="middle">
+    The signaling cache retains negotiation, not offline
+    chat or file content.
+  </text>
+</svg>

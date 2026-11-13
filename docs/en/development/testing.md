@@ -1,0 +1,531 @@
+# Testing
+
+Weblink separates correctness tests by **test boundary**, not by implementation
+feature. The goal is to keep fast deterministic feedback separate from real-browser
+smoke coverage and from performance measurements.
+
+Run the commands below from the repository root; they delegate to `apps/web`
+so existing test/configuration-relative paths retain their meaning. Application
+test and script paths in this document are relative to `apps/web/`.
+The two server submodules have separate dependencies and checks; see
+[WORKSPACE.md](workspace.md).
+
+Visual appearance is reviewed manually. Keep new UI tests focused on behavior,
+permissions, state transitions and resource cleanup. Avoid new screenshot or
+CSS geometry assertions for routine layout and styling changes.
+
+## Test layers {#test-layers}
+
+### Unit tests {#unit-tests}
+
+Location: `test/unit/`
+
+Unit tests exercise one module or one small contract in isolation. They should
+prefer plain values, fakes and injected dependencies over browser/network
+orchestration.
+
+Typical subjects:
+
+- protocol parsers and codecs
+- pure projections and utilities
+- isolated domain controllers
+- individual application services with injected fakes
+- local stream and ICE diagnostic policy
+- binary packet layout and validation
+
+Run:
+
+```sh
+bun run test:unit
+```
+
+A unit test should not require a real `RTCPeerConnection`, IndexedDB transaction,
+module Worker or rendered multi-component application flow.
+
+### Integration tests {#integration-tests}
+
+Location: `test/integration/`
+
+Integration tests exercise multiple Weblink modules together. They may use jsdom,
+Solid rendering, fake RTC transports/channels, reactive stores or in-memory
+repositories, but remain deterministic and process-local.
+
+Typical subjects:
+
+- room/session lifecycle ownership
+- typed P2P request/reply flows
+- messaging + message-store integration
+- file-transfer service + registry behavior
+- task state derived from messages/transfers
+- rendered dialogs/settings/components
+- signaling client lifecycle with fake WebSockets
+- speed-test service behavior over paired fake channels
+
+Run:
+
+```sh
+bun run test:integration
+```
+
+Shared test fakes live in `test/support/`.
+Device permission and pairing UI tests use `createPeerTrustMock` from
+`test/support/peer-trust.ts`. It implements the public service contract so API
+changes fail type-checking instead of leaving incomplete, untyped UI doubles.
+Message-store tests use `createMessageRepository` from
+`test/support/message-repository.ts`. Its default writes serialize and clone
+records, and reads return independent values. Override methods only for deliberate
+failure, delay or legacy-load scenarios. The same repository value contract runs
+against this fixture and real Chromium IndexedDB; no-op write mocks cannot verify
+reactive model serialization.
+
+The default correctness suite runs both unit and integration tests:
+
+```sh
+bun run test
+```
+
+CI runs unit and integration as separate steps so a failure clearly identifies
+the affected boundary. Vitest runs under Node 24, including when invoked by Bun;
+CI selects it before checks so `structuredClone(File)` preserves file metadata
+in fake IndexedDB. Real Chromium migration coverage verifies the browser contract.
+The shared Checks job runs web/desktop TypeScript checks,
+desktop adapter tests, and Chromium cache migration, conversation storage and private messaging
+regressions once. Development web deployment and the Windows development build depend on
+that job. `web-dev.yml`, `web-production.yml`, `desktop-dev.yml`, and
+`desktop-production.yml` are reusable workflows called by `ci.yml`; development
+runs on `public` pushes, desktop development also validates pull requests, and
+production runs on stable version tags. The Windows development job runs Rust
+formatting and native tests before building its executable. Stable tag releases
+validate release metadata and build production artifacts without rerunning these
+suites or compiling full-LTO test binaries; validate the commit in branch CI first.
+The development drag/drop check runs the exact test executable reported by
+Cargo's build metadata, without starting another Cargo build.
+
+For local iteration, run the affected tests first and use CI for the complete
+cross-platform checks. Re-run unchanged layers only when failures or changes
+justify it. The updater's loopback HTTP fixture is a standard-library-only Rust
+module at `apps/desktop/src-tauri/src/updates/test_http.rs` (repository-relative).
+It can run with `rustc --test` without compiling Tauri or the media crates.
+Windows development CI checks it before the native build; Cargo also includes
+it in the normal suite. Socket tests explicitly control blocking mode, handle fragmented
+requests, and use bounded I/O. HTTP clients for local fixtures disable proxies
+without mutating process-wide proxy settings.
+
+Native job lifecycle tests compile one small standard-library-only child process
+on demand and share it across the suite. They exercise real pipes, exit codes,
+timeouts and process cancellation without repeatedly starting PowerShell.
+A separate real-Shell smoke test covers script execution. On Windows it is
+opt-in because PowerShell/CLR cold startup depends on the host image and load;
+Unix keeps the smoke in the default suite. To run the Windows smoke explicitly:
+
+```sh
+cargo test --locked -p weblink-desktop --lib automation::jobs::tests::real_shell_executes_scripts_and_captures_output -- --exact --ignored --nocapture
+```
+
+Default correctness tests should assert event ordering, ownership and cleanup instead
+of interpreter startup speed, GPU latency or a fixed number of idle status reads.
+Use completion notifications to synchronize workers. Timeouts bound deadlocks and
+test cleanup; host-dependent performance measurements and Windows Shell smoke
+checks stay opt-in.
+The idle-host measurement remains available as `idle_host_status_reads`.
+
+### Browser E2E smoke tests {#browser-e2e-smoke-tests}
+
+Location: `test/e2e/smoke/`
+
+These checks launch a disposable headless Chromium profile through CDP and a local
+Vite server. They exercise real browser primitives that jsdom/fakes cannot prove:
+
+- actual `RTCPeerConnection` and `RTCDataChannel`
+- real IndexedDB
+- real module Workers
+- compression/decompression workers
+- rendered task/diagnostic UI in Chromium
+- chat scrollports, layout-driven bottom following and reading anchors
+
+They are **smoke tests**, not the primary exhaustive regression suite. Each one
+covers a high-value end-to-end subsystem path with a small number of scenarios.
+
+`node apps/web/scripts/run-messaging-check.mjs` (from the repository root) launches
+the real app and Bun signaling server on temporary local ports, plus two isolated
+Chromium contexts. It verifies automatic first pairing, trusted ready channels
+and default content reception through the application service. It checks private text/file
+sending with empty history and again after reloading persisted history, including
+automatic trust/permission restoration, room membership, receipts, draft clearing
+and downloaded file contents. It requires Node 22+, Bun and
+Chromium (`CHROMIUM_PATH` can select the browser). Profiles, Vite caches and server
+processes are disposable; it does not connect to a deployed signaling service.
+
+`bun run test:e2e:hmr` also requires `rsync`. It copies the app to a temporary
+receiving workspace and runs the real composition with two Chromium clients,
+local signaling, camera and microphone capture. Batched view sync must preserve
+the application owner, room, tracks and connected peers while RTP continues.
+Context and view definitions arriving together must rebuild through the native
+entry dependency without missing-context errors. It also checks root disposal
+and keeps the source workspace unchanged.
+
+`bun run test:e2e:clipboard` checks standard text clipboard interoperability in Chromium.
+It starts a promised write from Ctrl+C, delays the data beyond transient activation,
+and verifies Unicode text and line breaks using a real Ctrl+V paste event, with no
+custom formats. The disposable browser context receives clipboard permissions for
+the local test origin.
+`bun run test:e2e:clipboard-cache` covers copying a multi-chunk remote file into File
+cache through real WebRTC data channels, compression/fingerprint Workers, VFS caches and
+IndexedDB. It resets the controller input epoch after 8 MiB has arrived, then
+verifies every byte of the 12 MiB file and successful completion on both peers. It also
+transfers the file in the opposite direction through RemoteFileDrop, checking native
+adapter arguments and completion after application. This browser test uses a native
+adapter fixture; the opt-in Rust `file_drop::windows::tests` test exercises real OLE
+across two STA threads, verifies CF_HDROP file bytes and confirms no clipboard mutation.
+The native test opens its own temporary target window and moves/restores the pointer.
+
+`node scripts/run-browser-check.mjs --transfer --legacy-abort` runs the file
+workflow with `AbortSignal.any` unavailable, as on Safari 16 through 17.3. This
+checks the API compatibility path; it does not substitute for iPhone testing.
+
+Commands:
+
+```sh
+bun run test:e2e:protocol
+bun run test:e2e:recovery
+bun run test:e2e:native-screen
+bun run test:e2e:playback
+bun run test:e2e:transfer
+bun run test:e2e:cache
+bun run test:e2e:tasks
+bun run test:e2e:chat
+bun run test:e2e:conversations
+bun run test:e2e:meeting
+bun run test:e2e:hmr
+bun run test:e2e:speed
+```
+
+`test:e2e:cache` checks VFS page storage and automatic migration of old per-file
+IndexedDB databases, including partial resume, source sealing, blocked deletion,
+publication rollback and checksum failures. Unit migration tests cover quota
+failure, interruption, destination conflicts and restart recovery. Toast tests
+cover startup replay, progress, blocked connections and retained failure details.
+
+`test:e2e:recovery` uses Node 22+ and Chromium to exercise interrupted initial
+negotiation, repeated simultaneous peer recovery, forced colliding SDP offers,
+and camera/screen/audio RTP after reconnect. Signaling outages are controlled
+in-process; SDP, ICE, decoded video frames, audio packets and data channels are
+real browser transports. It also verifies that leaving/rejoining reuses local
+capture without reopening a stopped camera.
+
+`test:e2e:native-screen` exercises native publication signaling and decoded RTP
+with an unreachable STUN endpoint: share before/after joining, both negotiation
+roles and stop/restart without rebuilding the room connection. It substitutes a
+browser sender for the native host. Windows capture-crate tests independently
+check actual libwebrtc trickle ICE and isolation of preview frame-rate adaptation.
+It also checks stream-statistics routing and overlay polling/toggle lifetimes
+against decoded browser RTP. Windows tests verify software and MF encoder counters;
+MF processing time must come from the transform rather than the RTP passthrough.
+Windows `encoding_pool::tests` cover concurrent sharing, bitrate split/merge,
+stable output ports, recording ownership, live settings and stale lease cleanup.
+`shared_encoder_survives_viewer_churn_and_recording_owns_the_last_lease` is an
+explicitly ignored hardware test: run it with `--ignored --nocapture --test-threads=1`
+on Windows with an H.264 encoder. It uses synthetic frames and local WebRTC
+receivers to verify shared encoding, continued decoding and recording after every
+viewer leaves, and a returning viewer. The capture-audio recording test separately
+checks audio continuity after the viewer exits. These do not prove all GPU drivers.
+The opt-in `late_join_headers_and_fresh_decoders` test requires FFmpeg and
+`WEBLINK_LATE_JOIN_PROBE_DIR`. It checks late keyframe parameter sets and fresh
+decoding for AVC/HEVC, including memory fallback. AVC additionally uses local RTP
+receivers to check static startup, delayed answers and live settings. HEVC checks
+do not establish browser RTP playback. `static_join_timeline` writes encoder,
+sender and receiver events to `WEBLINK_STARTUP_PROBE_DIR`; `WEBLINK_STARTUP_LOG=1`
+also enables filtered WebRTC startup logs for diagnosing which stage is delayed.
+It checks direct pass-through startup and a keyframe in the first transmitted
+video frames. Static joins must reuse both capture pixels and converted buffers;
+keyframe demand remains subject to the configured FPS limit.
+The Windows `media_self_test` example accepts `--scene-burst` to exercise a
+moving texture in its own window, controlled by the exchange directory's `motion`
+file. Use native capture and decoded browser RTP together when checking scene-cut
+bitrate recovery; publication smoke tests do not measure native encoder performance.
+
+`test:e2e:native-screen` also sends a synthetic camera and microphone alongside
+a shared screen, then stops the camera and checks that voice and chat continue.
+The browser run substitutes a WebRTC receiver for the native adapter. In a
+Windows desktop dev WebView, `/test/e2e/smoke/native-screen.html?single-room`
+checks the connection count, two video tracks, microphone playback, native GPU
+presentation and binary SCTP across renegotiation. Add `&mixed` for a browser
+sender, `&web-viewer` for a browser receiver or `&polite` to reverse the
+negotiation initiator. Keep the test window unminimized. The optional
+`&fixture-window` case captures only the window named
+`Weblink Room Transport Test Pattern` and checks concurrent native screen video.
+With `&web-viewer&legacy&fixture-window`, the viewer omits `roomTransport/1`.
+Camera, microphone and data still work, and the host must open zero screen senders.
+
+`test:e2e:playback` uses Node 22+ and Chromium with the actual video component
+and received RTP. It checks deferred source attachment, interrupted playback,
+visibility/presentation recovery, borrowed-track cleanup, and continuous playback
+in grid and pinned meeting views while unrelated participants join, update and leave.
+The codec lifecycle integration checks cover per-receiver format selection, mixed
+H.265/H.264 viewers and delayed native encoder retirement without restarting other peers.
+Native PiP return
+events are simulated; it does not establish iPhone Safari rendering correctness.
+
+`test:e2e:protocol` also covers three independent room-chat protocol instances
+over real unordered mesh DataChannels, including partial delivery, connection
+replacement and idempotent retry. It also checks simultaneous synthetic video
+sources, microphone audio and shared audio over real RTP connections, then removes
+individual sources without interrupting retained tracks. It does not simulate
+physical devices or NAT.
+
+`test:e2e:transfer` covers concurrent private transfers and partial-download
+resume, then exercises three room-file service instances over real unordered
+control DataChannels. Offers must create neither receiver caches nor binary
+channels before an explicit download. Two recipients download independently and
+compare their complete files byte-for-byte using SHA-256. The provider's room
+cache must survive the first download even with automatic cache deletion enabled;
+legacy private request/resume messages must not bypass room authorization. The
+check also verifies separate download request IDs, per-recipient transfer state
+and absence of private-history projections. File caches use real, separately
+namespaced IndexedDB databases and real compression/decompression Workers.
+This fixture keeps message histories in memory and does not render the download
+button: UI interaction and durable message-store reloads have separate tests.
+The same transfer smoke covers shared-directory pulls between two peers, local
+content reuse without binary channels, pause/resume with byte comparison,
+cancellation that closes both peers' active channels and allows a new download,
+permission revocation, forged IDs, legacy request denial and absence of new chat
+messages. Sidebar integration tests cover member selection, 50-item pagination,
+search/sort, multi-select fetching, refresh retention, task cancellation,
+visibility cleanup and late responses.
+The room transfer fixture uses application-default transfer settings and
+negotiates a 32 KiB SCTP message limit. The complete binary packet, including its
+seven-byte header, must fit that budget; both manual recipients must receive
+byte-identical files without closing the chat channel.
+
+`test:e2e:conversations` uses real IndexedDB to check the v1-to-v2 migration,
+conversation isolation, persisted labels/read cursors, interrupted delivery
+recovery and deletion. `test:e2e:meeting` renders the actual meeting and chat UI,
+with a local message repository and synthetic media tracks; external signaling
+and network message delivery are replaced in that UI check. It uses the app's
+height constraints and long room/private histories to check internal scrolling,
+viewport overflow and the fixed position of the bottom controls.
+The meeting conversation list lives in the right panel's Conversations tab;
+selecting private or room history switches to Chat without replacing the stage
+or leaving the meeting. Checks cover four-tab keyboard navigation, combined
+search/label filtering, grouping and narrow-screen panel containment.
+Room dialog checks open settings from the group header, verify that capability
+notices are absent from the composer, and select devices without starting
+capture, including while a camera, muted microphone and shared screens are live.
+Settings contain no capture switches and preserve existing track identities and
+enabled states. The toolbar must reflect those preferences after closing the
+dialog. Media-controller tests verify applying a preference on the next activation,
+retrying a failed activation and discarding stale pending capture results.
+Device-access checks open the device tab directly from the right header, distinguish
+missing permission from blocked or absent devices, and refresh after permission
+changes. Granting access stops temporary tracks and never publishes them or touches
+existing meeting media. Tests cover native speaker selection, the microphone-based
+fallback, unsupported permission queries, dismissed prompts and late capture after
+disposal. Browser checks use deterministic permission APIs and synthetic media;
+they validate application behavior rather than a browser's native permission UI.
+Historical-room settings cannot edit the current meeting. Device APIs still use
+fixtures and synthetic tracks; these checks do not validate physical hardware.
+Room media checks render a sender's local image immediately, leave incoming
+images as metadata until requested, then verify the received image loads.
+Private and room views open and close real PhotoSwipe galleries and verify the
+active attachment's download link. Media checks compare thumbnail pixel geometry
+with PhotoSwipe transition bounds, verify hash updates and Back/Forward behavior,
+and mount an older-history deep link before local cache hydration. Room checks
+also decode a generated WebM video inside PhotoSwipe and WAV audio in native controls. File-card component tests
+cover the shared MIME-specific presentation, object-URL cleanup, circular progress,
+pause/resume dispatch for both conversation types and per-recipient room state,
+without issuing implicit transfers. The sender's details dialog keeps large recipient
+lists internally scrollable and updates progress while open without expanding its
+message bubble or initiating a transfer. Browser checks also compare the file-card
+height before, during and after a transfer to catch extra speed rows.
+Focus-layout checks cover a short viewport and many thumbnails; only the
+thumbnail rail scrolls. All grid, focused and thumbnail frames must retain 16:9
+geometry. Grid checks repeatedly resize the stage's container (without a window
+resize), add/remove sources, and restore side panels; tiles must stay inside the
+available width and height and column sizes must settle without observer loops.
+Unit checks cover column-boundary jitter, coalescing resize bursts, one observer
+per grid, hidden-container recovery and cancellation during unmount.
+The right header's sharing status and stop action must fit narrow
+viewports, including a long presenter name. Media controls use a camera and two shared
+screens, including stopping the pinned source and retaining the other captures.
+Screen-picker checks require optional audio to be requested and published alongside
+each screen, independently of microphone mute/device changes. Stopping one or all
+screens must release the corresponding audio. Unit checks also cover the browser's
+native stop event, audio-only termination, capture without audio, invalid capture
+cleanup and late permission results. The picker itself uses synthetic tracks in
+automation; these checks do not validate native chooser options or OS audio capture.
+Device-selection checks use enumerated fixture devices and capture/output API
+stubs to verify selections, constraints, independent tracks and narrow layouts.
+Unit checks cover device replacement failures, mute preservation, late capture
+results and output routing; physical device switching still requires a live check.
+
+Use `MEETING_TEST_WIDTH=390 bun run test:e2e:meeting` for the narrow layout,
+and set `MEETING_TEST_SCREENSHOT=/tmp/meeting.png` to capture the final screen.
+
+Run all browser smoke checks sequentially:
+
+```sh
+bun run test:e2e
+```
+
+Requirements:
+
+- Chromium available as `chromium`, or
+- `CHROMIUM_PATH=/absolute/path/to/chromium`
+
+The runner uses an isolated temporary profile, loopback peers and a local Vite
+server. It does not join the deployed Weblink signaling service or mutate a real
+browser profile.
+
+Useful optional environment variables:
+
+```sh
+CHAT_TEST_WIDTH=390 bun run test:e2e:chat
+CHAT_TEST_REDUCED_MOTION=1 bun run test:e2e:chat
+CHAT_TEST_SCREENSHOT=/tmp/chat.png bun run test:e2e:chat
+CHAT_TEST_COLOR_SCHEME=dark CHAT_TEST_WIDTH=390 CHAT_TEST_SCREENSHOT=/tmp/chat-dark.png bun run test:e2e:chat
+TASK_TEST_WIDTH=390 bun run test:e2e:tasks
+TASK_TEST_SCREENSHOT=/tmp/tasks.png bun run test:e2e:tasks
+TASK_TEST_SCREENSHOT_INFO=/tmp/client-info.png bun run test:e2e:tasks
+SPEED_TEST_REPORT=/tmp/speed-report.json bun run test:e2e:speed
+```
+
+The chat smoke checks sample actual intermediate scroll positions, not only the
+final offset. They cover initial positioning, batch arrivals, layout changes during
+native smooth scrolling, reader interruption and reduced-motion preferences. They
+also verify compact consecutive bubbles, time-gap separators, and stable message
+nodes when a group grows or its first message is deleted. The
+optional screenshot mode uses an isolated conversation with text, files and both
+incoming/outgoing bubbles; it does not use a real conversation's data.
+
+Because these are local subsystem E2E checks, passing them does not prove
+cross-device, public-network, carrier, background-tab or production-deployment
+behavior.
+
+### Browser benchmarks {#browser-benchmarks}
+
+Location: `test/e2e/benchmark/`
+
+Benchmarks measure performance and must not be treated as pass/fail correctness
+coverage or run as part of the normal CI test suite.
+
+Run the cache benchmark:
+
+```sh
+bun run bench:browser:cache
+bun run bench:browser:cache --repeating
+```
+
+The benchmark uses real Chromium and IndexedDB but deliberately excludes WebRTC.
+See [CACHE_ASSEMBLY.md](../reference/cache-assembly.md) for the measured operation and storage contract.
+
+## Directory layout {#directory-layout}
+
+```text
+test/
+├── unit/                 # isolated module/contract behavior
+├── integration/          # multiple Weblink modules together
+├── support/              # shared fakes/helpers
+└── e2e/
+    ├── smoke/            # real Chromium correctness smoke tests
+    └── benchmark/        # performance measurements only
+```
+
+Browser harness implementation is shared by
+`scripts/run-browser-check.mjs`.
+
+## What belongs where {#what-belongs-where}
+
+Use the narrowest boundary that proves the behavior:
+
+- A parser rejects malformed JSON → **unit**.
+- `P2PProtocol` resolves a request through a fake transport → **integration**.
+- A dialog reacts to application state in jsdom → **integration**.
+- A real DataChannel sends queued protocol traffic in Chromium → **E2E smoke**.
+- Real IndexedDB VFS finalizes or migrates a cached file → **E2E smoke**.
+- Timing 128 MiB cache finalization → **benchmark**.
+
+Do not promote every regression to E2E. Prefer unit/integration coverage first,
+then add one browser smoke path when the behavior depends on a real browser
+primitive or WebRTC/IndexedDB/Worker interoperability.
+
+## Signaling backend tests {#signaling-backend-tests}
+
+The two WebSocket signaling backends live in separate repositories and have their
+own integration suites:
+
+- `weblink-ws-server`: Bun tests + real local WebSocket server integration.
+- `weblink-ws-worker`: Vitest with the Cloudflare Workers/Durable Object test
+  environment.
+
+Those tests validate signaling ownership, reconnect/cache behavior and backend
+limits. They are not part of this frontend repository's browser E2E suite.
+
+A future shared signaling contract fixture should be distributed through a
+CI-consumable package/spec source rather than depending on sibling checkout
+paths.
+
+## Recommended validation before commit {#recommended-validation-before-commit}
+
+For ordinary frontend changes:
+
+```sh
+bun run lint
+bun run test:unit
+bun run test:integration
+bun run build
+```
+
+Add the relevant browser E2E smoke command when the change touches real WebRTC,
+IndexedDB, Workers or browser-only UI behavior.
+
+Protocol or transfer changes should run their focused E2E smoke check before
+merge. Benchmarks are only required when making or validating performance claims.
+
+## Automation {#automation}
+
+Run `bun run test:e2e:automation` for real Chromium DataChannel cancellation
+and bounded result transport. Its report states whether the installed
+browser exposes WebMCP; absence does not simulate browser Agent integration.
+Focused TS tests cover shared pairing, connection generations, stale cleanup,
+replay, cancellation and device settings approval. Native tests run with
+`cargo test --locked -p weblink-desktop automation --lib` and cover authenticated
+HTTP MCP discovery, native grants, Shell ownership and process cleanup.
+
+### Desktop accessibility {#desktop-accessibility}
+
+`cargo test --locked -p weblink-desktop-accessibility` covers reference ownership,
+read-grant revocation, expiry, protected controls, bounded traversal and action
+invalidation. From an interactive Windows desktop, run
+`cargo test --locked -p weblink-desktop-accessibility --test windows_provider -- --ignored`
+to launch an owned disposable WinForms fixture and verify real UIA discovery,
+password redaction, Unicode value setting and button invocation. This test is
+ignored by default because SSH/service Session 0 has no accessible interactive
+desktop. It does not operate existing user application windows.
+`cargo test --locked -p weblink-desktop --lib automation` checks the native
+permission bridge and catalog. Browser/desktop consent and emergency release
+still need end-to-end acceptance with the actual client and remote device.
+
+## Device trust {#device-trust}
+
+Run `bun run --cwd apps/web test:e2e:device-trust` for real Chromium WebRTC
+automatic first pairing, persistent key storage, changed-key isolation, default
+permission restoration after manual repair, content
+revocation, media restoration, normal disconnects, automatic recovery from a
+surviving peer-issued key and renewal of expired keys without resetting permissions.
+Run `bun run --cwd apps/web test:e2e:device-trust-http` for the same flows on a
+non-secure HTTP origin without `crypto.subtle` or `crypto.randomUUID`. The runner
+maps a test hostname to its loopback server; no LAN device or browser profile is used.
+Focused identity, pairing-key and peer-trust tests cover replay, DTLS binding,
+stale asynchronous decisions, issuer-only renewal, lost acknowledgements,
+storage failures, concurrent persistence, interrupted first exchanges, atomic
+pairing commits, pre-verification disconnects/timeouts, and mandatory manual
+repair when no shared key survives. Client signaling tests cover duplicate-ID
+backoff during both initial join and resume, cancellation, and transient network
+failures while waiting for ownership to clear.
+
+Both signaling repositories test repeated wrong-key, unsigned and replayed duplicate
+joins while the original owner continues forwarding, and admission of a regenerated
+identity after the owner leaves. To include atomic Redis leases and the two-node signaling test, supply
+`WEBLINK_TEST_REDIS_URL` pointing at a disposable Redis instance when running
+`bun run --cwd servers/weblink-ws-server test`. The test never reads the
+application's Redis configuration.

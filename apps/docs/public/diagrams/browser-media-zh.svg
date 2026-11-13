@@ -1,0 +1,494 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 842"
+  lang="zh-CN"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">浏览器媒体：编解码与显示</title>
+  <desc id="desc">
+    采集轨道用于本地预览与 WebRTC
+    发送，浏览器选择兼容的硬件或软件编码器。接收时，硬件或软件解码器向视频轨道和浏览器渲染器提供画面。编解码加速与
+    GPU 合成分别决定，软件回退需要存在兼容的实现。
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="840"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    浏览器媒体：编解码与显示
+  </text>
+  <text x="32" y="80" class="section" text-anchor="start">
+    发送 · 浏览器管理采集轨道
+  </text>
+  <path
+    class="edge control"
+    d="M280 147L325 147"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M575 147L620 147"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M155 190L155 240"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M280 147H300V283H325"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M575 283H745V190"
+    marker-end="url(#retry-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="104" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="129"
+      class="node-title"
+      text-anchor="middle"
+    >
+      浏览器采集
+    </text>
+    <text
+      x="155"
+      y="153"
+      class="detail"
+      text-anchor="middle"
+    >
+      getUserMedia()
+    </text>
+    <text
+      x="155"
+      y="177"
+      class="detail"
+      text-anchor="middle"
+    >
+      getDisplayMedia()
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="104" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="141"
+      class="node-title"
+      text-anchor="middle"
+    >
+      硬件编码器
+    </text>
+    <text
+      x="450"
+      y="165"
+      class="detail"
+      text-anchor="middle"
+    >
+      可用且被浏览器选中时
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="104" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="141"
+      class="node-title"
+      text-anchor="middle"
+    >
+      发送给对端
+    </text>
+    <text
+      x="745"
+      y="165"
+      class="detail"
+      text-anchor="middle"
+    >
+      WebRTC · RTP / SRTP
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="240" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="277"
+      class="node-title"
+      text-anchor="middle"
+    >
+      本地预览
+    </text>
+    <text
+      x="155"
+      y="301"
+      class="detail"
+      text-anchor="middle"
+    >
+      采集流 → &lt;video&gt;
+    </text>
+  </g>
+  <g class="node warning">
+    <rect x="325" y="240" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="277"
+      class="node-title"
+      text-anchor="middle"
+    >
+      软件编码器
+    </text>
+    <text
+      x="450"
+      y="301"
+      class="detail"
+      text-anchor="middle"
+    >
+      CPU · 存在兼容实现时
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="353" width="836" height="58" rx="12" />
+    <text
+      x="450"
+      y="376"
+      class="detail"
+      text-anchor="middle"
+    >
+      软件实现可以在启动时选中，也可以在硬件失败后启用。
+    </text>
+    <text
+      x="450"
+      y="400"
+      class="detail"
+      text-anchor="middle"
+    >
+      Weblink 设置格式与画质，具体编解码实现由浏览器选择。
+    </text>
+  </g>
+  <text x="32" y="451" class="section" text-anchor="start">
+    接收 · 先解码，再显示
+  </text>
+  <path
+    class="edge control"
+    d="M280 511L325 511"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M575 511L620 511"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M280 511H300V647H325"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge retry"
+    d="M575 647H596V511H620"
+    marker-end="url(#retry-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 554L745 604"
+    marker-end="url(#control-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="468" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      WebRTC 接收器
+    </text>
+    <text
+      x="155"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP · 缓冲与恢复
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="468" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      硬件解码器
+    </text>
+    <text
+      x="450"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      GPU 资源承载画面
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="468" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      视频轨道 → &lt;video&gt;
+    </text>
+    <text
+      x="745"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      srcObject = MediaStream
+    </text>
+  </g>
+  <g class="node warning">
+    <rect x="325" y="604" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="641"
+      class="node-title"
+      text-anchor="middle"
+    >
+      软件解码器
+    </text>
+    <text
+      x="450"
+      y="665"
+      class="detail"
+      text-anchor="middle"
+    >
+      CPU 像素画面
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="604" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="629"
+      class="node-title"
+      text-anchor="middle"
+    >
+      浏览器显示层
+    </text>
+    <text
+      x="745"
+      y="653"
+      class="detail"
+      text-anchor="middle"
+    >
+      GPU 合成
+    </text>
+    <text
+      x="745"
+      y="677"
+      class="detail"
+      text-anchor="middle"
+    >
+      或软件渲染
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="744" width="836" height="66" rx="12" />
+    <text
+      x="450"
+      y="771"
+      class="detail"
+      text-anchor="middle"
+    >
+      软件解码的画面也可以上传给 GPU 合成。
+    </text>
+    <text
+      x="450"
+      y="795"
+      class="detail"
+      text-anchor="middle"
+    >
+      没有兼容的实现，就不能保证回退到 CPU。
+    </text>
+  </g>
+</svg>

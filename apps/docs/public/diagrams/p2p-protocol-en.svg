@@ -1,0 +1,365 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 760"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Request, persistence, and acknowledgment
+  </title>
+  <desc id="desc">
+    A sender submits a text request. The receiver validates
+    it, waits for local history persistence, then
+    acknowledges. If the acknowledgment is lost, a retry
+    with the same ID can reuse the retained reply without
+    rerunning the handler.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="758"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Request, persistence, and acknowledgment
+  </text>
+  <path class="lifeline" d="M140 140V630" />
+  <path class="lifeline" d="M450 140V630" />
+  <path class="lifeline" d="M760 140V406" />
+  <g class="node">
+    <rect x="35" y="68" width="210" height="72" rx="12" />
+    <text
+      x="140"
+      y="98"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Sender
+    </text>
+    <text
+      x="140"
+      y="122"
+      class="detail"
+      text-anchor="middle"
+    >
+      Request owner
+    </text>
+  </g>
+  <g class="node">
+    <rect x="345" y="68" width="210" height="72" rx="12" />
+    <text
+      x="450"
+      y="98"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Receiver
+    </text>
+    <text
+      x="450"
+      y="122"
+      class="detail"
+      text-anchor="middle"
+    >
+      Protocol + deduplication
+    </text>
+  </g>
+  <g class="node">
+    <rect x="655" y="68" width="210" height="72" rx="12" />
+    <text
+      x="760"
+      y="98"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Chat handler
+    </text>
+    <text
+      x="760"
+      y="122"
+      class="detail"
+      text-anchor="middle"
+    >
+      Local history
+    </text>
+  </g>
+  <path
+    class="edge control"
+    d="M140 190L450 190"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="178" class="label" text-anchor="middle">
+    send-text · id=message-1
+  </text>
+  <path
+    class="edge control"
+    d="M450 238L760 238"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="605" y="226" class="label" text-anchor="middle">
+    Validate → dispatch
+  </text>
+  <g class="node success">
+    <rect x="650" y="267" width="220" height="64" rx="12" />
+    <text
+      x="760"
+      y="305"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Commit local history
+    </text>
+  </g>
+  <path
+    class="edge control"
+    d="M760 367L450 367"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="605" y="355" class="label" text-anchor="middle">
+    Handler completed
+  </text>
+  <path
+    class="edge control"
+    d="M450 411L140 411"
+    marker-end="url(#control-arrow)"
+  />
+  <text x="295" y="399" class="label" text-anchor="middle">
+    ack · mode=receive
+  </text>
+  <text
+    x="450"
+    y="460"
+    class="section"
+    text-anchor="middle"
+  >
+    If the ACK was lost and retries are enabled
+  </text>
+  <path
+    class="edge retry"
+    d="M140 500L450 500"
+    marker-end="url(#retry-arrow)"
+  />
+  <text x="295" y="488" class="label" text-anchor="middle">
+    Retry · same ID + payload
+  </text>
+  <g class="node accent">
+    <rect x="340" y="523" width="220" height="68" rx="12" />
+    <text
+      x="450"
+      y="551"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Retained result
+    </text>
+    <text
+      x="450"
+      y="575"
+      class="detail"
+      text-anchor="middle"
+    >
+      No handler rerun
+    </text>
+  </g>
+  <path
+    class="edge retry"
+    d="M450 635L140 635"
+    marker-end="url(#retry-arrow)"
+  />
+  <text x="295" y="623" class="label" text-anchor="middle">
+    Replay the original ACK
+  </text>
+  <g class="node note">
+    <rect x="32" y="675" width="836" height="60" rx="12" />
+    <text
+      x="450"
+      y="699"
+      class="detail"
+      text-anchor="middle"
+    >
+      ACK confirms local persistence at that moment, not a
+      read receipt.
+    </text>
+    <text
+      x="450"
+      y="723"
+      class="detail"
+      text-anchor="middle"
+    >
+      Duplicate records are bounded and belong to the
+      protocol session.
+    </text>
+  </g>
+</svg>

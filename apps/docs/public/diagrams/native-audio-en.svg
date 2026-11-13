@@ -1,0 +1,555 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 900"
+  lang="en"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">
+    Windows audio: native codecs and PCM bridges
+  </title>
+  <desc id="desc">
+    System audio enters native encoding from WASAPI process
+    loopback, excluding Weblink. A microphone attached to
+    the native room instead crosses a WebView AudioWorklet
+    PCM bridge. Native reception decodes to bounded PCM,
+    crosses IPC, and reaches a playback worklet, MediaStream
+    destination, shared audio element, and device output.
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="898"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    Windows audio: native codecs and PCM bridges
+  </text>
+  <text x="32" y="78" class="section" text-anchor="start">
+    Sending · two capture paths
+  </text>
+  <path
+    class="edge data"
+    d="M280 139L325 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 139L620 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M280 295L325 295"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 295H596V139H620"
+    marker-end="url(#data-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="96" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="121"
+      class="node-title"
+      text-anchor="middle"
+    >
+      System loopback
+    </text>
+    <text
+      x="155"
+      y="145"
+      class="detail"
+      text-anchor="middle"
+    >
+      WASAPI
+    </text>
+    <text
+      x="155"
+      y="169"
+      class="detail"
+      text-anchor="middle"
+    >
+      Excludes Weblink's tree
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="96" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="121"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native PCM source
+    </text>
+    <text
+      x="450"
+      y="145"
+      class="detail"
+      text-anchor="middle"
+    >
+      Supported rate / channels
+    </text>
+    <text
+      x="450"
+      y="169"
+      class="detail"
+      text-anchor="middle"
+    >
+      10 ms input blocks
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="620" y="96" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="133"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native encoding
+    </text>
+    <text
+      x="745"
+      y="157"
+      class="detail"
+      text-anchor="middle"
+    >
+      libwebrtc → RTP / SRTP
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="252" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="289"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Microphone
+    </text>
+    <text
+      x="155"
+      y="313"
+      class="detail"
+      text-anchor="middle"
+    >
+      WebView · getUserMedia()
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="252" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="277"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Microphone worklet
+    </text>
+    <text
+      x="450"
+      y="301"
+      class="detail"
+      text-anchor="middle"
+    >
+      48 kHz · stereo S16
+    </text>
+    <text
+      x="450"
+      y="325"
+      class="detail"
+      text-anchor="middle"
+    >
+      PCM → IPC → native source
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="364" width="836" height="56" rx="12" />
+    <text
+      x="450"
+      y="386"
+      class="detail"
+      text-anchor="middle"
+    >
+      The microphone bridge applies when a track joins the
+      native room.
+    </text>
+    <text
+      x="450"
+      y="410"
+      class="detail"
+      text-anchor="middle"
+    >
+      Its worklet adapts samples; libwebrtc performs codec
+      encoding.
+    </text>
+  </g>
+  <text x="32" y="458" class="section" text-anchor="start">
+    Receiving · native decode, Web Audio playback
+  </text>
+  <path
+    class="edge control"
+    d="M280 521L325 521"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 521L620 521"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M745 564L745 618"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M620 661L575 661"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M325 661L280 661"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M155 704L155 766"
+    marker-end="url(#data-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="478" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="515"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native RTP receive
+    </text>
+    <text
+      x="155"
+      y="539"
+      class="detail"
+      text-anchor="middle"
+    >
+      Buffering / recovery
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="478" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="515"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Native decode + adapt
+    </text>
+    <text
+      x="450"
+      y="539"
+      class="detail"
+      text-anchor="middle"
+    >
+      48 kHz · stereo S16
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="478" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="515"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Bounded PCM queue
+    </text>
+    <text
+      x="745"
+      y="539"
+      class="detail"
+      text-anchor="middle"
+    >
+      Notify → IPC read
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="618" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="655"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Playback worklet
+    </text>
+    <text
+      x="745"
+      y="679"
+      class="detail"
+      text-anchor="middle"
+    >
+      S16 → Float32
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="618" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="655"
+      class="node-title"
+      text-anchor="middle"
+    >
+      MediaStream
+    </text>
+    <text
+      x="450"
+      y="679"
+      class="detail"
+      text-anchor="middle"
+    >
+      Web Audio destination
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="618" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="655"
+      class="node-title"
+      text-anchor="middle"
+    >
+      Shared &lt;audio&gt;
+    </text>
+    <text
+      x="155"
+      y="679"
+      class="detail"
+      text-anchor="middle"
+    >
+      Mute / output selection
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="766" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="803"
+      class="node-title"
+      text-anchor="middle"
+    >
+      System output
+    </text>
+    <text
+      x="155"
+      y="827"
+      class="detail"
+      text-anchor="middle"
+    >
+      Headphones / speakers
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="325" y="766" width="545" height="86" rx="12" />
+    <text
+      x="597.5"
+      y="791"
+      class="detail"
+      text-anchor="middle"
+    >
+      The playback worklet consumes decoded PCM.
+    </text>
+    <text
+      x="597.5"
+      y="815"
+      class="detail"
+      text-anchor="middle"
+    >
+      No second Opus decode or GPU audio path.
+    </text>
+    <text
+      x="597.5"
+      y="839"
+      class="detail"
+      text-anchor="middle"
+    >
+      WebView playback policy still applies.
+    </text>
+  </g>
+</svg>

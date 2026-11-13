@@ -1,0 +1,468 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 720"
+  lang="zh-CN"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">浏览器音频：从采集到播放</title>
+  <desc id="desc">
+    麦克风采集应用受支持的输入处理，屏幕采集可另行提供声音轨道。各轨道进入浏览器
+    WebRTC 编码与传输。接收侧经过缓冲和解码，接入共用 HTML
+    音频播放器及输出设备。PCM 与编码媒体是不同的数据。
+  </desc>
+  <defs>
+    <marker
+      id="control-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="data-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--content)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <marker
+      id="retry-arrow"
+      markerWidth="10"
+      markerHeight="10"
+      refX="8"
+      refY="5"
+      orient="auto-start-reverse"
+    >
+      <path
+        d="M2 1L8 5L2 9"
+        fill="none"
+        stroke="var(--signal)"
+        stroke-width="1.5"
+      />
+    </marker>
+    <style>
+      :root {
+        --canvas: #f8fafc;
+        --frame: #dbe3ed;
+        --node: #ffffff;
+        --border: #cbd5e1;
+        --text: #1e293b;
+        --muted: #475569;
+        --signal: #64748b;
+        --content: #315fa8;
+        --accent-bg: #edf3fc;
+        --accent-border: #a7bfdf;
+        --success-bg: #edf7f1;
+        --success-border: #a5cdb6;
+        --warning-bg: #fff7e8;
+        --warning-border: #d6b879;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --canvas: #151a23;
+          --frame: #374151;
+          --node: #20252e;
+          --border: #465368;
+          --text: #e9edf5;
+          --muted: #b2bed0;
+          --signal: #94a3b8;
+          --content: #96b9ff;
+          --accent-bg: #24344b;
+          --accent-border: #4d6793;
+          --success-bg: #213b30;
+          --success-border: #4c8062;
+          --warning-bg: #3b3020;
+          --warning-border: #8e7444;
+        }
+      }
+      text {
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        fill: var(--text);
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 650;
+      }
+      .node-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .detail {
+        font-size: 16px;
+        fill: var(--muted);
+      }
+      .label {
+        font-size: 16px;
+        paint-order: stroke;
+        stroke: var(--canvas);
+        stroke-width: 5px;
+        stroke-linejoin: round;
+      }
+      .section {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .canvas {
+        fill: var(--canvas);
+        stroke: var(--frame);
+      }
+      .panel {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .node rect,
+      .node path {
+        fill: var(--node);
+        stroke: var(--border);
+        stroke-width: 1.5;
+      }
+      .accent rect,
+      .decision path {
+        fill: var(--accent-bg);
+        stroke: var(--accent-border);
+      }
+      .success rect {
+        fill: var(--success-bg);
+        stroke: var(--success-border);
+      }
+      .warning rect {
+        fill: var(--warning-bg);
+        stroke: var(--warning-border);
+      }
+      .note rect {
+        fill: none;
+        stroke: var(--frame);
+      }
+      .edge {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      .control {
+        stroke: var(--signal);
+      }
+      .data {
+        stroke: var(--content);
+        stroke-width: 2.5;
+      }
+      .retry {
+        stroke: var(--signal);
+        stroke-dasharray: 6 5;
+      }
+      .lifeline {
+        fill: none;
+        stroke: var(--frame);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 6;
+      }
+    </style>
+  </defs>
+  <rect
+    class="canvas"
+    x="1"
+    y="1"
+    width="898"
+    height="718"
+    rx="16"
+  />
+  <text x="32" y="39" class="title" text-anchor="start">
+    浏览器音频：从采集到播放
+  </text>
+  <text x="32" y="78" class="section" text-anchor="start">
+    发送 · 相互独立的来源
+  </text>
+  <path
+    class="edge data"
+    d="M280 139L325 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 139L620 139"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M280 285H596V139H620"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge control"
+    d="M745 182L745 242"
+    marker-end="url(#control-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="96" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="133"
+      class="node-title"
+      text-anchor="middle"
+    >
+      麦克风
+    </text>
+    <text
+      x="155"
+      y="157"
+      class="detail"
+      text-anchor="middle"
+    >
+      getUserMedia()
+    </text>
+  </g>
+  <g class="node">
+    <rect x="325" y="96" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="121"
+      class="node-title"
+      text-anchor="middle"
+    >
+      输入处理
+    </text>
+    <text
+      x="450"
+      y="145"
+      class="detail"
+      text-anchor="middle"
+    >
+      回声 / 降噪 / 增益
+    </text>
+    <text
+      x="450"
+      y="169"
+      class="detail"
+      text-anchor="middle"
+    >
+      以浏览器支持为准
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="620" y="96" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="133"
+      class="node-title"
+      text-anchor="middle"
+    >
+      浏览器编码器
+    </text>
+    <text
+      x="745"
+      y="157"
+      class="detail"
+      text-anchor="middle"
+    >
+      Opus / G.722 / G.711
+    </text>
+  </g>
+  <g class="node">
+    <rect x="30" y="242" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="267"
+      class="node-title"
+      text-anchor="middle"
+    >
+      屏幕声音
+    </text>
+    <text
+      x="155"
+      y="291"
+      class="detail"
+      text-anchor="middle"
+    >
+      getDisplayMedia()
+    </text>
+    <text
+      x="155"
+      y="315"
+      class="detail"
+      text-anchor="middle"
+    >
+      实际返回声音轨道时
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="242" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="279"
+      class="node-title"
+      text-anchor="middle"
+    >
+      发送给对端
+    </text>
+    <text
+      x="745"
+      y="303"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP / SRTP
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="354" width="836" height="56" rx="12" />
+    <text
+      x="450"
+      y="376"
+      class="detail"
+      text-anchor="middle"
+    >
+      采样偏好不保证实际返回的采集格式。
+    </text>
+    <text
+      x="450"
+      y="400"
+      class="detail"
+      text-anchor="middle"
+    >
+      普通 Web 通话不需要应用逐块桥接 PCM。
+    </text>
+  </g>
+  <text x="32" y="448" class="section" text-anchor="start">
+    接收 · 先解码，再播放
+  </text>
+  <path
+    class="edge control"
+    d="M280 511L325 511"
+    marker-end="url(#control-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M575 511L620 511"
+    marker-end="url(#data-arrow)"
+  />
+  <path
+    class="edge data"
+    d="M745 554L745 598"
+    marker-end="url(#data-arrow)"
+  />
+  <g class="node">
+    <rect x="30" y="468" width="250" height="86" rx="12" />
+    <text
+      x="155"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      接收与缓冲
+    </text>
+    <text
+      x="155"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      RTP · 时序与丢包处理
+    </text>
+  </g>
+  <g class="node accent">
+    <rect x="325" y="468" width="250" height="86" rx="12" />
+    <text
+      x="450"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      浏览器解码器
+    </text>
+    <text
+      x="450"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      编码音频 → 采样
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="468" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="505"
+      class="node-title"
+      text-anchor="middle"
+    >
+      共用 &lt;audio&gt; 播放器
+    </text>
+    <text
+      x="745"
+      y="529"
+      class="detail"
+      text-anchor="middle"
+    >
+      接收的 MediaStream
+    </text>
+  </g>
+  <g class="node">
+    <rect x="620" y="598" width="250" height="86" rx="12" />
+    <text
+      x="745"
+      y="635"
+      class="node-title"
+      text-anchor="middle"
+    >
+      输出设备
+    </text>
+    <text
+      x="745"
+      y="659"
+      class="detail"
+      text-anchor="middle"
+    >
+      耳机 / 扬声器
+    </text>
+  </g>
+  <g class="node note">
+    <rect x="32" y="598" width="542" height="86" rx="12" />
+    <text
+      x="303"
+      y="623"
+      class="detail"
+      text-anchor="middle"
+    >
+      来源静音、收听状态与输出选择在本地生效，
+    </text>
+    <text
+      x="303"
+      y="647"
+      class="detail"
+      text-anchor="middle"
+    >
+      不会因此停止远端采集。
+    </text>
+    <text
+      x="303"
+      y="671"
+      class="detail"
+      text-anchor="middle"
+    >
+      播放仍需获得浏览器允许。
+    </text>
+  </g>
+</svg>
