@@ -19,7 +19,10 @@ import {
   MeetingTileAction,
   MeetingTileActions,
 } from "@/routes/home/components/meeting-tile-actions";
-import { RemoteKeyboardInput } from "@/routes/home/components/remote-keyboard-input";
+import {
+  RemoteKeyboardInput,
+  type RemoteKeyboardInputHandle,
+} from "@/routes/home/components/remote-keyboard-input";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
 import { platform } from "@/libs/platform/runtime";
 
@@ -94,17 +97,24 @@ function setup(fullscreen = false, virtualKeyboard = true) {
   } as unknown as RemotePointer;
   const action = vi.fn();
   const [host, setHost] = createSignal<HTMLDivElement>();
-  render(() => (
+  const [keyboard, setKeyboard] =
+    createSignal<RemoteKeyboardInputHandle>();
+  const view = render(() => (
     <div ref={setHost}>
       <MeetingTileActions
         compact
         label="Actions"
+        keyboardFocused={keyboard()?.focused() === true}
         portalMount={fullscreen ? host() : undefined}
       >
         <RemoteKeyboardInput
           control={control}
           state="active"
           enabled
+          registerKeyboard={(input) => {
+            setKeyboard(input);
+            return () => setKeyboard(undefined);
+          }}
         />
         <MeetingTileAction
           label="Other action"
@@ -168,18 +178,66 @@ function setup(fullscreen = false, virtualKeyboard = true) {
     });
   };
   return {
+    ...view,
     api,
     action,
     editor,
     trigger,
     openMenu,
     host,
+    keyboard,
     expectEditorReady,
     enterText,
   };
 }
 
 describe("meeting action menu keyboard focus", () => {
+  it.each([false, true])(
+    "keeps the same handle inside the tile and the editor usable during IME (fullscreen=%s)",
+    async (fullscreen) => {
+      const f = setup(fullscreen);
+      const dock = f.trigger.parentElement!;
+      const boundary = dock.parentElement!;
+      f.keyboard()!.show();
+      expect(dock.parentElement).toBe(boundary);
+      expect(
+        (fullscreen ? f.host()! : document.body).contains(
+          dock,
+        ),
+      ).toBe(true);
+      expect(boundary.contains(f.editor)).toBe(true);
+      f.expectEditorReady();
+
+      const down = new MouseEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      fireEvent(f.trigger, down);
+      expect(down.defaultPrevented).toBe(true);
+      fireEvent.pointerUp(f.trigger);
+      fireEvent.click(f.trigger);
+      expect(
+        screen.getByRole("button", { name: "Actions" }),
+      ).toBe(f.trigger);
+      f.expectEditorReady();
+      await f.enterText();
+
+      fireEvent.click(
+        screen.getByRole("menuitem", {
+          name: "remote_control.keyboard_hide",
+        }),
+      );
+      expect(boundary.contains(dock)).toBe(true);
+      expect(document.activeElement).not.toBe(f.editor);
+      f.keyboard()!.show();
+      expect(dock.parentElement).toBe(boundary);
+      f.unmount();
+      expect(dock.isConnected).toBe(false);
+      expect(f.editor.isConnected).toBe(false);
+    },
+  );
+
   it.each([
     { runtime: "browser", width: 1440 },
     { runtime: "desktop", width: 1440 },
@@ -262,6 +320,11 @@ describe("meeting action menu keyboard focus", () => {
       expect(document.activeElement).not.toBe(f.editor);
       fireEvent.click(item);
       f.expectEditorReady();
+      // IME must not follow the transformed drag handle or live in the inert menu.
+      expect(
+        f.trigger.parentElement!.contains(f.editor),
+      ).toBe(false);
+      expect(f.host()!.contains(f.editor)).toBe(true);
       await new Promise((resolve) =>
         setTimeout(resolve, 0),
       );
@@ -435,6 +498,8 @@ describe("floating meeting actions", () => {
     actionCount = 1,
   ) {
     const [floating, setFloating] = createSignal(true);
+    const [keyboardFocused, setKeyboardFocused] =
+      createSignal(false);
     vi.stubGlobal("innerWidth", 900);
     vi.stubGlobal("innerHeight", 700);
     const action = vi.fn();
@@ -447,6 +512,7 @@ describe("floating meeting actions", () => {
         <MeetingTileActions
           compact={compact}
           floating={floating()}
+          keyboardFocused={keyboardFocused()}
           label="Actions"
         >
           <For
@@ -543,6 +609,7 @@ describe("floating meeting actions", () => {
       action,
       surfaceInput,
       setFloating,
+      setKeyboardFocused,
       anchorRect,
     };
   }
@@ -564,6 +631,33 @@ describe("floating meeting actions", () => {
       }),
     );
     expect(f.action).toHaveBeenCalledOnce();
+  });
+
+  it("continues constraining the handle to the video while the keyboard owns focus", () => {
+    const f = setupFloating(true);
+    const readWidth = vi.fn(() => 600);
+    Object.defineProperty(f.boundary, "clientWidth", {
+      get: readWidth,
+    });
+    f.setKeyboardFocused(true);
+    expect(f.dock.parentElement).toBe(f.boundary);
+    readWidth.mockClear();
+    window.dispatchEvent(new Event("resize"));
+    expect(readWidth).toHaveBeenCalled();
+    f.tap();
+    fireEvent.click(
+      screen.getByRole("menuitem", {
+        name: "Other action",
+      }),
+    );
+    expect(f.action).toHaveBeenCalledOnce();
+
+    f.setKeyboardFocused(false);
+    expect(f.boundary.contains(f.dock)).toBe(true);
+    expect(readWidth).toHaveBeenCalled();
+    f.setKeyboardFocused(true);
+    f.setFloating(false);
+    expect(f.boundary.contains(f.dock)).toBe(true);
   });
 
   it("keeps the same portaled menu and focus usable when switching the main source", () => {
@@ -776,6 +870,54 @@ describe("floating meeting actions", () => {
     expect(f.capture).toHaveBeenCalledOnce();
   });
 
+  it.each(["resize", "scroll"])(
+    "ends a drag on visual viewport %s without changing the saved edge or activating actions",
+    (type) => {
+      const viewport = Object.assign(new EventTarget(), {
+        width: 900,
+        height: 700,
+        offsetLeft: 0,
+        offsetTop: 0,
+      });
+      vi.stubGlobal("visualViewport", viewport);
+      const f = setupFloating(true);
+      f.pointer("pointerdown", 575, 375);
+      f.pointer("pointermove", 120, 180);
+      f.pointer("pointerup", 120, 180);
+      expect(f.dock.dataset.edge).toBe("left");
+      f.pointer("pointerdown", 575, 375);
+      f.pointer("pointermove", 300, 300);
+      f.release.mockClear();
+
+      // IME can change the coordinate space without any window resize.
+      viewport.height = 300;
+      viewport.offsetTop = 40;
+      viewport.dispatchEvent(new Event(type));
+      expect(f.release).toHaveBeenCalledOnce();
+      expect(f.dock.hasAttribute("data-dragging")).toBe(
+        false,
+      );
+      f.pointer("pointerup", 300, 300);
+      fireEvent.click(f.trigger, { detail: 1 });
+      expect(f.trigger.getAttribute("aria-expanded")).toBe(
+        "false",
+      );
+      expect(f.dock.dataset.edge).toBe("left");
+
+      viewport.height = 700;
+      viewport.offsetTop = 0;
+      viewport.dispatchEvent(new Event(type));
+      expect(f.dock.dataset.edge).toBe("left");
+      f.tap();
+      fireEvent.click(
+        screen.getByRole("menuitem", {
+          name: "Other action",
+        }),
+      );
+      expect(f.action).toHaveBeenCalledOnce();
+    },
+  );
+
   it("retains the chosen edge across resizing and fullscreen changes", () => {
     const f = setupFloating(false);
     f.pointer("pointerdown", 575, 375);
@@ -794,6 +936,8 @@ describe("floating meeting actions", () => {
   });
 
   it("releases capture, observers and pending movement on unmount", () => {
+    const viewport = new EventTarget();
+    vi.stubGlobal("visualViewport", viewport);
     const disconnect = vi.fn();
     vi.stubGlobal(
       "ResizeObserver",
@@ -814,9 +958,17 @@ describe("floating meeting actions", () => {
     expect(disconnect).toHaveBeenCalled();
     expect(cancelFrame).toHaveBeenCalled();
     const releases = f.release.mock.calls.length;
+    const measure = vi.mocked(
+      f.boundary.getBoundingClientRect,
+    );
+    measure.mockClear();
     f.pointer("pointerup", 120, 180);
     window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("scroll"));
+    viewport.dispatchEvent(new Event("resize"));
+    viewport.dispatchEvent(new Event("scroll"));
     expect(f.release).toHaveBeenCalledTimes(releases);
+    expect(measure).not.toHaveBeenCalled();
   });
 
   it.each([

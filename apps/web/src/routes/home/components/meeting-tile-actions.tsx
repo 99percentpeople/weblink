@@ -26,6 +26,7 @@ export function MeetingTileActions(
   props: ParentProps<{
     compact: boolean;
     floating?: boolean;
+    keyboardFocused?: boolean;
     label: string;
     portalMount?: HTMLElement;
   }>,
@@ -70,6 +71,7 @@ export function MeetingTileActions(
   };
   const floating = createFloatingTileActions({
     enabled: assistive,
+    keyboardFocused: () => props.keyboardFocused === true,
     container: () => container,
     trigger: () => trigger,
     onActivate() {
@@ -346,7 +348,9 @@ export function MeetingTileActions(
                   case "Escape":
                     event.preventDefault();
                     event.stopPropagation();
-                    trigger.focus({ preventScroll: true });
+                    trigger.focus({
+                      preventScroll: true,
+                    });
                     dismiss();
                     return;
                   case "ArrowDown":
@@ -370,7 +374,9 @@ export function MeetingTileActions(
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                items[next]?.focus({ preventScroll: true });
+                items[next]?.focus({
+                  preventScroll: true,
+                });
               }}
             >
               <Show when={fan()}>
@@ -469,9 +475,10 @@ export function MeetingTileActions(
               </Show>
             </div>
           </Portal>
-          {/* Keep action owners and the keyboard editor outside the inert menu. */}
-          {props.children}
         </div>
+        {/* Keep the IME editor outside the moving handle as well as the inert menu.
+            Focusing an editor that moves with the dot can pan the viewport. */}
+        {props.children}
       </div>
     </ActionsContext.Provider>
   );

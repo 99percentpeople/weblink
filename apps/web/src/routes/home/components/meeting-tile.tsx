@@ -373,6 +373,9 @@ export function MeetingTile(props: {
               desktopPip={props.desktopPip}
               registerFeatures={props.registerFeatures}
               registerKeyboard={registerKeyboard}
+              keyboardFocused={
+                keyboardInput()?.focused() === true
+              }
               onStop={props.onStop}
               name={props.name}
               participantName={participantName()}
@@ -400,6 +403,7 @@ function TileActions(props: {
   statisticsVisible: boolean;
   onToggleStatistics(): void;
   registerKeyboard: RegisterRemoteKeyboardInput;
+  keyboardFocused: boolean;
   pinned: boolean;
   onPin?(): void;
   onActivate?(action: () => void): void;
@@ -590,6 +594,7 @@ function TileActions(props: {
       <Show when={hasActions()}>
         <MeetingTileActions
           compact={isMobile()}
+          keyboardFocused={props.keyboardFocused}
           floating={
             props.pinned ||
             fullscreen.isThisElementFullscreen()

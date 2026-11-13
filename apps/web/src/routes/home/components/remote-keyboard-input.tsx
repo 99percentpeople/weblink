@@ -371,7 +371,7 @@ export function RemoteKeyboardInput(props: {
         rows={1}
         value={REMOTE_TEXT_SEED}
         tabIndex={-1}
-        class="pointer-events-none absolute bottom-0 left-0 h-px w-px
+        class="pointer-events-none absolute left-0 top-0 h-px w-px
           resize-none border-0 p-0 text-base opacity-0 outline-none"
         onFocus={() => setOpen(true)}
         onBlur={() => {
