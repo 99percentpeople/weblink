@@ -620,6 +620,23 @@ The optional driver DLL is loaded from Windows System32; neither CUDA nor NVIDIA
 SDK binaries are required or bundled. The pinned API 12.2 header retains its NVIDIA
 MIT notice in `crates/desktop-capture/vendor/nvcodec`.
 
+Before creating graphics devices, the Windows desktop app uses the optional NVAPI
+DRS interface to set `PREFERRED_PSTATE_PREFER_MAX` for its own executable's absolute
+path. This reduces idle-to-motion recovery without encoding unchanged frames at
+the full streaming rate: static content still refreshes twice per second. Only
+the application power preference is changed; the global NVIDIA profile, Windows
+power plan and other programs are untouched. A shared, basename-only or mismatched
+existing profile is left unchanged. Missing NVIDIA support or driver errors are
+nonfatal and do not change the capture/encoder fallback behavior.
+
+The application profile is saved and read back at startup, and persists across
+exit for subsequent launches at the same path. It is an application preference,
+not a per-viewer lease; GPU idle power may increase while Weblink has active
+graphics devices, including a local preview. Startup skips writes when the exact
+application override already has the requested value. Other profile settings are
+preserved. The driver DLL is loaded only from System32; no NVAPI SDK/runtime is
+bundled and no global clock locks or high-rate synthetic encoding are used.
+
 The native preset vocabulary is `balanced`, `quality` and `latency`. NVENC maps
 these to P3/ultra-low-latency/no AQ, P4/low-latency/spatial AQ strength 5, and
 P1/ultra-low-latency/no AQ respectively. Balanced and quality analyze the current

@@ -73,6 +73,10 @@ fn media_permission(
 }
 
 pub fn run() {
+    // The driver reads application preferences when graphics devices are created.
+    // Run before Tauri/WebView and the capture service can initialize a device.
+    #[cfg(windows)]
+    application::gpu_power::configure();
     let builder = tauri::Builder::default();
     // We use DOM input and our own low-level hooks, not Tao's DeviceEvent stream.
     // Tao's default Raw Input registration can hide keyboard events from hooks
