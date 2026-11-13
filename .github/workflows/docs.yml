@@ -37,6 +37,10 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
     inputs:
+      create_project:
+        description: Create the Pages project before its first deployment (run only once)
+        type: boolean
+        default: false
       force:
         description: Deploy even if unchanged or not yet reachable (initial setup/recovery)
         type: boolean
@@ -112,10 +116,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
+      - name: Create Pages project for initial deployment
+        if: inputs.create_project == true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: >-
+          bunx wrangler@4.137.0 pages project create "$PAGES_PROJECT_NAME"
+          --production-branch public
       - name: Compare published content
         id: changes
         env:
-          FORCE_DEPLOY: ${{ inputs.force || false }}
+          FORCE_DEPLOY: ${{ inputs.force || inputs.create_project || false }}
         run: node scripts/static-site.mjs check docs apps/docs/dist "$PAGES_URL"
       - name: Deploy documentation
         if: steps.changes.outputs.changed == 'true'

@@ -42,6 +42,7 @@ PR 只检查和构建，推送到 `public` 才发布。无需修改应用版本�
 3. `docs.webl.ink` 使用根路径，保留 `DOCS_BASE=/` 即可。需要其他路径时，
    在仓库 Actions Variables 设置 `DOCS_BASE` 并匹配托管路径；这是构建配置，不是运行时变量。
 4. 在 Actions 的 **Documentation production** 中对 `public` 运行工作流。
+   也可省去第 1 步的本地创建，勾选 `create_project`，让工作流使用已有凭据创建项目并完成首次发布；仅在项目尚不存在时使用一次。
    首次发布若 Pages 域名尚不可访问，勾选 `force` 跳过发布前检查；后续保持默认即可。
 5. 在 Pages 项目的自定义域名中绑定 `docs.webl.ink`，按提示配置 DNS，等证书生效后访问英文根路径与 `/zh/`。
    绑定步骤见 [Cloudflare 自定义域名说明](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
