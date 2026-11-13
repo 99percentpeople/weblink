@@ -43,6 +43,10 @@ export function navigation(
         activeMatch: "/guide/faq",
       },
       {
+        text: zh ? "返回官网" : "Main website",
+        link: "https://www.webl.ink/",
+      },
+      {
         text: zh ? "打开 Weblink" : "Open Weblink",
         link: "https://webl.ink",
       },
