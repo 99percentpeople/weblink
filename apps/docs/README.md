@@ -46,9 +46,25 @@ PR 只检查和构建，推送到 `public` 才发布。无需修改应用版本�
    首次发布若 Pages 域名尚不可访问，勾选 `force` 跳过发布前检查；后续保持默认即可。
 5. 在 Pages 项目的自定义域名中绑定 `docs.webl.ink`，按提示配置 DNS，等证书生效后访问英文根路径与 `/zh/`。
    绑定步骤见 [Cloudflare 自定义域名说明](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
-   也可手动运行 **Pages domain setup** 工作流并选择 `docs`：它绑定域名，并仅在 DNS 记录缺失时创建 CNAME。
-   这一步需要 Token 同时具有该域名的 DNS 编辑权限；权限不足时在控制台完成即可，不影响后续仅需 Pages 编辑权限的站点发布。
-   已存在且指向不同目标的 DNS 记录会要求人工处理，不会自动覆盖。
+
+也可使用已登录的 [Cloudflare CLI](https://developers.cloudflare.com/cf/get-started/) 配置域名。
+`cf` 与 Wrangler 使用独立的登录状态，可先运行 `cf auth whoami` 检查；未登录时运行 `cf auth login`。
+首次绑定域名与创建 DNS 记录需要 Pages 和 DNS 编辑权限，日常自动发布仍只需 Pages 编辑权限。
+
+```sh
+cf pages domains list --project-name weblink-docs
+cf dns records list --zone webl.ink --name docs.webl.ink
+```
+
+确认相应绑定和记录不存在时再创建；已有正确配置直接保留，目标不一致时先核对用途：
+
+```sh
+cf pages domains create weblink-docs --name docs.webl.ink
+cf dns records create --zone webl.ink --body '{"type":"CNAME","name":"docs.webl.ink","content":"weblink-docs.pages.dev","ttl":1,"proxied":true}'
+cf pages domains get docs.webl.ink --project-name weblink-docs
+```
+
+若实际 Pages 域名带随机后缀，CNAME 的 `content` 也应使用该实际域名。等待域名状态为 `active` 后验证 HTTPS 访问。
 
 正常情况下，有修改就推送到 `public`，工作流会自行判断并发布对应站点。
 只改 GitHub Variables 时手动运行对应工作流，无需修改源码来触发。
