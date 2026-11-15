@@ -4,10 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [1.3.8] - 2026-11-15
 
+Weblink 1.3.8 adds scoped Windows screen-sharing performance controls, live automation status updates and saved MCP token usage, and fixes floating video controls when the on-screen keyboard opens.
+
+### Windows screen sharing
+
+- **Application-scoped NVIDIA power preference.** Before graphics initialization, set and verify a persistent maximum-performance preference for the current Weblink executable. Preserve global and shared driver profiles and other applications' settings. The preference remains saved across app exits; static screen content still refreshes at 2 FPS.
+- **Scoped streaming priorities.** While a screen has remote viewers, request 1 ms timer resolution and higher capture, hardware-encoder and GPU scheduling priorities. Share timer and GPU requests across concurrent captures and release them after their final user leaves. Thread priorities are restored after each work scope. Local preview and recording-only sessions do not activate these requests, and unavailable or failed requests leave streaming operational.
+- **Performance diagnostics.** Report the startup GPU power-policy result separately from active stream scheduling, including remote viewer leases, timer resolution, GPU scheduling and capture/encoder thread status. Detailed automation reports preserve known status labels and error codes while filtering arbitrary driver text.
+
+### MCP and automation
+
+- **Saved token usage.** Show each MCP token's last successful authentication time in settings and retain it across restarts. Preserve newer usage records when settings are edited concurrently or older snapshots arrive late.
+- **Live runtime status.** Push permission, approval, job, audit, controller and listener changes from the native service. Guard updates by session and revision so stale events cannot replace current state, and remove frontend status polling and heartbeats.
+- **Event-driven maintenance.** Schedule native maintenance from state changes and deadlines. Observe Windows network changes through native notifications, with a bounded address-only fallback.
+
 ### Video controls
 
 - **Movable stream statistics.** Open diagnostics only for the main video and move the compact window across the entire meeting interface by dragging its title bar or using the arrow keys. Keep it inside the main video's fullscreen surface when fullscreen is active, and close it when that source leaves the main view. Prioritize latency and presentation frame rate, followed by 1% Low, in a compact summary with small text and line charts covering the last 60 seconds. Label latency by its measurement stage and keep per-stream frame rates, bitrate and drop counters in expandable details. Preserve gaps in missing data and isolate each connection's history. Close the window directly and copy the complete report even when details are collapsed.
+- **Stable controls with the on-screen keyboard.** Keep the floating control dot docked to the video edge as the keyboard opens, closes or changes the viewport. Preserve its saved position through temporary layout changes, and keep keyboard focus when opening or dragging the dot.
 - **Consistent playback statistics.** Use a shared statistics contract for browser and desktop presentation. Add native 1% Low from individual compositor frame intervals, using the same rolling window and definition as the browser. Keep frame counters and timing histories independent for each native view, and reset interval history while a view is hidden.
+
+### Maintenance
+
+- Unify typed event subscriptions and lifecycle cleanup across web and desktop services, including messaging, file transfers, sessions, storage and recording. Remove legacy event emitters and obsolete interfaces.
+- Make video presentation diagnostic cleanup safe to repeat, so retired observers cannot remove their replacements.
 
 ## [1.3.7] - 2026-11-09
 
