@@ -1,6 +1,7 @@
 //! One render worker and DirectComposition target per window, with latest-frame admission.
+use super::statistics::ViewStatistics;
 use super::wake::Wake;
-use super::{Frame, Source, Subscription};
+use super::{Frame, Source, Subscription, ViewStats};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -38,6 +39,7 @@ struct Binding {
     source: Arc<Source>,
     layout: Layout,
     watch: Subscription,
+    statistics: Arc<Mutex<ViewStatistics>>,
 }
 #[derive(Default)]
 struct State {
@@ -144,6 +146,11 @@ impl Compositor {
             }
             binding.layout = layout;
             binding.watch.set_frames(layout.visible);
+            binding
+                .statistics
+                .lock()
+                .unwrap()
+                .set_visible(layout.visible);
         } else {
             if state.bindings.len() >= 16 {
                 return Err("Native video view limit reached".into());
@@ -156,12 +163,15 @@ impl Compositor {
                 false,
             );
             watch.set_frames(layout.visible);
+            let mut statistics = ViewStatistics::default();
+            statistics.set_visible(layout.visible);
             state.bindings.insert(
                 id,
                 Binding {
                     source,
                     layout,
                     watch,
+                    statistics: Arc::new(Mutex::new(statistics)),
                 },
             );
         }
@@ -171,6 +181,19 @@ impl Compositor {
     pub fn remove(&self, id: u64) {
         self.state.lock().unwrap().bindings.remove(&id);
         self.wake.signal();
+    }
+    pub fn stats(&self, id: u64) -> Option<ViewStats> {
+        let statistics = self
+            .state
+            .lock()
+            .unwrap()
+            .bindings
+            .get(&id)?
+            .statistics
+            .clone();
+        // Sorting a diagnostic snapshot must not hold the render worker's lock.
+        let mut snapshot = statistics.lock().unwrap().clone();
+        Some(snapshot.snapshot(Instant::now()))
     }
 }
 impl Drop for Compositor {
@@ -203,7 +226,7 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
                 state
                     .bindings
                     .iter()
-                    .map(|(&id, b)| (id, (b.source.clone(), b.layout))),
+                    .map(|(&id, b)| (id, (b.source.clone(), b.layout, b.statistics.clone()))),
             );
             state.closed
         };
@@ -220,14 +243,14 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
                 if hr != 1 {
                     view.lease = None;
                     if hr < 0 {
-                        if let Some((source, _)) = bindings.get(&id) {
+                        if let Some((source, _, _)) = bindings.get(&id) {
                             source.fail(format!("Native video completion: {hr:#x}"));
                         }
                     }
                 }
             }
-            let binding = bindings.get(&id).filter(|(source, _)| !source.closed());
-            let Some((source, layout)) = binding else {
+            let binding = bindings.get(&id).filter(|(source, _, _)| !source.closed());
+            let Some((source, layout, statistics)) = binding else {
                 // Hide immediately, but keep the sample until the GPU finishes.
                 let _ = wl_composition_layout(native.0, id, 0., 0., 0., 0., 0., 0);
                 if view.lease.is_some() {
@@ -281,7 +304,13 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
             if hr < 0 {
                 source.fail(format!("Native video presentation: {hr:#x}"));
             } else {
-                source.presented(queue_ms, start.elapsed().as_secs_f64() * 1000.);
+                let at = Instant::now();
+                let submit_ms = at.duration_since(start).as_secs_f64() * 1000.;
+                statistics
+                    .lock()
+                    .unwrap()
+                    .presented(at, queue_ms, submit_ms);
+                source.presented(queue_ms, submit_ms);
             }
             view.lease = Some(frame);
             true
@@ -291,7 +320,7 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
         // accumulate a FIFO of obsolete positions behind frame presentation.
         let hr = unsafe { wl_composition_commit(native.0) };
         if hr < 0 {
-            for (source, _) in bindings.values() {
+            for (source, _, _) in bindings.values() {
                 source.fail(format!("Native video composition: {hr:#x}"));
             }
         }
@@ -300,7 +329,7 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
         }
         let hr = unsafe { wl_composition_wait(native.0, wake.handle().0) };
         if hr < 0 {
-            for (source, _) in bindings.values() {
+            for (source, _, _) in bindings.values() {
                 source.fail(format!("Native video wait: {hr:#x}"));
             }
             // A wait failure is exceptional. Keep pending leases protected;

@@ -1,5 +1,7 @@
 export * from "./recording";
 export * from "./presentation-layout";
+export type * from "./presentation-stats";
+import type { VideoPresentationSampler } from "./presentation-stats";
 export type * from "./media-receive";
 export type * from "./room-peer";
 export { browserRoomTransport } from "./room-peer";
@@ -76,16 +78,9 @@ export interface PlatformRuntime {
     | Promise<import("./room-peer").RoomTransport>;
   /** Bind an already decoded native source beneath the existing video controls. */
   readonly videoPresentation?: {
-    sample?(track: MediaStreamTrack):
-      | {
-          read(at?: number): {
-            fps?: number;
-            totalFrames?: number;
-            implementation?: string;
-          };
-          close(): void;
-        }
-      | undefined;
+    sample?(
+      track: MediaStreamTrack,
+    ): VideoPresentationSampler | undefined;
     bind(
       track: MediaStreamTrack,
       video: HTMLVideoElement,

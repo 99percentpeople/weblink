@@ -41,6 +41,7 @@ vi.hoisted(() => {
 
 const fixture = vi.hoisted(() => ({
   error: vi.fn(),
+  readStatistics: vi.fn(async () => []),
   control: undefined as any,
   screenControl: undefined as any,
   peerCapabilities:
@@ -67,6 +68,7 @@ vi.mock("@/libs/state/app-state-context", () => ({
 }));
 vi.mock("@/libs/application/session-service", () => ({
   sessionService: {
+    getVideoStats: fixture.readStatistics,
     getRemoteControl: () => fixture.control,
     getScreenControl: () => fixture.screenControl,
     remoteControl: { status: fixture.hostStatus },
@@ -176,6 +178,7 @@ beforeEach(() => {
   vi.stubGlobal("innerWidth", 390);
   window.dispatchEvent(new Event("resize"));
   fixture.error.mockClear();
+  fixture.readStatistics.mockClear();
   fixture.control = undefined;
   fixture.screenControl = undefined;
   fixture.peerCapabilities.mockReset();
@@ -246,7 +249,7 @@ function openActions() {
   }
 }
 
-function setup(main = true) {
+function setup(main = true, statisticsMount?: HTMLElement) {
   const [local, setLocal] = createSignal(true);
   const [kind, setKind] = createSignal("screen");
   const [pinned, setPinned] = createSignal(main);
@@ -267,6 +270,7 @@ function setup(main = true) {
       }
       local={local()}
       pinned={pinned()}
+      statisticsMount={statisticsMount}
       onPin={() => setPinned((value) => !value)}
       onStop={onStop}
     />
@@ -294,6 +298,97 @@ const cover = () =>
   screen.queryByRole("button", {
     name: "meeting.show_screen_preview",
   });
+
+describe("main video statistics", () => {
+  it("offers diagnostics only for the main video and stops them when it becomes a thumbnail", async () => {
+    const view = setup(false);
+    const show = () =>
+      screen.queryByRole("button", {
+        name: "video.statistics.show_overlay",
+      });
+    expect(show()).toBeNull();
+    activateFullscreen(view.display);
+    expect(show()).toBeNull();
+    activateFullscreen(null);
+    view.setPinned(true);
+    openActions();
+    fireEvent.click(show()!);
+    expect(
+      screen.getByRole("region", {
+        name: "video.statistics.title",
+      }),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(fixture.readStatistics).toHaveBeenCalledOnce(),
+    );
+    view.setPinned(false);
+    expect(
+      screen.queryByRole("region", {
+        name: "video.statistics.title",
+      }),
+    ).toBeNull();
+    openActions();
+    expect(show()).toBeNull();
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1100),
+    );
+    expect(fixture.readStatistics).toHaveBeenCalledOnce();
+    view.setPinned(true);
+    openActions();
+    expect(show()).toBeTruthy();
+    expect(
+      screen.queryByRole("region", {
+        name: "video.statistics.title",
+      }),
+    ).toBeNull();
+    expect(view.track().stop).not.toHaveBeenCalled();
+  });
+
+  it("moves the same window between the meeting and fullscreen without replacing playback or its controls", async () => {
+    const meeting = render(() => (
+      <main data-testid="statistics-mount" />
+    ));
+    const mount = meeting.getByTestId("statistics-mount");
+    const view = setup(true, mount);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "video.statistics.show_overlay",
+      }),
+    );
+    const panel = await screen.findByRole("region", {
+      name: "video.statistics.title",
+    });
+    expect(mount.contains(panel)).toBe(true);
+    expect(view.display.contains(panel)).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "video.statistics.show_details",
+      }),
+    );
+    const expanded = screen.getByRole("button", {
+      name: "video.statistics.hide_details",
+    });
+    activateFullscreen(view.display);
+    expect(view.display.contains(panel)).toBe(true);
+    expect(mount.contains(panel)).toBe(false);
+    expect(
+      screen.getByRole("button", {
+        name: "video.statistics.hide_details",
+      }),
+    ).toBe(expanded);
+    activateFullscreen(null);
+    expect(mount.contains(panel)).toBe(true);
+    expect(view.display.contains(panel)).toBe(false);
+    expect(view.container.querySelector("video")).toBe(
+      view.video,
+    );
+    view.unmount();
+    expect(
+      mount.querySelector("[data-stream-statistics]"),
+    ).toBeNull();
+    expect(view.track().stop).not.toHaveBeenCalled();
+  });
+});
 
 it.each([
   { local: true, sourceLabel: "", audioOnly: false },

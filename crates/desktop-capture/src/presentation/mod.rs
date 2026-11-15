@@ -2,11 +2,13 @@
 mod compositor;
 mod recording;
 mod source;
+mod statistics;
 pub mod upload;
 mod wake;
 pub use compositor::{Compositor, Layout};
 pub use recording::Recording;
 pub use source::{Frame, Source, Stats, Subscription, Texture};
+pub use statistics::ViewStats;
 #[cfg(test)]
 mod tests {
     use super::*;

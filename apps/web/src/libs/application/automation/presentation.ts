@@ -1,13 +1,12 @@
 import { createVideoPresentationStats } from "@/libs/domain/video-presentation-stats";
 import { SubscriptionScope } from "@weblink/platform/subscription-scope";
+import type { VideoPresentationSampler } from "@weblink/platform";
 /** Read-only player observers, owned by the application diagnostics service. */
 export class PresentationDiagnostics {
   constructor(
     private readonly native?: (
       track: MediaStreamTrack,
-    ) =>
-      | { read(): Record<string, unknown>; close(): void }
-      | undefined,
+    ) => VideoPresentationSampler | undefined,
   ) {}
   private subscriptions = new SubscriptionScope();
   private readonly readers = new Map<

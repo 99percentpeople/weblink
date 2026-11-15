@@ -202,9 +202,16 @@ pub fn presentation_stats(
         .ok_or("Native presentation closed")?;
     entry.renewed = Instant::now();
     let stats = entry.source.stats();
+    let key = entry.key;
+    let view = data
+        .windows
+        .get(webview.label())
+        .and_then(|window| window.stats(key))
+        .unwrap_or_default();
     Ok(
-        json!({"path":"d3d11-composition", "presentedFrames":stats.presented_frames, "uploadedFrames":stats.uploaded_frames,
-        "decodedQueueMs":stats.decoded_queue_ms, "submitMs":stats.submit_ms, "error":stats.error}),
+        json!({"path":"d3d11-composition", "presentedFrames":view.presented_frames, "uploadedFrames":stats.uploaded_frames,
+        "onePercentLowFps":view.one_percent_low_fps, "onePercentLowState":view.one_percent_low_state,
+        "decodedQueueMs":view.decoded_queue_ms, "submitMs":view.submit_ms, "error":stats.error}),
     )
 }
 #[tauri::command]

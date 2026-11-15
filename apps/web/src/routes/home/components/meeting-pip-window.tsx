@@ -68,6 +68,7 @@ export function MeetingPipWindow(props: {
           aria-label={t("meeting.pip_title")}
         >
           <MeetingStage
+            statisticsMount={page}
             compact
             ref={(value) => {
               stage = value;

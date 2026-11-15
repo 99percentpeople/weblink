@@ -55,6 +55,18 @@ export async function streamStatisticsCheck(
     if (calls !== 0)
       throw new Error("Disabled overlay polled statistics");
     toggle(true);
+    const details = [
+      ...host.querySelectorAll("button"),
+    ].find(
+      (button) =>
+        button.getAttribute("aria-label") ===
+        t("video.statistics.show_details"),
+    );
+    if (!details)
+      throw new Error(
+        "Statistics details control is missing",
+      );
+    details.click();
     await until(() => {
       const text =
         host.querySelector("[data-stream-statistics]")

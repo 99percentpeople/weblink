@@ -85,6 +85,7 @@ export function MeetingTile(props: {
   audioMuted?: boolean;
   onToggleAudio?: () => void;
   pinned: boolean;
+  statisticsMount?: HTMLElement;
   onPin?(): void;
   onActivate?(action: () => void): void;
   registerFeatures?: RegisterMeetingMainFeatures;
@@ -209,6 +210,9 @@ export function MeetingTile(props: {
     createSignal(false);
   const [statisticsVisible, setStatisticsVisible] =
     createSignal(false);
+  createEffect(() => {
+    if (!props.pinned) setStatisticsVisible(false);
+  });
   createEffect(
     on(
       () => [props.sourceId, props.trackId],
@@ -308,10 +312,20 @@ export function MeetingTile(props: {
             }
           />
           <Show
-            when={statisticsVisible() && playbackActive()}
+            when={
+              props.pinned &&
+              statisticsVisible() &&
+              playbackActive()
+            }
           >
             <VideoStatisticsOverlay
               local={props.local}
+              mount={
+                fullscreen.isThisElementFullscreen()
+                  ? displayRef()
+                  : props.statisticsMount
+              }
+              onClose={() => setStatisticsVisible(false)}
               read={(track) =>
                 sessionService.getVideoStats(track)
               }

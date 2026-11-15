@@ -1,14 +1,11 @@
-export interface VideoPresentationStats {
-  fps?: number;
-  onePercentLowFps?: number;
-  onePercentLowState?: "estimated" | "unsupported";
-  droppedPerSecond?: number;
-  receiveToPresentMs?: number;
-}
-export interface VideoPresentationSampler {
-  read(at?: number): VideoPresentationStats;
-  close(): void;
-}
+import type {
+  VideoPresentationStats,
+  VideoPresentationSampler,
+} from "@weblink/platform";
+export type {
+  VideoPresentationStats,
+  VideoPresentationSampler,
+} from "@weblink/platform";
 
 const valid = (value: number | undefined) =>
   value !== undefined &&

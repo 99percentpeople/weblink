@@ -1,3 +1,5 @@
+import type { VideoPresentationStats } from "@weblink/platform";
+
 /** Only known, bounded diagnostic fields cross from native reports into exports. */
 export interface ReceiveStageTiming {
   count: number;
@@ -21,7 +23,10 @@ export interface NativeReceivePipelineStats {
   decodedQueueMs?: ReceiveStageTiming;
   pixelCopyMs?: ReceiveStageTiming;
   leaseHoldMs?: ReceiveStageTiming;
-  renderer?: {
+  renderer?: Pick<
+    VideoPresentationStats,
+    "onePercentLowFps" | "onePercentLowState"
+  > & {
     path?: "d3d11-composition";
     presentedFrames?: number;
     uploadedFrames?: number;
@@ -115,6 +120,14 @@ export function readNativeReceiveStats(
               ? "d3d11-composition"
               : undefined,
           presentedFrames: number(renderer.presentedFrames),
+          onePercentLowFps: number(
+            renderer.onePercentLowFps,
+          ),
+          onePercentLowState:
+            renderer.onePercentLowState === "estimated" ||
+            renderer.onePercentLowState === "unsupported"
+              ? renderer.onePercentLowState
+              : undefined,
           uploadedFrames: number(renderer.uploadedFrames),
           decodedQueueMs: number(renderer.decodedQueueMs),
           submitMs: number(renderer.submitMs),

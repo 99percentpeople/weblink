@@ -53,6 +53,45 @@ beforeEach(() => {
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
+it("passes native per-frame low FPS through the shared presentation sampler", async () => {
+  let frames = 100;
+  let low = 25;
+  mockIPC((command) => {
+    if (command === "presentation_stats")
+      return {
+        presentedFrames: frames,
+        onePercentLowFps: low,
+        onePercentLowState: null,
+      };
+  });
+  const presentation = createNativePresentation();
+  const surface = presentation.create(
+    "receiver",
+    false,
+    vi.fn(),
+    vi.fn(),
+    vi.fn(),
+  );
+  await surface.open();
+  surface.visible = true;
+  await surface.stats(true);
+  const sampler = presentation.sample(
+    pixels as unknown as MediaStreamTrack,
+  )!;
+  expect(sampler.read().onePercentLowFps).toBe(25);
+  await vi.advanceTimersByTimeAsync(1000);
+  frames = 160;
+  low = 40;
+  await surface.stats(true);
+  expect(sampler.read()).toMatchObject({
+    fps: 60,
+    onePercentLowFps: 40,
+  });
+  sampler.close();
+  surface.close();
+  expect(sampler.read()).toEqual({});
+});
+
 it("refreshes the placeholder on demand without periodic pixel work", async () => {
   let events!: Channel<{
     type: string;

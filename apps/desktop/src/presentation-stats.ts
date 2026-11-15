@@ -1,10 +1,21 @@
+import type {
+  VideoPresentationSampler,
+  VideoPresentationStats,
+} from "@weblink/platform";
+
+export interface NativePresentationSnapshot {
+  at: number;
+  frames: number;
+  visible: boolean;
+  onePercentLowFps?: number | null;
+  onePercentLowState?:
+    | VideoPresentationStats["onePercentLowState"]
+    | null;
+}
+
 export function createNativePresentationStats(
-  current: () => {
-    at: number;
-    frames: number;
-    visible: boolean;
-  },
-) {
+  current: () => NativePresentationSnapshot,
+): VideoPresentationSampler {
   let previous: { at: number; frames: number } | undefined;
   let fps: number | undefined;
   let closed = false;
@@ -15,11 +26,21 @@ export function createNativePresentationStats(
         closed ||
         !sample.visible ||
         !Number.isFinite(sample.at) ||
-        !Number.isFinite(sample.frames)
+        !Number.isSafeInteger(sample.frames) ||
+        sample.frames < 0 ||
+        sample.at < 0
       ) {
         previous = undefined;
         fps = undefined;
         return {};
+      }
+      if (
+        previous &&
+        (sample.at < previous.at ||
+          sample.frames < previous.frames)
+      ) {
+        previous = undefined;
+        fps = undefined;
       }
       if (previous && sample.at > previous.at) {
         const elapsed = sample.at - previous.at;
@@ -30,9 +51,21 @@ export function createNativePresentationStats(
             : undefined;
       }
       if (!previous || sample.at !== previous.at)
-        previous = sample;
+        previous = { at: sample.at, frames: sample.frames };
+      const low = sample.onePercentLowFps;
+      const hasLow =
+        sample.onePercentLowState !== "unsupported" &&
+        typeof low === "number" &&
+        Number.isFinite(low) &&
+        low >= 0;
       return {
         fps,
+        onePercentLowFps: hasLow ? low : undefined,
+        onePercentLowState: hasLow
+          ? sample.onePercentLowState === "estimated"
+            ? "estimated"
+            : undefined
+          : "unsupported",
         totalFrames: sample.frames,
         implementation: "D3D11 / DirectComposition",
       };

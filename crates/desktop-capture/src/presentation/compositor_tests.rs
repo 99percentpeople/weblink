@@ -268,3 +268,66 @@ fn pooled_software_uploads_present_and_record_without_overwriting_held_frames() 
     drop(compositor);
     assert!(source.stats().error.is_none());
 }
+
+#[test]
+fn presentation_statistics_belong_to_each_view_and_reset_when_hidden() {
+    fn wait_view(compositor: &Compositor, id: u64, frames: u64) -> ViewStats {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let stats = compositor.stats(id).unwrap();
+            if stats.presented_frames >= frames {
+                return stats;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "View {id} did not present {frames} frames"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+    let window = Window::new();
+    let compositor = Compositor::new(window.hwnd).unwrap();
+    let (device, _) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let source = Arc::new(Source::default());
+    let frame = texture(&device, 1284, 724);
+    let layout = Layout {
+        width: 128.,
+        height: 96.,
+        visible: true,
+        ..Default::default()
+    };
+    compositor.bind(1, source.clone(), layout).unwrap();
+    compositor.bind(2, source.clone(), layout).unwrap();
+    for count in 1..=3 {
+        source.publish(frame.clone());
+        wait_view(&compositor, 1, count);
+        wait_view(&compositor, 2, count);
+    }
+    assert_eq!(source.stats().presented_frames, 6);
+    for id in [1, 2] {
+        let stats = compositor.stats(id).unwrap();
+        assert_eq!(stats.presented_frames, 3);
+        assert!(stats.one_percent_low_fps.unwrap() > 0.);
+        assert_eq!(stats.one_percent_low_state, None);
+    }
+    compositor
+        .bind(
+            1,
+            source.clone(),
+            Layout {
+                visible: false,
+                ..layout
+            },
+        )
+        .unwrap();
+    assert_eq!(compositor.stats(1).unwrap().one_percent_low_fps, None);
+    source.publish(frame);
+    wait_view(&compositor, 2, 4);
+    assert_eq!(compositor.stats(1).unwrap().presented_frames, 3);
+    compositor.bind(1, source.clone(), layout).unwrap();
+    assert_eq!(wait_view(&compositor, 1, 4).one_percent_low_fps, Some(0.));
+    compositor.remove(1);
+    assert!(compositor.stats(1).is_none());
+    compositor.remove(2);
+    source.close();
+}

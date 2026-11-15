@@ -11,6 +11,7 @@ it("exports native GPU counters without treating them as shared-buffer or placeh
     renderer: {
       path: "d3d11-composition",
       presentedFrames: 59,
+      onePercentLowFps: 42,
       uploadedFrames: 0,
       decodedQueueMs: 0.4,
       submitMs: 0.3,
@@ -22,6 +23,7 @@ it("exports native GPU counters without treating them as shared-buffer or placeh
     slots: 0,
     renderer: {
       presentedFrames: 59,
+      onePercentLowFps: 42,
       uploadedFrames: 0,
       decodedQueueMs: 0.4,
     },
@@ -112,6 +114,8 @@ it("exports only known finite stages and rejects oversized diagnostic windows", 
     renderer: {
       submittedFrames: 299,
       hiddenFrames: -1,
+      onePercentLowFps: Number.NaN,
+      onePercentLowState: "private",
       receivedFrames: Infinity,
       secret: "private",
       presenterWriteMs: timing,
@@ -128,6 +132,10 @@ it("exports only known finite stages and rejects oversized diagnostic windows", 
   });
   expect(value?.workerQueueMs).toBeUndefined();
   expect(value?.renderer?.hiddenFrames).toBeUndefined();
+  expect(value?.renderer?.onePercentLowFps).toBeUndefined();
+  expect(
+    value?.renderer?.onePercentLowState,
+  ).toBeUndefined();
   expect(value?.renderer?.receivedFrames).toBeUndefined();
   expect(JSON.stringify(value)).not.toContain("private");
   expect(

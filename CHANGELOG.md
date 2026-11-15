@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.8] - 2026-11-15
+
+### Video controls
+
+- **Movable stream statistics.** Open diagnostics only for the main video and move the compact window across the entire meeting interface by dragging its title bar or using the arrow keys. Keep it inside the main video's fullscreen surface when fullscreen is active, and close it when that source leaves the main view. Prioritize latency and presentation frame rate, followed by 1% Low, in a compact summary with small text and line charts covering the last 60 seconds. Label latency by its measurement stage and keep per-stream frame rates, bitrate and drop counters in expandable details. Preserve gaps in missing data and isolate each connection's history. Close the window directly and copy the complete report even when details are collapsed.
+- **Consistent playback statistics.** Use a shared statistics contract for browser and desktop presentation. Add native 1% Low from individual compositor frame intervals, using the same rolling window and definition as the browser. Keep frame counters and timing histories independent for each native view, and reset interval history while a view is hidden.
+
 ## [1.3.7] - 2026-11-09
 
 Weblink 1.3.7 improves how Windows screen sharing handles bitrate changes, adds more detailed encoder diagnostics, and restores messaging and file requests after a peer reconnects.

@@ -1,31 +1,44 @@
-import { createMemo, For, Show } from "solid-js";
+import {
+  createMemo,
+  createSignal,
+  createUniqueId,
+  Index,
+  Show,
+} from "solid-js";
+import { Portal } from "solid-js/web";
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  GripVertical,
+  X,
+} from "lucide-solid";
 import { toast } from "solid-sonner";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n";
-import { createVideoStatistics } from "@/libs/hooks/video-statistics";
+import { createFloatingPanel } from "@/libs/hooks/create-floating-panel";
+import {
+  createVideoStatistics,
+  type VideoStatisticsRow,
+} from "@/libs/hooks/video-statistics";
 import type { VideoStatsBatch } from "@/libs/domain/video-stats";
 import { useVideoDisplay } from "@/routes/home/components/video-display-context";
 import { copyText } from "@/libs/utils/copy-text";
-import { Copy } from "lucide-solid";
-
-const fixed = (value: number | undefined, unit: string) =>
-  value === undefined ||
-  !Number.isFinite(value) ||
-  value < 0
-    ? undefined
-    : `${value.toFixed(1)} ${unit}`;
-const bitrate = (value?: number) =>
-  value === undefined
-    ? undefined
-    : value >= 1_000_000
-      ? fixed(value / 1_000_000, "Mbps")
-      : fixed(value / 1000, "kbps");
+import {
+  formatVideoStatistics,
+  statisticsText,
+  type StatisticsMetric,
+} from "./video-statistics-format";
+import { VideoStatisticsTrend } from "./video-statistics-trend";
+import { formatVideoStatisticsOverview } from "./video-statistics-overview";
 
 export function VideoStatisticsOverlay(props: {
   local?: boolean;
+  mount?: HTMLElement;
   read: (
     track: MediaStreamTrack,
   ) => Promise<VideoStatsBatch[]>;
+  onClose?(): void;
 }) {
   const { videoRef, videoTrack } = useVideoDisplay();
   const rows = createVideoStatistics(
@@ -34,189 +47,281 @@ export function VideoStatisticsOverlay(props: {
     props.read,
     () => props.local === true,
   );
-  const visibleRows = createMemo(() => {
-    const duration = (
-      kind:
-        | "encode"
-        | "decode"
-        | "buffer"
-        | "encoder_queue"
-        | "capture_to_encode"
-        | "send_queue"
-        | "receive_to_present"
-        | "rtt",
-      value?: number,
-    ) => {
-      const text = fixed(value, "ms");
-      return text
-        ? `${t(`video.statistics.${kind}`)} ${text}`
-        : undefined;
-    };
-    return rows()
-      .map((row) => {
-        const codec = row.codec
-          ?.replace(/^video\//i, "")
-          .trim();
-        const implementation = row.implementation?.trim();
-        const fps = fixed(row.fps, "FPS");
-        let lowFps = fixed(row.onePercentLowFps, "FPS");
-        if (
-          row.onePercentLowState === "estimated" &&
-          lowFps
-        )
-          lowFps = "≈ " + lowFps;
-        if (row.onePercentLowState === "unsupported")
-          lowFps = t("video.statistics.low_unavailable");
-        const dropped = fixed(row.droppedPerSecond, "/s");
-        const fpsLabel =
-          row.direction === "send"
-            ? t("video.statistics.encode")
-            : row.direction === "receive"
-              ? t(
-                  row.preview && !row.codec
-                    ? "video.statistics.submitted"
-                    : "video.statistics.decode",
-                )
-              : undefined;
-        const lines = [
-          codec
-            ? `${codec}${implementation ? ` (${implementation})` : ""}`
-            : implementation,
-          [
-            row.width &&
-            row.height &&
-            Number.isFinite(row.width) &&
-            Number.isFinite(row.height) &&
-            row.width > 0 &&
-            row.height > 0
-              ? `${row.width} × ${row.height}`
-              : undefined,
-            fps
-              ? `${fpsLabel ? `${fpsLabel} ` : ""}${fps}`
-              : undefined,
-            bitrate(row.bitrate),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          ...(
-            [
-              ["target_bitrate", row.targetBitrate],
-              ["encoder_bitrate", row.encoderBitrate],
-              [
-                "bandwidth_estimate",
-                row.availableOutgoingBitrate,
-              ],
-            ] as const
-          ).map(([kind, value]) => {
-            const text = bitrate(value);
-            return text
-              ? `${t(`video.statistics.${kind}`)} ${text}`
-              : undefined;
-          }),
-          lowFps
-            ? `${t("video.statistics.one_percent_low")} ${lowFps}`
-            : undefined,
-          [
-            dropped
-              ? `${t("video.statistics.player_dropped")} ${dropped}`
-              : undefined,
-            duration(
-              "receive_to_present",
-              row.receiveToPresentMs,
-            ),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          [
-            duration("encode", row.encodeMs),
-            duration("decode", row.decodeMs),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          row.direction === "receive"
-            ? duration("buffer", row.jitterMs)
-            : undefined,
-          [
-            duration("encoder_queue", row.encoderQueueMs),
-            duration(
-              "capture_to_encode",
-              row.captureToEncodeMs,
-            ),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          [
-            duration("send_queue", row.sendDelayMs),
-            duration("rtt", row.roundTripMs),
-          ]
-            .filter(Boolean)
-            .join(" · "),
-        ].filter((line): line is string => Boolean(line));
-        const title = `${t(`video.statistics.${row.direction}`)}${
-          row.preview
-            ? ` · ${t("video.statistics.preview")}`
-            : row.peer
-              ? ` · ${row.peer}`
-              : ""
-        }`;
-        return { ...row, title, lines };
-      })
-      .filter((row) => row.lines.length > 0);
+  return (
+    <Show when={videoTrack()}>
+      <Show
+        when={props.mount}
+        fallback={
+          <StatisticsWindow
+            rows={rows()}
+            onClose={props.onClose}
+          />
+        }
+      >
+        <Portal
+          mount={props.mount}
+          ref={(container) => {
+            container.style.display = "contents";
+          }}
+        >
+          <StatisticsWindow
+            rows={rows()}
+            onClose={props.onClose}
+          />
+        </Portal>
+      </Show>
+    </Show>
+  );
+}
+
+function StatisticsMetrics(props: {
+  metrics: StatisticsMetric[];
+}) {
+  return (
+    <dl>
+      <Index each={props.metrics}>
+        {(metric) => (
+          <div
+            class="flex min-w-0 items-center gap-2"
+            title={metric().description}
+          >
+            <dt class="min-w-0 flex-1 break-words text-white/50">
+              {metric().label}
+            </dt>
+            <dd
+              class="flex w-[10.5rem] max-w-[70%] items-center justify-end gap-2
+                font-mono tabular-nums"
+              classList={{
+                "text-white/85": !metric().secondary,
+                "text-white/50": metric().secondary,
+              }}
+            >
+              <Show when={metric().trend}>
+                {(trend) => (
+                  <VideoStatisticsTrend
+                    trend={trend()}
+                    label={metric().label}
+                  />
+                )}
+              </Show>
+              <span class="w-[12ch] shrink-0 text-right">
+                {metric().value}
+              </span>
+            </dd>
+          </div>
+        )}
+      </Index>
+    </dl>
+  );
+}
+
+function StatisticsWindow(props: {
+  rows: VideoStatisticsRow[];
+  onClose?(): void;
+}) {
+  let boundary!: HTMLDivElement;
+  let panel!: HTMLElement;
+  let handle!: HTMLButtonElement;
+  const bodyId = createUniqueId();
+  const [expanded, setExpanded] = createSignal(false);
+  const floating = createFloatingPanel({
+    boundary: () => boundary,
+    panel: () => panel,
+    handle: () => handle,
   });
+  const rows = createMemo(() =>
+    props.rows.map(formatVideoStatistics),
+  );
+  const overview = createMemo(() =>
+    formatVideoStatisticsOverview(props.rows),
+  );
+  const detailLabel = () =>
+    t(
+      expanded()
+        ? "video.statistics.hide_details"
+        : "video.statistics.show_details",
+    );
   const copy = async () => {
     const text = [
       `${t("video.statistics.title")} · ${new Date().toISOString()}`,
-      ...visibleRows().map((row) =>
-        [row.title, ...row.lines].join("\n"),
-      ),
-      JSON.stringify(rows(), null, 2),
+      ...rows().map(statisticsText),
+      JSON.stringify(props.rows, null, 2),
     ].join("\n\n");
-    if (await copyText(text)) {
+    if (await copyText(text))
       toast.success(t("common.notification.copy_success"));
-    }
   };
+  const stop = (event: Event) => event.stopPropagation();
   return (
-    <Show when={videoTrack() && visibleRows().length > 0}>
-      <div
-        class="pointer-events-none absolute left-2 top-2 z-10
-          max-h-[calc(100%-1rem)] max-w-[calc(100%-1rem)]
-          overflow-hidden rounded-md bg-black/75 px-2 py-1.5 font-mono
-          text-[10px] tabular-nums leading-relaxed text-white"
-        role="group"
+    <div
+      ref={boundary}
+      class="pointer-events-none absolute inset-0 z-50"
+    >
+      <section
+        ref={panel}
+        role="region"
         aria-label={t("video.statistics.title")}
         data-stream-statistics
+        class="pointer-events-auto absolute left-0 top-0 flex
+          max-h-[calc(100%-1rem)] w-72 max-w-[calc(100%-1rem)]
+          flex-col overflow-hidden rounded-md border border-white/10
+          bg-zinc-950/85 text-[10px] leading-4 text-white shadow-md
+          backdrop-blur-sm"
+        style={{
+          transform: `translate3d(${floating.position().x}px, ${floating.position().y}px, 0)`,
+        }}
+        onPointerDown={stop}
+        onPointerMove={stop}
+        onPointerUp={stop}
+        onPointerCancel={stop}
+        onClick={stop}
+        onDblClick={stop}
+        onContextMenu={stop}
+        onWheel={stop}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (
+            event.key === "Escape" &&
+            !event.isComposing &&
+            props.onClose
+          ) {
+            event.preventDefault();
+            props.onClose();
+          }
+        }}
+        onKeyUp={stop}
       >
-        <For each={visibleRows()}>
-          {(row) => (
-            <div class="py-0.5">
-              <div class="truncate text-white/70">
-                {row.title}
-              </div>
-              <For each={row.lines}>
-                {(line) => (
-                  <div class="truncate">{line}</div>
-                )}
-              </For>
-            </div>
-          )}
-        </For>
-        <Button
-          type="button"
-          variant="link"
-          size="sm"
-          class="pointer-events-auto h-7 px-0 text-[10px] text-white
-            hover:bg-white/15 hover:text-white"
-          onPointerDown={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            void copy();
-          }}
+        <div class="flex shrink-0 items-center border-b border-white/10 p-0.5">
+          <button
+            ref={handle}
+            type="button"
+            aria-label={t("video.statistics.move")}
+            title={t("video.statistics.move_hint")}
+            class="flex min-w-0 flex-1 touch-none select-none items-center
+              gap-1 rounded px-1 py-1 text-left font-medium outline-none
+              focus-visible:ring-1 focus-visible:ring-white/60"
+            style={{
+              cursor: floating.dragging()
+                ? "grabbing"
+                : "grab",
+            }}
+          >
+            <GripVertical
+              class="size-3 shrink-0 text-white/40"
+              aria-hidden="true"
+            />
+            <span class="truncate">
+              {t("video.statistics.title")}
+            </span>
+          </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-6 rounded text-white/60 hover:bg-white/10
+              hover:text-white"
+            title={detailLabel()}
+            aria-label={detailLabel()}
+            aria-expanded={expanded()}
+            aria-controls={bodyId}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <Show
+              when={expanded()}
+              fallback={
+                <ChevronDown
+                  class="size-3"
+                  aria-hidden="true"
+                />
+              }
+            >
+              <ChevronUp
+                class="size-3"
+                aria-hidden="true"
+              />
+            </Show>
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-6 rounded text-white/60 hover:bg-white/10
+              hover:text-white"
+            title={t("video.statistics.copy")}
+            aria-label={t("video.statistics.copy")}
+            disabled={!rows().length}
+            onClick={() => void copy()}
+          >
+            <Copy class="size-3" aria-hidden="true" />
+          </Button>
+          <Show when={props.onClose}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="size-6 rounded text-white/60 hover:bg-white/10
+                hover:text-white"
+              title={t("common.action.close")}
+              aria-label={t("common.action.close")}
+              onClick={() => props.onClose?.()}
+            >
+              <X class="size-3" aria-hidden="true" />
+            </Button>
+          </Show>
+        </div>
+        <div
+          id={bodyId}
+          class="min-h-0 overflow-y-auto overscroll-contain"
         >
-          <Copy />
-          {t("video.statistics.copy")}
-        </Button>
-      </div>
-    </Show>
+          <Show
+            when={rows().length}
+            fallback={
+              <p class="px-2 py-2 text-white/50">
+                {t("video.statistics.waiting")}
+              </p>
+            }
+          >
+            <Show
+              when={expanded()}
+              fallback={
+                <div class="px-2 pb-1.5 pt-1">
+                  <StatisticsMetrics metrics={overview()} />
+                </div>
+              }
+            >
+              <Index each={rows()}>
+                {(row) => (
+                  <section
+                    aria-label={row().title}
+                    class="space-y-1 border-b border-white/10 px-2 py-1.5 last:border-0"
+                  >
+                    <div class="flex flex-wrap items-baseline justify-between gap-x-2">
+                      <h3 class="min-w-0 break-words font-medium text-white/75">
+                        {row().title}
+                      </h3>
+                      <span class="font-mono text-[9px] text-white/45">
+                        {[row().codec, row().resolution]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    <StatisticsMetrics
+                      metrics={row().summary}
+                    />
+                    <Show when={row().implementation}>
+                      <p class="font-mono text-[9px] text-white/40 [overflow-wrap:anywhere]">
+                        {row().implementation}
+                      </p>
+                    </Show>
+                    <StatisticsMetrics
+                      metrics={row().details}
+                    />
+                  </section>
+                )}
+              </Index>
+            </Show>
+          </Show>
+        </div>
+      </section>
+    </div>
   );
 }

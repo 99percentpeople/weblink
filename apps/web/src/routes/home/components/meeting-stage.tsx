@@ -38,6 +38,7 @@ export function MeetingStage(
     active?: boolean;
     sources: readonly MeetingSource[];
     pinnedId: string | null;
+    statisticsMount?: HTMLElement;
     hideRailToggle?: boolean;
     railCollapsed: boolean;
     onKeyboardVisibleChange?: (visible: boolean) => void;
@@ -292,6 +293,7 @@ export function MeetingStage(
             )
           }
           pinned={source().id === featured()?.id}
+          statisticsMount={props.statisticsMount}
           onPin={
             sources().length > 1 &&
             (!featured() || source().id === featured()?.id)

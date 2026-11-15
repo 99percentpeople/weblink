@@ -10,18 +10,26 @@ import {
   type VideoStatsSample,
   type VideoStatsValue,
 } from "../domain/video-stats";
-import {
-  createVideoPresentationStats,
-  type VideoPresentationStats,
-} from "../domain/video-presentation-stats";
+import { createVideoPresentationStats } from "../domain/video-presentation-stats";
+import type { VideoPresentationStats } from "@weblink/platform";
 import { createPresentationVisible } from "./presentation-visible";
 import { platform } from "@/libs/platform/runtime";
+import {
+  appendStatisticsHistory,
+  type StatisticsHistoryPoint,
+} from "./video-statistics-history";
+
+interface PreviousStatistics {
+  sample: VideoStatsSample;
+  history: StatisticsHistoryPoint[];
+}
 
 export interface VideoStatisticsRow
   extends VideoStatsValue, VideoPresentationStats {
   direction: "send" | "receive" | "capture" | "display";
   preview?: boolean;
   peer?: string;
+  history?: readonly StatisticsHistoryPoint[];
   /** Two bounded snapshots preserve drop/loss counters for copied diagnostics. */
   counters?: {
     current: VideoStatsSample;
@@ -57,8 +65,9 @@ export function createVideoStatistics(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let previous = new Map<
       object | string,
-      Map<string, VideoStatsSample>
+      Map<string, PreviousStatistics>
     >();
+    let displayHistory: StatisticsHistoryPoint[] = [];
     const poll = async () => {
       try {
         if (current.readyState === "ended") {
@@ -68,39 +77,62 @@ export function createVideoStatistics(
         }
         const batches = await read(current);
         if (stopped) return;
+        const at = performance.now();
         const next = new Map<
           object | string,
-          Map<string, VideoStatsSample>
+          Map<string, PreviousStatistics>
         >();
         const values: VideoStatisticsRow[] =
           batches.flatMap((batch) => {
-            const samples = new Map<
-              string,
-              VideoStatsSample
-            >();
+            const samples =
+              next.get(batch.key) ??
+              new Map<string, PreviousStatistics>();
             next.set(batch.key, samples);
             return batch.samples.map((sample) => {
+              const key = JSON.stringify([
+                batch.direction,
+                batch.preview === true,
+                sample.id,
+              ]);
               const before = previous
                 .get(batch.key)
-                ?.get(sample.id);
-              samples.set(sample.id, sample);
+                ?.get(key);
+              const value = videoStatsValue(
+                sample,
+                before?.sample,
+              );
+              const history = appendStatisticsHistory(
+                before?.sample.codec === sample.codec
+                  ? (before?.history ?? [])
+                  : [],
+                value,
+                at,
+              );
+              samples.set(key, { sample, history });
               return {
-                ...videoStatsValue(sample, before),
+                ...value,
+                history,
                 direction: batch.direction,
                 preview: batch.preview,
                 peer: batch.peer,
                 counters: {
                   current: sample,
-                  previous: before,
+                  previous: before?.sample,
                 },
               };
             });
           });
         previous = next;
         const display = presentation.read();
+        displayHistory = appendStatisticsHistory(
+          displayHistory,
+          display,
+          at,
+        );
         if (!values.length) {
           values.push({
             ...display,
+            history: displayHistory,
             direction: "display",
             preview: isLocal,
             width: element.videoWidth || undefined,
@@ -109,10 +141,18 @@ export function createVideoStatistics(
         } else if (
           Object.values(display).some(
             (value) => value !== undefined,
+          ) ||
+          // Retain presentation gaps instead of falling back to decoder FPS.
+          displayHistory.some(
+            (point) =>
+              point.fps !== undefined ||
+              point.receiveToPresentMs !== undefined ||
+              point.onePercentLowFps !== undefined,
           )
         ) {
           values.push({
             ...display,
+            history: displayHistory,
             direction: "display",
             preview: isLocal,
           });
@@ -122,6 +162,7 @@ export function createVideoStatistics(
         // A closed/replaced transport is normal during leave/rejoin.
         if (!stopped) {
           previous.clear();
+          displayHistory = [];
           setRows([]);
         }
       } finally {
@@ -135,6 +176,7 @@ export function createVideoStatistics(
       presentation.close();
       clearTimeout(timer);
       previous.clear();
+      displayHistory = [];
     });
   });
   return rows;

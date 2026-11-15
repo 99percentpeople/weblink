@@ -5,6 +5,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { createPresentationLayout } from "./presentation-layout";
 import { readPresentationGeometry } from "./presentation-geometry";
 import { observePresentationLayout } from "./presentation-observer";
+import type { VideoPresentationStats } from "@weblink/platform";
 
 export interface GpuStats {
   path: string;
@@ -12,6 +13,10 @@ export interface GpuStats {
   uploadedFrames: number;
   decodedQueueMs: number;
   submitMs: number;
+  onePercentLowFps?: number | null;
+  onePercentLowState?:
+    | VideoPresentationStats["onePercentLowState"]
+    | null;
   error?: string;
 }
 export interface GpuSurface {
@@ -51,6 +56,10 @@ export function createNativePresentation(
       return createNativePresentationStats(() => ({
         at: surface.statsAt,
         frames: surface.latestStats?.presentedFrames ?? 0,
+        onePercentLowFps:
+          surface.latestStats?.onePercentLowFps,
+        onePercentLowState:
+          surface.latestStats?.onePercentLowState,
         visible:
           !surface.closed &&
           surface.visible &&

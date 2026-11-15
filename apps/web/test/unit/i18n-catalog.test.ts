@@ -40,7 +40,11 @@ const placeholders = (value: string) =>
 
 // Reviewed shared spellings and technical terms. New English copies in a
 // non-English catalog need an explicit review instead of passing key parity.
-const sharedTerms = ["RTT", "{{page}} / {{count}}"];
+const sharedTerms = [
+  "RTT",
+  "1% Low",
+  "{{page}} / {{count}}",
+];
 const unchangedTerms: Record<string, readonly string[]> = {
   "de-de": [
     "Pause",

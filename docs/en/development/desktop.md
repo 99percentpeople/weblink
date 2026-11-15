@@ -1070,7 +1070,16 @@ refresh submissions) are shown. The overlay separates submitted/encoded/decoded
 FPS from the video element's presentation FPS, using cumulative compositor
 counters where supported. Player
 drops and receive-to-presentation timing are shown only when available. These are
-browser presentation measurements, not physical display scan-out or end-to-end latency.
+presentation measurements, not physical display scan-out or end-to-end latency.
+Browser and native GPU samplers share the `VideoPresentationStats` and
+`VideoPresentationSampler` contracts in `packages/platform`. Both report 1% Low
+as the reciprocal of the mean slowest 1% of completed presentation intervals in
+the last ten seconds of visible playback. Native intervals are recorded after
+successful compositor submissions, independently for each bound view; hiding a
+view resets its interval window. Browser coalesced callbacks and bounded native
+history truncation are marked as estimates. Unavailable measurements remain
+absent; an active supported sampler with no completed intervals reports zero.
+Decoded FPS and its pipeline timings remain separate from presentation metrics.
 MCP presentation samples include document visibility: cumulative player drop
 counters can include background frames and must not be interpreted alone as
 foreground stutter. Browser receive diagnostics expose first-packet-to-decoded

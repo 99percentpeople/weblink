@@ -864,6 +864,7 @@ export default function Home() {
                 }}
               >
                 <MeetingStage
+                  statisticsMount={page}
                   active={
                     !fullPanel() ||
                     meeting.nativePip?.active()
