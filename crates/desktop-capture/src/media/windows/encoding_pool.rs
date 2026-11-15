@@ -185,6 +185,7 @@ impl FailedPeer {
 pub(super) struct Pool {
     state: Mutex<State>,
     feedback: Option<crate::surface::gpu::Wake>,
+    performance: Arc<crate::performance::Session>,
 }
 pub(super) struct Consumer {
     token: u64,
@@ -211,10 +212,14 @@ impl Drop for Consumer {
     }
 }
 impl Pool {
-    pub fn new(feedback: crate::surface::gpu::Wake) -> Self {
+    pub fn new(
+        feedback: crate::surface::gpu::Wake,
+        performance: Arc<crate::performance::Session>,
+    ) -> Self {
         Self {
             state: Mutex::default(),
             feedback: Some(feedback),
+            performance,
         }
     }
     pub fn acquire(
@@ -301,6 +306,7 @@ impl Pool {
             wake,
             self.feedback.clone().unwrap_or_else(|| Arc::new(|| {})),
             initial,
+            self.performance.clone(),
         )?);
         state.groups.retain(|_, encoder| encoder.strong_count() > 0);
         state.groups.insert(key.clone(), Arc::downgrade(&encoder));

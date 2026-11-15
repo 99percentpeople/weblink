@@ -39,3 +39,51 @@ it("identifies requested and effective presets without exposing native names or 
   expect(result.total).toEqual({ meanMs: 5 });
   expect(result.name).toBeUndefined();
 });
+
+it("preserves fixed performance outcomes and lifetime while redacting driver details", () => {
+  const result = JSON.parse(
+    JSON.stringify(
+      sanitizePipeline({
+        performance: {
+          remoteConsumers: 0,
+          powerPolicy: {
+            backend: "NVIDIA DRS",
+            lifetime: "persistentApplication",
+            status: {
+              state: "failed",
+              reason: "C:\\private\\driver: 0x80004001",
+            },
+          },
+          timing: { state: "inactive" },
+          gpuScheduling: { state: "alreadyApplied" },
+          captureThread: {
+            scheduling: { state: "applied" },
+            timing: { state: "unsupported" },
+          },
+          encodeThread: null,
+        },
+        unknown: {
+          state: "C:\\private\\state",
+          backend: "Private GPU name",
+          lifetime: "private text",
+        },
+      }),
+    ),
+  );
+  expect(result.performance).toEqual({
+    remoteConsumers: 0,
+    powerPolicy: {
+      backend: "NVIDIA DRS",
+      lifetime: "persistentApplication",
+      status: { state: "failed", reason: ["0x80004001"] },
+    },
+    timing: { state: "inactive" },
+    gpuScheduling: { state: "alreadyApplied" },
+    captureThread: {
+      scheduling: { state: "applied" },
+      timing: { state: "unsupported" },
+    },
+    encodeThread: null,
+  });
+  expect(result.unknown).toEqual({});
+});

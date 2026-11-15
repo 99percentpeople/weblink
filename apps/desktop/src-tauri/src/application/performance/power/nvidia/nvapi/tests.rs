@@ -1,4 +1,6 @@
+use super::super::Nvidia;
 use super::*;
+use crate::application::performance::power::{apply, Status as PolicyStatus};
 
 #[test]
 fn unicode_paths_have_space_for_a_terminator_and_are_never_truncated() {
@@ -62,8 +64,13 @@ fn native_profile_is_scoped_persistent_idempotent_and_preserves_global_power() {
         driver,
         executable: path.clone(),
     };
-    assert!(super::super::ensure(&mut guard.driver, &executable).unwrap());
-    assert!(!super::super::ensure(&mut guard.driver, &executable).unwrap());
+    let applied = apply(&Nvidia, Ok(&executable));
+    assert_eq!(applied.backend, Some("NVIDIA DRS"));
+    assert_eq!(applied.status, PolicyStatus::Applied);
+    assert_eq!(
+        apply(&Nvidia, Ok(&executable)).status,
+        PolicyStatus::AlreadyApplied
+    );
     // A new DRS session proves this was saved rather than just cached locally.
     let mut reopened = Driver::open().unwrap().unwrap();
     let profile = reopened.find(&path).unwrap().unwrap();

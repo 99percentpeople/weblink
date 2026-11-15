@@ -510,6 +510,12 @@ impl MediaSession {
     pub fn new(_: MediaOptions) -> crate::Result<std::sync::Arc<Self>> {
         Err("Native screen sharing currently requires Windows".into())
     }
+    pub fn with_performance(
+        options: MediaOptions,
+        _: std::sync::Arc<crate::performance::Manager>,
+    ) -> crate::Result<std::sync::Arc<Self>> {
+        Self::new(options)
+    }
     pub fn error(&self) -> Option<String> {
         None
     }

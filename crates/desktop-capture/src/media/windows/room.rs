@@ -195,6 +195,7 @@ impl MediaSession {
                 recording: None,
                 recording_audio,
                 encoded: consumer,
+                _performance: self.performance.acquire(),
             },
         );
         drop(peers);

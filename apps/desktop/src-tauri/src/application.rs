@@ -15,8 +15,7 @@ mod control_window;
 pub mod device;
 #[cfg(windows)]
 mod executable;
-#[cfg(windows)]
-pub mod gpu_power;
+pub mod performance;
 pub mod single_instance;
 pub mod visibility;
 

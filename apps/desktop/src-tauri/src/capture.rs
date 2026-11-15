@@ -106,12 +106,14 @@ pub async fn capture_stop(
 #[tauri::command]
 pub async fn capture_share_start(
     service: State<'_, Service>,
+    performance: State<'_, crate::application::performance::Shared>,
     source_id: String,
     options: weblink_desktop_capture::media::MediaOptions,
     capture: Option<CaptureOptions>,
 ) -> Result<CaptureStatus, String> {
+    let performance = performance.inner().clone();
     run(service, move |s| {
-        let media = weblink_desktop_capture::media::MediaSession::new(options)?;
+        let media = performance.create_media(options)?;
         s.start_media_with_options(source_id, media, capture.unwrap_or_default())
     })
     .await
@@ -236,9 +238,15 @@ pub async fn capture_video_stats(
 #[tauri::command]
 pub async fn capture_pipeline_stats(
     service: State<'_, Service>,
+    performance: State<'_, crate::application::performance::Shared>,
     session_id: String,
-) -> Result<weblink_desktop_capture::media::pipeline::PipelineStats, String> {
-    run(service, move |s| Ok(s.media(session_id)?.pipeline_stats())).await
+) -> Result<crate::application::performance::PipelineReport, String> {
+    let performance = performance.inner().clone();
+    run(service, move |s| {
+        let media = s.media(session_id)?;
+        Ok(performance.pipeline_stats(&media))
+    })
+    .await
 }
 
 #[tauri::command]

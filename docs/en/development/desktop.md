@@ -620,7 +620,28 @@ The optional driver DLL is loaded from Windows System32; neither CUDA nor NVIDIA
 SDK binaries are required or bundled. The pinned API 12.2 header retains its NVIDIA
 MIT notice in `crates/desktop-capture/vendor/nvcodec`.
 
-Before creating graphics devices, the Windows desktop app uses the optional NVAPI
+The application-layer `application::performance::PerformanceService` is created
+once before Tauri/WebView or capture can create graphics devices. It invokes the
+private GPU power adapter once, retains its startup report, and owns the shared
+stream scheduling manager injected into native media sessions. Creating media,
+reading diagnostics, reconnecting and closing streams never reconfigure power.
+The power adapter requests an application GPU maximum-performance preference and
+returns the selected backend and an explicit `Applied`, `AlreadyApplied`,
+`Unsupported` or `Failed` result. Applied results describe a verified driver
+preference, not measured clock speed or recovery latency. The contract is independent
+of the encoder: NVENC and Media Foundation do not configure power policy themselves.
+New backends must scope changes to the current executable's absolute path and verify
+the override. An unavailable implementation must report `Unsupported`, not success.
+Driver failures are nonfatal and do not select another encoder or alter frame cadence.
+
+The only implemented backend is NVIDIA on Windows. Other GPUs without an available
+NVIDIA driver and non-Windows platforms return `Unsupported`. On hybrid systems a
+successful NVIDIA result does not imply the active capture/encoder uses NVIDIA.
+AMD/Intel GPU-wide power or frequency tuning, CPU QoS and high-performance adapter
+selection are not equivalent to this application preference and are not used as
+fallbacks. Any future support requires its own scope and driver readback validation.
+
+The Windows backend uses the optional NVAPI
 DRS interface to set `PREFERRED_PSTATE_PREFER_MAX` for its own executable's absolute
 path. This reduces idle-to-motion recovery without encoding unchanged frames at
 the full streaming rate: static content still refreshes twice per second. Only
@@ -636,6 +657,55 @@ graphics devices, including a local preview. Startup skips writes when the exact
 application override already has the requested value. Other profile settings are
 preserved. The driver DLL is loaded only from System32; no NVAPI SDK/runtime is
 bundled and no global clock locks or high-rate synthetic encoding are used.
+
+Native senders also use `weblink_desktop_capture::performance`, a separate, scoped
+scheduling interface inspired by [Sunshine's platform layer](https://github.com/LizardByte/Sunshine/blob/801abd5cb39e38e9011a2ea5085da02cb9a3dec2/src/platform/common.h).
+`PerformanceService` supplies the same manager to every capture's media session;
+the capture crate has no dependency on application power configuration.
+Each remote publication holds
+a lease, including publications on the shared room transport. Local preview,
+recording-only consumers and encoder probes do not activate it. The first remote
+starts the requests; the last remote, capture shutdown or failed peer teardown
+releases them. Concurrent captures share timer requests and identical D3D devices;
+device replacement releases the old device only after its final user leaves.
+
+- Windows requests 1 ms timer resolution with paired `timeBeginPeriod` /
+  `timeEndPeriod`, `ABOVE_NORMAL` capture/conversion workers, `HIGHEST` hardware
+  encoder workers and relative DXGI GPU thread priority 7 on the capture frame's
+  D3D11 device. Stronger existing priorities are preserved. These requests do not
+  set a realtime process class or change a Windows power plan. Timer resolution
+  is a request, not a timing guarantee; Windows 11 may disregard it for an
+  occluded application.
+- Linux supplies per-thread nice requests (-10 for capture, -15 for encoding)
+  and 1 ns timer slack during scoped work. Missing scheduling permission is
+  reported without elevation. GPU and process timer requests are unsupported.
+- macOS supplies scoped pthread QoS overrides (`USER_INITIATED` capture,
+  `USER_INTERACTIVE` encoding), preserving the original thread QoS. GPU and
+  explicit timer-resolution requests are unsupported.
+
+Thread guards stay within synchronous work and restore on return or unwind;
+they never cross an async suspension or remain on a reused Tokio worker. The
+public `with_thread` closure bounds each synchronous work scope. Hardware workers
+also release their hints before idle waits. Changes are confined to threads/devices owned by
+the capture pipeline; third-party codec and audio threads retain their own
+scheduling. Restoration preserves a later external priority change. Linux and
+macOS adapters provide the scheduling contract, but native capture on those
+platforms remains unsupported until their capture/encoding backends exist.
+
+`NativePipelineStats.performance` reports remote lease count and independent
+timer, GPU and last capture/encoder thread request results. Its application-level
+`powerPolicy` member adds the startup backend/result and the explicit
+`persistentApplication` lifetime. It remains present and unchanged when stream
+requests become inactive; it is the startup verification, not a fresh driver
+query. Existing pipeline fields and the IPC request remain compatible. Detailed
+automation diagnostics retain only fixed performance states, the known backend
+name and lifetime; arbitrary driver messages remain redacted except error codes.
+`Applied`,
+`AlreadyApplied`, `Unsupported`, `Inactive` and `Failed` describe API outcomes,
+not measured clocks or end-to-end latency. Unsupported or failed requests do
+not interrupt streaming. The manager adds no polling or frame generation:
+unchanged content retains its 500 ms refresh deadline (2 FPS), and changed
+frames keep the existing event-driven admission rules.
 
 The native preset vocabulary is `balanced`, `quality` and `latency`. NVENC maps
 these to P3/ultra-low-latency/no AQ, P4/low-latency/spatial AQ strength 5, and

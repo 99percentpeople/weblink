@@ -234,6 +234,7 @@ async fn encoder_only(
         } else {
             options.max_bitrate as u32
         },
+        Arc::default(),
     )
     .unwrap();
     let frame = |index: usize| TextureFrame {

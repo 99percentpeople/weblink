@@ -6,6 +6,8 @@ export type * from "./media-receive";
 export type * from "./room-peer";
 export { browserRoomTransport } from "./room-peer";
 import type { NativeMediaReceive } from "./media-receive";
+import type { NativePipelineStats } from "./performance";
+export type * from "./performance";
 export type * from "./automation";
 export { DEFAULT_MCP_SERVER } from "./automation";
 import type { NativeAutomation } from "./automation";
@@ -592,18 +594,6 @@ export interface AudioCaptureFormat {
 export interface NativeSendCodecs {
   video: string;
   audio: string;
-}
-export interface NativePipelineStats {
-  frames: number;
-  inputSize: [number, number];
-  readbackSize: [number, number];
-  gpuScaled: boolean;
-  scaleFallback: string | null;
-  peers: number;
-  hardwareEncoders: number;
-  encoders: Record<string, unknown>[];
-  peerErrors: string[];
-  [stage: string]: unknown;
 }
 export interface NativeScreenShare {
   pipelineStats?(

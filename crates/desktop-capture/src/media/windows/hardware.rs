@@ -263,7 +263,15 @@ impl Encoder {
         preview: bool,
         wake: crate::surface::gpu::Wake,
     ) -> Result<Self> {
-        Self::create(id, options, preview, wake, Arc::new(|| {}), None)
+        Self::create(
+            id,
+            options,
+            preview,
+            wake,
+            Arc::new(|| {}),
+            None,
+            Arc::default(),
+        )
     }
     pub fn shared(
         id: String,
@@ -271,8 +279,17 @@ impl Encoder {
         wake: crate::surface::gpu::Wake,
         input_wake: crate::surface::gpu::Wake,
         bitrate: u32,
+        performance: Arc<crate::performance::Session>,
     ) -> Result<Self> {
-        Self::create(id, options, false, wake, input_wake, Some(bitrate))
+        Self::create(
+            id,
+            options,
+            false,
+            wake,
+            input_wake,
+            Some(bitrate),
+            performance,
+        )
     }
     fn create(
         id: String,
@@ -281,6 +298,7 @@ impl Encoder {
         wake: crate::surface::gpu::Wake,
         input_wake: crate::surface::gpu::Wake,
         bitrate: Option<u32>,
+        performance: Arc<crate::performance::Session>,
     ) -> Result<Self> {
         let pending = Arc::new((
             Mutex::new(Pending {
@@ -316,6 +334,7 @@ impl Encoder {
                     &input_mode,
                     bitrate,
                     consumers,
+                    performance,
                 ) {
                     *failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(error);
                 }
@@ -461,6 +480,7 @@ fn run(
     fallback: &Fallback,
     bitrate: Option<u32>,
     outputs: Arc<Mutex<HashMap<u64, (Arc<super::encoding_output::Output>, u64)>>>,
+    performance: Arc<crate::performance::Session>,
 ) -> Result<()> {
     let _runtime = transform::Runtime::new().map_err(|e| e.to_string())?;
     let mut selection = backend::Selection::new(id, options.encoder == "auto");
@@ -502,6 +522,7 @@ fn run(
     // discards outstanding frames; cumulative completed-frame counters survive it.
     let mut in_flight = HashMap::<i64, InputTiming>::new();
     loop {
+        let _priority = performance.enter_thread(crate::performance::ThreadRole::Encode);
         let (next_options, next_input, next_damage, next_bitrate) = {
             let mut pending = work.0.lock().unwrap_or_else(|e| e.into_inner());
             pending.wake = false;
@@ -804,6 +825,7 @@ fn run(
                     waiting_for_budget = budget.is_none_or(|wait| wait > cadence_delay);
                     let delay = budget.map(|wait| wait.max(cadence_delay));
                     if delay != Some(Duration::ZERO) {
+                        drop(_priority);
                         continue_wait(
                             &work,
                             &rate_control,
@@ -841,6 +863,7 @@ fn run(
                                     // All surfaces are still owned by MF. Keep only the newest
                                     // input and wait for an output or final sample-release wake.
                                     latest = Some(frame);
+                                    drop(_priority);
                                     continue_wait(
                                         &work,
                                         &rate_control,
@@ -878,6 +901,7 @@ fn run(
                     }
                     if input == Ok(false) {
                         latest = Some(frame);
+                        drop(_priority);
                         continue_wait(
                             &work,
                             &rate_control,
@@ -935,6 +959,7 @@ fn run(
                 }
             }
         }
+        drop(_priority);
         continue_wait(
             &work,
             &rate_control,
@@ -1004,8 +1029,15 @@ mod tests {
             ..Default::default()
         };
         let bitrate = 1_024_000;
-        let worker =
-            Encoder::shared(id, options, Arc::new(|| {}), Arc::new(|| {}), bitrate).unwrap();
+        let worker = Encoder::shared(
+            id,
+            options,
+            Arc::new(|| {}),
+            Arc::new(|| {}),
+            bitrate,
+            Arc::default(),
+        )
+        .unwrap();
         let packets = worker.recording.subscribe().unwrap();
         let mut scene = I420Buffer::new_black(640, 360);
         let mut seed = 17u32;
@@ -1349,10 +1381,12 @@ mod tests {
                     recording: None,
                     recording_audio: None,
                     encoded: Some(replacement.clone()),
+                    _performance: media.performance.acquire(),
                 },
             );
             media.close_failed_encoder(&failure);
             assert!(media.peers.lock().unwrap().contains_key("reconnecting"));
+            assert_eq!(media.performance.snapshot().remote_consumers, 1);
             assert!(replacement.encoder().is_some());
             assert_ne!(
                 connection.connection_state(),
@@ -1364,6 +1398,7 @@ mod tests {
             let current = pool.take_failed_peers().pop().unwrap();
             media.close_failed_encoder(&current);
             assert!(!media.peers.lock().unwrap().contains_key("reconnecting"));
+            assert_eq!(media.performance.snapshot().remote_consumers, 0);
             assert_eq!(
                 connection.connection_state(),
                 libwebrtc::peer_connection::PeerConnectionState::Closed

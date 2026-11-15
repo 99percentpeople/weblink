@@ -159,7 +159,15 @@ fn mf_worker_preserves_one_instance_across_live_bitrate_changes() {
         frames.push(Arc::new(Frame::from_gpu(image.captured(), &options, None)));
     }
     let low = 2_000_000;
-    let worker = Worker::shared(info.id, options, Arc::new(|| {}), Arc::new(|| {}), low).unwrap();
+    let worker = Worker::shared(
+        info.id,
+        options,
+        Arc::new(|| {}),
+        Arc::new(|| {}),
+        low,
+        Arc::default(),
+    )
+    .unwrap();
     let mut means = Vec::new();
     let mut confirmed = Vec::new();
     for rate in [low, 20_000_000, low] {

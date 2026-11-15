@@ -4,9 +4,28 @@ mod nvapi;
 #[cfg(test)]
 mod tests;
 
+use super::{Backend, Change, Result};
 use std::path::Path;
 
-type Result<T> = std::result::Result<T, String>;
+pub(super) struct Nvidia;
+
+impl Backend for Nvidia {
+    fn name(&self) -> Option<&'static str> {
+        Some("NVIDIA DRS")
+    }
+    fn prefer_maximum_performance(&self, executable: &Path) -> Result<Option<Change>> {
+        let Some(mut profiles) = nvapi::Driver::open()? else {
+            return Ok(None);
+        };
+        ensure(&mut profiles, executable).map(|changed| {
+            Some(if changed {
+                Change::Applied
+            } else {
+                Change::AlreadyApplied
+            })
+        })
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Power {
@@ -55,7 +74,7 @@ fn ensure(profiles: &mut impl Profiles, executable: &Path) -> Result<bool> {
     if !executable.is_absolute() {
         return Err("The GPU preference requires an absolute executable path".into());
     }
-    let executable = super::executable::normalized_path(executable);
+    let executable = crate::application::executable::normalized_path(executable);
     let profile = match profiles.find(&executable)? {
         Some(profile) => profile,
         None => profiles.create(&executable)?,
@@ -74,20 +93,4 @@ fn ensure(profiles: &mut impl Profiles, executable: &Path) -> Result<bool> {
         return Err("NVIDIA did not retain the application power preference".into());
     }
     Ok(true)
-}
-
-pub fn configure() {
-    let result = (|| {
-        let Some(mut profiles) = nvapi::Driver::open()? else {
-            return Ok(false);
-        };
-        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-        ensure(&mut profiles, &executable)
-    })();
-    match result {
-        Ok(true) => eprintln!("Enabled NVIDIA maximum performance for this Weblink executable"),
-        Ok(false) => {}
-        // Driver availability/permissions must never prevent normal app startup.
-        Err(error) => eprintln!("Could not configure Weblink GPU power preference: {error}"),
-    }
 }

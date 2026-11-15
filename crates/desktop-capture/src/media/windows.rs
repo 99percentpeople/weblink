@@ -57,6 +57,7 @@ use std::{
 // Recording holds its own encoder consumer. Production
 // preview reads raw frames; legacy/test receivers still use independent peers.
 pub struct MediaSession {
+    performance: Arc<crate::performance::Session>,
     factory: PeerConnectionFactory,
     source: NativeVideoSource,
     // WebRTC feeds sink adaptation back into its source. Preview adaptation
@@ -108,6 +109,8 @@ struct MediaPeer {
     recording: Option<recording::RecordingRelay>,
     recording_audio: Option<Arc<SenderAudioRecording>>,
     encoded: Option<Arc<encoding_pool::Consumer>>,
+    // Release after sender/encoder teardown; previews and local recording have no lease.
+    _performance: Option<crate::performance::StreamLease>,
 }
 impl MediaPeer {
     fn close(&self) {
@@ -213,10 +216,31 @@ impl MediaSession {
     }
 
     pub fn new(options: MediaOptions) -> Result<Arc<Self>> {
-        Self::with_audio_factory(options, audio::Loopback::start)
+        Self::with_performance(options, Arc::default())
     }
 
+    pub fn with_performance(
+        options: MediaOptions,
+        manager: Arc<crate::performance::Manager>,
+    ) -> Result<Arc<Self>> {
+        let performance = manager.session();
+        Self::with_audio_and_performance(options, audio::Loopback::start, performance)
+    }
+
+    #[cfg(test)]
     fn with_audio_factory(
+        options: MediaOptions,
+        start_audio: impl FnOnce(
+            u32,
+            u32,
+            bool,
+            Arc<crate::lifecycle::Subscription>,
+        ) -> Result<audio::Loopback>,
+    ) -> Result<Arc<Self>> {
+        Self::with_audio_and_performance(options, start_audio, Arc::default())
+    }
+
+    fn with_audio_and_performance(
         mut options: MediaOptions,
         start_audio: impl FnOnce(
             u32,
@@ -224,6 +248,7 @@ impl MediaSession {
             bool,
             Arc<crate::lifecycle::Subscription>,
         ) -> Result<audio::Loopback>,
+        performance: Arc<crate::performance::Session>,
     ) -> Result<Arc<Self>> {
         options.validate()?;
         // Automatic format selection may later use VP8. Resolve the shared
@@ -306,10 +331,14 @@ impl MediaSession {
                 .transpose()?,
             peers: Mutex::new(HashMap::new()),
             // Feedback only schedules group reconciliation, never a CPU readback.
-            hardware: Arc::new(encoding_pool::Pool::new(Arc::new(move || {
-                feedback.notify_one();
-                cpu_feedback.notify_one();
-            }))),
+            hardware: Arc::new(encoding_pool::Pool::new(
+                Arc::new(move || {
+                    feedback.notify_one();
+                    cpu_feedback.notify_one();
+                }),
+                performance.clone(),
+            )),
+            performance,
             recordings: RecordingSessions::default(),
             encoder_id,
             encoders,
@@ -617,6 +646,7 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .snapshot();
         report.peers = self.peers.lock().unwrap_or_else(|e| e.into_inner()).len();
+        report.performance = Some(self.performance.snapshot());
         report.encoders = self.hardware.statistics();
         report.hardware_encoders = report.encoders.len();
         report.peer_errors = self
@@ -1145,6 +1175,11 @@ impl MediaSession {
                         "Capture stopped, media peer already exists or peer limit reached".into(),
                     );
                 }
+                let performance = if !preview && recording.is_none() {
+                    self.performance.acquire()
+                } else {
+                    None
+                };
                 peers.insert(
                     id.clone(),
                     MediaPeer {
@@ -1162,6 +1197,7 @@ impl MediaSession {
                         recording,
                         recording_audio,
                         encoded,
+                        _performance: performance,
                     },
                 );
             }
@@ -1283,6 +1319,7 @@ impl MediaSession {
             peer.close();
         }
         self.hardware.close();
+        self.performance.close();
         self.latest.lock().unwrap_or_else(|e| e.into_inner()).take();
         *self.conversion.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
         *self.gpu_capture.lock().unwrap_or_else(|e| e.into_inner()) = Default::default();
@@ -1300,18 +1337,22 @@ impl FrameSink for MediaSession {
             return Ok(());
         }
         let captured_at = Instant::now();
-        self.readback
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .copy_at(&frame, captured_at)?;
-        self.pipeline
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .record_source(captured_at, captured_at.elapsed());
-        if self.has_consumers() {
-            self.wake_capture();
-        }
-        Ok(())
+        self.performance.set_gpu_device(frame.device);
+        self.performance
+            .with_thread(crate::performance::ThreadRole::Capture, || {
+                self.readback
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .copy_at(&frame, captured_at)?;
+                self.pipeline
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .record_source(captured_at, captured_at.elapsed());
+                if self.has_consumers() {
+                    self.wake_capture();
+                }
+                Ok(())
+            })
     }
 }
 

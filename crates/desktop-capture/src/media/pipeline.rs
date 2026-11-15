@@ -54,6 +54,8 @@ pub struct PipelineStats {
     pub encoders: Vec<super::latency::EncoderPipelineStats>,
     /// Bounded diagnostics for failed peer encoders; no frame or SDP contents.
     pub peer_errors: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub performance: Option<crate::performance::Snapshot>,
 }
 
 #[cfg(any(windows, test))]

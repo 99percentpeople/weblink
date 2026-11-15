@@ -8,6 +8,7 @@ mod audio_sampling;
 mod gpu;
 mod late_join_probe;
 mod latency_probe;
+mod performance;
 mod recording;
 mod shared_encoding;
 mod software_presets;
@@ -152,6 +153,7 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                     control: None,
                     recording: None,
                     recording_audio: None,
+                    _performance: media.performance.acquire(),
                 },
             );
             let mut waiting = Box::pin(gathering.wait());
@@ -171,6 +173,11 @@ fn closing_a_native_peer_or_session_cancels_pending_ice_waiters() {
                 .unwrap();
             assert_eq!(result.unwrap_err(), "Native media connection closed");
             assert!(media.peers.lock().unwrap().is_empty());
+            assert_eq!(media.performance.snapshot().remote_consumers, 0);
+            assert_eq!(
+                media.performance.snapshot().timing,
+                crate::performance::Status::Inactive
+            );
         }
     });
 }

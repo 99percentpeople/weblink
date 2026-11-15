@@ -104,7 +104,14 @@ impl MediaSession {
                 let admit = cadence.ready(now);
                 // One worker operation at a time. GPU events never wait in Map;
                 // CPU conversion runs off the async executor and capture mutex.
-                let result = tokio::task::spawn_blocking(move || session.capture_step(admit)).await;
+                let result = tokio::task::spawn_blocking(move || {
+                    session
+                        .performance
+                        .with_thread(crate::performance::ThreadRole::Capture, || {
+                            session.capture_step(admit)
+                        })
+                })
+                .await;
                 let work = match result {
                     Ok(Ok(work)) => work,
                     error => {

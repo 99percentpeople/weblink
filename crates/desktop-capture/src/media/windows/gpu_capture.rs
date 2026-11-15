@@ -47,7 +47,14 @@ impl MediaSession {
                 }
                 cadence.set_interval(session.frame_interval(), Instant::now());
                 let admit = cadence.ready(Instant::now());
-                let result = tokio::task::spawn_blocking(move || session.gpu_step(admit)).await;
+                let result = tokio::task::spawn_blocking(move || {
+                    session
+                        .performance
+                        .with_thread(crate::performance::ThreadRole::Capture, || {
+                            session.gpu_step(admit)
+                        })
+                })
+                .await;
                 let work = match result {
                     Ok(work) => work,
                     Err(error) => {

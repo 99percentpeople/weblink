@@ -13,13 +13,20 @@ the low-level `domain` layer.
 - `apps/desktop/`: Tauri shell and desktop platform adapter. It builds the same
   frontend in desktop mode, with separate output and native permissions, and uses
   the application version from `apps/web/package.json`.
+  `src-tauri/src/application/performance.rs` composes startup power policy and
+  stream scheduling. Its `performance/power/` backends own persistent driver
+  preferences; `performance/diagnostics.rs` composes their IPC reports.
 - `apps/docs/`: independent VitePress documentation build and theme; reads
   the complete bilingual articles from `docs/`.
 - `packages/platform/`: Platform capability and adapter contracts used by both
   applications. Vite selects the runtime adapter at build time; browser bundles
-  do not import Tauri APIs.
+  do not import Tauri APIs. Native pipeline and performance diagnostic contracts
+  live in `src/performance.ts` and remain exported from the package entry point.
 - `crates/desktop-capture/`: Tauri-independent Rust capture service, Windows
   capture backends, native encoding/WebRTC and local preview.
+  `src/performance.rs` is the scheduling facade: `performance/session.rs` owns
+  stream/worker lifetimes, `leases.rs` shares reversible resources,
+  `diagnostics.rs` defines outcomes, and `platform/` contains OS implementations.
 - `crates/desktop-input/`: Tauri-independent control authorization and Windows
   keyboard/mouse worker, with native revocation and an owned-window input probe.
   The desktop composition layer binds it to display shares and local consent;

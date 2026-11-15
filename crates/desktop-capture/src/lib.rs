@@ -18,6 +18,7 @@ pub use observers::StatusObserver;
 pub mod damage;
 pub mod geometry;
 pub mod media;
+pub mod performance;
 #[cfg(windows)]
 pub mod presentation;
 #[cfg(windows)]

@@ -391,6 +391,24 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
             "{camera_impl}"
         );
         a.peer.detach_screen("text");
+        assert_eq!(
+            screens[0]
+                .1
+                .pipeline_stats()
+                .performance
+                .unwrap()
+                .remote_consumers,
+            0
+        );
+        assert_eq!(
+            screens[1]
+                .1
+                .pipeline_stats()
+                .performance
+                .unwrap()
+                .remote_consumers,
+            1
+        );
         assert_eq!(a.peer.bandwidth.applied_maximum(), Some(3_000_000));
         a.negotiate(&b).await;
         assert!(!a
@@ -405,6 +423,10 @@ fn software_screens_keep_independent_presets_and_live_vfr_on_one_connection() {
         assert_eq!(screens[1].1.applied_room_vfr("motion"), Some(24));
         for (_, share, _) in screens {
             share.close();
+            assert_eq!(
+                share.pipeline_stats().performance.unwrap().timing,
+                crate::performance::Status::Inactive
+            );
         }
         assert_eq!(a.peer.bandwidth.applied_maximum(), None);
         a.peer.close();

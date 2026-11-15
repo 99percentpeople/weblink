@@ -14,7 +14,15 @@ const controlNames = new Set([
   "qualityVsSpeed",
 ]);
 
-/** Preserve bounded metrics and known control names, never arbitrary native strings. */
+const performanceStates = new Set([
+  "inactive",
+  "applied",
+  "alreadyApplied",
+  "unsupported",
+  "failed",
+]);
+
+/** Preserve bounded metrics and fixed labels, never arbitrary native strings. */
 export function sanitizePipeline(
   value: unknown,
   depth = 0,
@@ -27,6 +35,15 @@ export function sanitizePipeline(
     return value;
   if (typeof value === "string") {
     if (key === "name" && controlNames.has(value))
+      return value;
+    if (key === "state" && performanceStates.has(value))
+      return value;
+    if (key === "backend" && value === "NVIDIA DRS")
+      return value;
+    if (
+      key === "lifetime" &&
+      value === "persistentApplication"
+    )
       return value;
     return value.match(/0x[0-9a-f]{8}/gi) ?? undefined;
   }
