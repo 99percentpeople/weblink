@@ -24,6 +24,9 @@ const taskUi = process.argv.includes("--tasks");
 const chatUi = process.argv.includes("--chat");
 const meetingUi = process.argv.includes("--meeting");
 const playbackTest = process.argv.includes("--playback");
+const audioPlaybackTest = process.argv.includes(
+  "--audio-playback",
+);
 const recordingTest = process.argv.includes("--recording");
 const presentationRecordingTest = process.argv.includes(
   "--native-presentation-recording",
@@ -78,22 +81,24 @@ const defaultEntry = notificationsTest
 const httpDeviceTrust = process.argv.includes(
   "--device-trust-http",
 );
-const entry = presentationRecordingTest
-  ? "test/e2e/smoke/native-presentation-recording.html"
-  : process.argv.includes("--device-trust") ||
-      httpDeviceTrust
-    ? "test/e2e/smoke/device-trust.html"
-    : process.argv.includes("--automation")
-      ? "test/e2e/smoke/automation.html"
-      : recordingTest
-        ? "test/e2e/smoke/recording.html"
-        : process.argv.includes("--vfs")
-          ? "test/e2e/smoke/vfs.html"
-          : clipboardTest
-            ? "test/e2e/smoke/clipboard.html"
-            : clipboardCacheTest
-              ? "test/e2e/smoke/clipboard-cache.html"
-              : defaultEntry;
+const entry = audioPlaybackTest
+  ? "test/e2e/smoke/audio-playback.html"
+  : presentationRecordingTest
+    ? "test/e2e/smoke/native-presentation-recording.html"
+    : process.argv.includes("--device-trust") ||
+        httpDeviceTrust
+      ? "test/e2e/smoke/device-trust.html"
+      : process.argv.includes("--automation")
+        ? "test/e2e/smoke/automation.html"
+        : recordingTest
+          ? "test/e2e/smoke/recording.html"
+          : process.argv.includes("--vfs")
+            ? "test/e2e/smoke/vfs.html"
+            : clipboardTest
+              ? "test/e2e/smoke/clipboard.html"
+              : clipboardCacheTest
+                ? "test/e2e/smoke/clipboard-cache.html"
+                : defaultEntry;
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -116,7 +121,7 @@ async function main() {
       configFile: false,
       logLevel: "error",
       plugins:
-        ui || nativeScreenTest
+        ui || nativeScreenTest || audioPlaybackTest
           ? [solidPlugin(), solidSvg(), tailwindcss()]
           : [],
       resolve: {
@@ -232,12 +237,22 @@ async function main() {
             ]
           : []),
         ...(protocolTest ||
+        audioPlaybackTest ||
         recoveryTest ||
         playbackTest ||
         recordingTest ||
         presentationRecordingTest ||
         nativeScreenTest
           ? ["--autoplay-policy=no-user-gesture-required"]
+          : []),
+        ...(audioPlaybackTest
+          ? [
+              "--auto-select-tab-capture-source-by-title=Weblink audio playback checks",
+              "--allow-http-screen-capture",
+              // Keep Chromium's render/tab-loopback pipeline, using a fake
+              // hardware sink so CI does not require speakers or an audio driver.
+              "--disable-audio-output",
+            ]
           : []),
         "--no-first-run",
         "--no-default-browser-check",
@@ -351,6 +366,30 @@ async function main() {
       });
     }
     await cdp.call("Page.navigate", { url });
+    if (audioPlaybackTest) {
+      const deadline = Date.now() + 30000;
+      while (true) {
+        const { result } = await cdp.call(
+          "Runtime.evaluate",
+          {
+            expression:
+              "typeof window.__AUDIO_PLAYBACK_START__ === 'function'",
+            returnByValue: true,
+          },
+        );
+        if (result.value) break;
+        if (Date.now() > deadline)
+          throw new Error(
+            "Audio playback test did not load",
+          );
+        await sleep(100);
+      }
+      // getDisplayMedia requires activation even with an automated tab picker.
+      await cdp.call("Runtime.evaluate", {
+        expression: "window.__AUDIO_PLAYBACK_START__()",
+        userGesture: true,
+      });
+    }
     if (clipboardTest) {
       const waitFor = async (name) => {
         const until = Date.now() + 20000;

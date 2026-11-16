@@ -1,8 +1,9 @@
-import { onCleanup, type ParentProps } from "solid-js";
+import { For, onCleanup, type ParentProps } from "solid-js";
 import { AudioPlayerContext } from "@/libs/state/audio-player-context";
 import type { AudioPlayerController } from "@/libs/state/create-audio-player";
-export function AudioPlayerView(props: {
+function AudioTrackPlayer(props: {
   player: AudioPlayerController;
+  track?: MediaStreamTrack;
 }) {
   let element!: HTMLAudioElement;
   onCleanup(() => {
@@ -12,7 +13,7 @@ export function AudioPlayerView(props: {
     <audio
       ref={(audio) => {
         element = audio;
-        props.player.attach(audio);
+        props.player.attach(audio, props.track);
       }}
       class="hidden"
       onPlaying={(event) =>
@@ -22,6 +23,23 @@ export function AudioPlayerView(props: {
         props.player.onPause(event.currentTarget)
       }
     />
+  );
+}
+export function AudioPlayerView(props: {
+  player: AudioPlayerController;
+}) {
+  return (
+    <>
+      <AudioTrackPlayer player={props.player} />
+      <For each={props.player.tracks()}>
+        {(track) => (
+          <AudioTrackPlayer
+            player={props.player}
+            track={track}
+          />
+        )}
+      </For>
+    </>
   );
 }
 export function AudioPlayerProvider(

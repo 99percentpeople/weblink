@@ -41,9 +41,9 @@ On reception, the browser handles RTP/SRTP, packet timing, jitter buffering, los
 
 ### Playback {#browser-playback}
 
-Weblink's shared audio player binds received tracks through `audio.srcObject`. Source mute, listening state, and output-device selection are separate from the sender's capture state. The normal browser path feeds this player directly, without the application's native PCM bridge.
+Weblink's shared audio controller binds each received track to its own HTML audio element through `audio.srcObject`. This preserves simultaneous playback of browser WebRTC tracks and native PCM bridge tracks; combining those tracks in a single media element can omit audio in Chromium. Source mute, listening state, and output-device selection are separate from the sender's capture state. The normal browser path feeds these renderers directly, without the application's native PCM bridge.
 
-Output selection uses `HTMLMediaElement.setSinkId()` when supported. Without it, the application can use the default output but cannot promise selection of another device. Device permission and browser policy still apply; see the [output-device API](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/setSinkId).
+Output selection applies `HTMLMediaElement.setSinkId()` to all renderers when supported. New tracks inherit the selected device before playing; a partial switch failure rolls successful renderers back to the previous output. Without this API, the application can use the default output but cannot promise selection of another device. Device permission and browser policy still apply; see the [output-device API](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/setSinkId).
 
 ## Windows native audio paths {#native}
 

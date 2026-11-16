@@ -41,7 +41,9 @@ Weblink 会请求屏幕声音，并提供包含系统音频的提示，但是否
 
 ### 播放 {#browser-playback}
 
-Weblink 的共用音频播放器通过 `audio.srcObject` 绑定接收轨道。来源静音、收听状态与输出设备选择，独立于发送端的采集状态。普通浏览器通路直接接入这个播放器，不需要经过应用的原生 PCM 桥接。
+Weblink 的共用音频控制器通过 `audio.srcObject`，为每条接收轨道绑定独立的 HTML 音频元素，以同时播放浏览器 WebRTC 音轨和原生 PCM 桥接音轨；将这些音轨合并到同一个媒体元素，在 Chromium 中可能漏播部分声音。来源静音、收听状态与输出设备选择，独立于发送端的采集状态。普通浏览器通路直接接入这些播放器，不需要经过应用的原生 PCM 桥接。
+
+输出设备选择会同步到所有播放器，新音轨在应用已选设备后才开始播放。如果部分播放器切换失败，已切换的播放器会回滚到原设备。
 
 支持时，输出设备选择使用 `HTMLMediaElement.setSinkId()`。不支持时，应用可以使用默认输出，但不能保证切换到另一个设备。设备权限和浏览器策略仍然适用，见[输出设备接口](https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/setSinkId)。
 

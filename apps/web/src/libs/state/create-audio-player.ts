@@ -1,10 +1,16 @@
 import { appState } from "@/libs/state/app-state";
 import {
+  AudioPlayback,
+  type AudioPlaybackState,
+} from "@/libs/application/audio-playback";
+import { createStore } from "solid-js/store";
+import {
   batch,
   createEffect,
   createMemo,
   createSignal,
   onCleanup,
+  type Accessor,
 } from "solid-js";
 import {
   getRemoteAudioVideoTrackId,
@@ -15,7 +21,11 @@ import type { AudioPlayerContextValue } from "./audio-player-context";
 
 export interface AudioPlayerController {
   readonly value: AudioPlayerContextValue;
-  attach(element: HTMLAudioElement): void;
+  readonly tracks: Accessor<readonly MediaStreamTrack[]>;
+  attach(
+    element: HTMLAudioElement,
+    track?: MediaStreamTrack,
+  ): void;
   detach(element: HTMLAudioElement): void;
   onPlaying(element: HTMLAudioElement): void;
   onPause(element: HTMLAudioElement): void;
@@ -86,61 +96,15 @@ export function createAudioPlayer(): AudioPlayerController {
       );
     });
   };
-  const [wantsAudio, setWantsAudio] = createSignal(true);
-  const [playState, setPlayState] = createSignal(false);
-  const [audioRef, setAudioRef] =
-    createSignal<HTMLAudioElement>();
-  const [outputDeviceId, setOutputDeviceId] =
-    createSignal("");
-  const [outputBusy, setOutputBusy] = createSignal(false);
-  const outputSupported = createMemo(
-    () => typeof audioRef()?.setSinkId === "function",
-  );
-  let outputQueue: Promise<void> = Promise.resolve();
-  let pendingOutputRequests = 0;
-  let disposed = false;
-  let playbackVersion = 0;
-
-  const outputAborted = () =>
-    new DOMException(
-      "Audio player was disposed",
-      "AbortError",
-    );
-  const setOutputDevice = (id: string): Promise<void> => {
-    if (disposed) return Promise.reject(outputAborted());
-    ++pendingOutputRequests;
-    setOutputBusy(true);
-    // Serialize native calls so a slow earlier device cannot overwrite the
-    // browser's actual sink after a newer request has already succeeded.
-    const operation = outputQueue.then(async () => {
-      if (disposed) throw outputAborted();
-      const audio = audioRef();
-      if (!audio)
-        throw new DOMException(
-          "Audio player is not ready",
-          "InvalidStateError",
-        );
-      if (typeof audio.setSinkId !== "function") {
-        if (id !== "")
-          throw new DOMException(
-            "Audio output selection is unavailable",
-            "NotSupportedError",
-          );
-      } else {
-        await audio.setSinkId(id);
-      }
-      if (disposed || audioRef() !== audio)
-        throw outputAborted();
-      setOutputDeviceId(id);
+  const [output, setOutput] =
+    createStore<AudioPlaybackState>({
+      playing: false,
+      outputSupported: false,
+      outputDeviceId: "",
+      outputBusy: false,
     });
-    // One denied/missing device must not poison the following selection.
-    outputQueue = operation.catch(() => {});
-    return operation.finally(() => {
-      if (disposed) return;
-      --pendingOutputRequests;
-      setOutputBusy(pendingOutputRequests > 0);
-    });
-  };
+  const playback = new AudioPlayback(setOutput);
+  onCleanup(() => playback.dispose());
 
   createEffect(() => {
     const peers = Object.values(
@@ -214,109 +178,26 @@ export function createAudioPlayer(): AudioPlayerController {
     }
   });
 
-  const audioStream = createMemo(() =>
-    tracks().length ? new MediaStream(tracks()) : null,
-  );
-  createEffect(() => {
-    const audio = audioRef();
-    const stream = audioStream();
-    const wanted = wantsAudio();
-    const version = ++playbackVersion;
-    if (!audio) return;
-    if (audio.srcObject !== stream)
-      audio.srcObject = stream;
-    if (!stream || !wanted) {
-      audio.pause();
-      setPlayState(false);
-      return;
-    }
-    void audio
-      .play()
-      .then(() => {
-        if (version === playbackVersion && wantsAudio())
-          setPlayState(true);
-      })
-      .catch(() => {
-        // A blocked autoplay request is surfaced as the existing unmute action.
-        if (version === playbackVersion)
-          setPlayState(false);
-      });
-  });
-
-  const setPlay = (state: boolean) => {
-    // A rejected autoplay attempt can leave wantsAudio true. Retry directly
-    // within the explicit user gesture even when that preference is unchanged.
-    if (state && wantsAudio()) {
-      const audio = audioRef();
-      if (!audio || !audioStream()) return;
-      const version = ++playbackVersion;
-      void audio
-        .play()
-        .then(() => {
-          if (version === playbackVersion && wantsAudio())
-            setPlayState(true);
-        })
-        .catch(() => {
-          if (version === playbackVersion)
-            setPlayState(false);
-        });
-    } else setWantsAudio(state);
-  };
-
-  onCleanup(() => {
-    disposed = true;
-    setOutputBusy(false);
-    ++playbackVersion;
-    const audio = audioRef();
-    if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-    }
-  });
-
   return {
+    tracks,
     value: {
       hasAudio: createMemo(() => tracks().length > 0),
-      playState,
-      setPlay,
+      playState: () => output.playing,
+      setPlay: (state) => playback.setPlay(state),
       hasPeerAudio: (id) => !!peerTracks().get(id)?.length,
       isPeerMuted,
       setPeerMuted,
       isSourceMuted,
       setSourceMuted,
-      outputDeviceId,
-      outputSupported,
-      outputBusy,
-      setOutputDevice,
+      outputDeviceId: () => output.outputDeviceId,
+      outputSupported: () => output.outputSupported,
+      outputBusy: () => output.outputBusy,
+      setOutputDevice: (id) => playback.setOutputDevice(id),
     },
-    attach(element) {
-      setAudioRef(element);
-      // A view can replace its DOM node without replacing the meeting owner.
-      const selected = outputDeviceId();
-      if (selected)
-        void setOutputDevice(selected).catch(() => {
-          if (audioRef() === element) setOutputDeviceId("");
-        });
-    },
-    detach(element) {
-      if (audioRef() !== element) return;
-      ++playbackVersion;
-      element.pause();
-      element.srcObject = null;
-      setAudioRef(undefined);
-      setPlayState(false);
-    },
-    onPlaying(element) {
-      if (audioRef() !== element) return;
-      if (!wantsAudio()) {
-        audioRef()?.pause();
-        return;
-      }
-      setPlayState(true);
-    },
-    onPause(element) {
-      if (audioRef() !== element) return;
-      setPlayState(false);
-    },
+    attach: (element, track) =>
+      playback.attach(element, track),
+    detach: (element) => playback.detach(element),
+    onPlaying: (element) => playback.onPlaying(element),
+    onPause: (element) => playback.onPause(element),
   };
 }

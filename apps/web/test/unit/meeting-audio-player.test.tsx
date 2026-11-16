@@ -66,9 +66,14 @@ const connect = (stream: Stream) =>
       stream: stream as unknown as MediaStream,
     } as ClientInfo,
   });
-const flush = async () => {
-  for (let i = 0; i < 4; i++) await Promise.resolve();
-};
+const flush = () =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+const outputs = (container: HTMLElement) =>
+  [...container.querySelectorAll("audio")].filter(
+    (element) => element.srcObject,
+  );
+const output = (container: HTMLElement) =>
+  outputs(container)[0];
 const originalSinkDescriptor =
   Object.getOwnPropertyDescriptor(
     HTMLMediaElement.prototype,
@@ -141,6 +146,155 @@ afterEach(() => {
 });
 
 describe("meeting audio output selection", () => {
+  it("rolls back successful renderers when another output switch fails", async () => {
+    const mic = track(),
+      screen = track();
+    const selected = new Map<HTMLMediaElement, string>();
+    const denied = new DOMException(
+      "missing output",
+      "NotFoundError",
+    );
+    installSink(async function (
+      this: HTMLMediaElement,
+      id: string,
+    ) {
+      if (
+        id === "missing" &&
+        (
+          this.srcObject as MediaStream | null
+        )?.getAudioTracks()[0] === screen
+      )
+        throw denied;
+      selected.set(this, id);
+    });
+    connect(new Stream([mic, screen]));
+    const view = setup();
+    await flush();
+    await player.setOutputDevice("speaker-1");
+    await expect(
+      player.setOutputDevice("missing"),
+    ).rejects.toBe(denied);
+    expect(player.outputDeviceId()).toBe("speaker-1");
+    expect([...selected.values()]).toEqual([
+      "speaker-1",
+      "speaker-1",
+      "speaker-1",
+    ]);
+    expect(player.playState()).toBe(true);
+    expect(outputs(view.container)).toHaveLength(2);
+    await player.setOutputDevice("speaker-2");
+    expect(
+      [...selected.values()].every(
+        (id) => id === "speaker-2",
+      ),
+    ).toBe(true);
+  });
+
+  it("routes a newly received track after a pending selection before playing it", async () => {
+    const pending = deferred();
+    const selected = new Map<HTMLMediaElement, string>();
+    installSink(async function (
+      this: HTMLMediaElement,
+      id: string,
+    ) {
+      if (id === "speaker-2") await pending.promise;
+      selected.set(this, id);
+    });
+    const first = track(),
+      added = track();
+    const stream = new Stream([first]);
+    connect(stream);
+    const view = setup();
+    await flush();
+    await player.setOutputDevice("speaker-1");
+    const selection = player.setOutputDevice("speaker-2");
+    await flush();
+    const playingOn: (string | undefined)[] = [];
+    vi.mocked(
+      HTMLMediaElement.prototype.play,
+    ).mockImplementation(function (this: HTMLMediaElement) {
+      playingOn.push(selected.get(this));
+      return Promise.resolve();
+    });
+    stream.add(added);
+    await flush();
+    expect(playingOn).toEqual([]);
+    pending.resolve();
+    await selection;
+    await flush();
+    expect(playingOn).toEqual(["speaker-2"]);
+    expect(
+      outputs(view.container).every(
+        (element) => selected.get(element) === "speaker-2",
+      ),
+    ).toBe(true);
+    expect(player.outputBusy()).toBe(false);
+    expect(player.playState()).toBe(true);
+  });
+
+  it("ignores an output failure from a track removed during device selection", async () => {
+    const removed = track(),
+      retained = track();
+    const pending = deferred();
+    installSink(function (this: HTMLMediaElement) {
+      return (
+        this.srcObject as MediaStream | null
+      )?.getAudioTracks()[0] === removed
+        ? pending.promise
+        : Promise.resolve();
+    });
+    connect(new Stream([removed, retained]));
+    setup();
+    await flush();
+    const operation = player.setOutputDevice("speaker-2");
+    await flush();
+    (removed as unknown as Track).end();
+    pending.reject(
+      new DOMException("detached", "AbortError"),
+    );
+    await operation;
+    expect(player.outputDeviceId()).toBe("speaker-2");
+    expect(player.playState()).toBe(true);
+  });
+
+  it("keeps a failed rollback silent until its selected output can be restored", async () => {
+    const mic = track(),
+      screen = track();
+    let rollbackFails = false;
+    installSink(async function (
+      this: HTMLMediaElement,
+      id: string,
+    ) {
+      const source = (
+        this.srcObject as MediaStream | null
+      )?.getAudioTracks()[0];
+      if (
+        (id === "missing" && source === screen) ||
+        (rollbackFails &&
+          id === "speaker-1" &&
+          source === mic)
+      )
+        throw new DOMException(
+          "device unavailable",
+          "NotFoundError",
+        );
+    });
+    connect(new Stream([mic, screen]));
+    setup();
+    await flush();
+    await player.setOutputDevice("speaker-1");
+    rollbackFails = true;
+    await expect(
+      player.setOutputDevice("missing"),
+    ).rejects.toMatchObject({ name: "NotFoundError" });
+    expect(player.outputDeviceId()).toBe("speaker-1");
+    expect(player.playState()).toBe(false);
+    rollbackFails = false;
+    player.setPlay(true);
+    await flush();
+    expect(player.playState()).toBe(true);
+  });
+
   it("rebinds a replaced view without losing tracks, source mute or the selected speaker", async () => {
     const sink = vi.fn().mockResolvedValue(undefined);
     installSink(sink);
@@ -159,7 +313,7 @@ describe("meeting audio output selection", () => {
       );
     });
     await flush();
-    const original = view.container.querySelector("audio")!;
+    const original = output(view.container);
     const stream = original.srcObject;
     await controller.value.setOutputDevice("speaker-2");
     controller.value.setPeerMuted("alice", true);
@@ -167,8 +321,7 @@ describe("meeting audio output selection", () => {
     expect(original.srcObject).toBeNull();
     show(true);
     await flush();
-    const replacement =
-      view.container.querySelector("audio")!;
+    const replacement = output(view.container);
     expect(replacement).not.toBe(original);
     expect(replacement.srcObject).toBe(stream);
     expect(controller.value.outputDeviceId()).toBe(
@@ -214,9 +367,12 @@ describe("meeting audio output selection", () => {
     await flush();
     connect(new Stream([track()]));
     await flush();
-    expect(sink).toHaveBeenCalledTimes(1);
+    expect(sink).toHaveBeenCalledTimes(3);
     expect(player.outputDeviceId()).toBe("speaker-2");
     expect(player.playState()).toBe(true);
+    expect(sink.mock.contexts).toContain(
+      output(view.container),
+    );
     await player.setOutputDevice("");
     expect(sink).toHaveBeenLastCalledWith("");
     expect(player.outputDeviceId()).toBe("");
@@ -383,6 +539,91 @@ describe("meeting audio output selection", () => {
 });
 
 describe("meeting audio playback", () => {
+  it("retains each renderer when another track is added, reordered or removed", async () => {
+    const first = track(),
+      second = track();
+    const media = new Stream([first]);
+    connect(media);
+    const view = setup();
+    await flush();
+    const original = output(view.container);
+    const stream = original.srcObject;
+    media.add(second);
+    await flush();
+    const added = outputs(view.container)[1];
+    connect(new Stream([second, first]));
+    await flush();
+    expect(outputs(view.container)).toEqual([
+      added,
+      original,
+    ]);
+    expect(original.srcObject).toBe(stream);
+    expect(
+      HTMLMediaElement.prototype.play,
+    ).toHaveBeenCalledTimes(2);
+    (first as unknown as Track).end();
+    expect(original.srcObject).toBeNull();
+    expect(outputs(view.container)).toEqual([added]);
+    expect(player.playState()).toBe(true);
+    expect(second.readyState).toBe("live");
+  });
+
+  it("retries only blocked audio when some tracks are already playing", async () => {
+    vi.mocked(HTMLMediaElement.prototype.play)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new DOMException(
+          "autoplay blocked",
+          "NotAllowedError",
+        ),
+      )
+      .mockResolvedValue(undefined);
+    connect(new Stream([track(), track()]));
+    const view = setup();
+    await flush();
+    const [first, blocked] = outputs(view.container);
+    expect(player.playState()).toBe(false);
+    player.setPlay(true);
+    await flush();
+    expect(player.playState()).toBe(true);
+    expect(
+      vi.mocked(HTMLMediaElement.prototype.play).mock
+        .contexts,
+    ).toEqual([first, blocked, blocked]);
+  });
+
+  it("ignores pending playback from removed tracks and cannot undo global mute", async () => {
+    const pending = deferred();
+    vi.mocked(
+      HTMLMediaElement.prototype.play,
+    ).mockReturnValueOnce(pending.promise);
+    const first = track(),
+      second = track();
+    connect(new Stream([first, second]));
+    const view = setup();
+    await flush();
+    const removed = output(view.container);
+    expect(player.playState()).toBe(false);
+    (first as unknown as Track).end();
+    expect(player.playState()).toBe(true);
+    player.setPlay(false);
+    pending.resolve();
+    await flush();
+    expect(player.playState()).toBe(false);
+    expect(removed.srcObject).toBeNull();
+    expect(outputs(view.container)).toHaveLength(1);
+    const pauses = vi.mocked(
+      HTMLMediaElement.prototype.pause,
+    ).mock.calls.length;
+    output(view.container).dispatchEvent(
+      new Event("playing"),
+    );
+    expect(
+      HTMLMediaElement.prototype.pause,
+    ).toHaveBeenCalledTimes(pauses + 1);
+    expect(player.playState()).toBe(false);
+  });
+
   it("controls microphone and screen groups independently while member mute still applies to every source", async () => {
     const mic = track(),
       shared1 = track(),
@@ -406,8 +647,7 @@ describe("meeting audio playback", () => {
     });
     const view = setup();
     await flush();
-    const output =
-      view.container.querySelector("audio")!.srcObject;
+    const originalOutput = output(view.container).srcObject;
     const microphoneId = JSON.stringify(["alice", null]);
     const firstScreenId = JSON.stringify([
       "alice",
@@ -447,9 +687,9 @@ describe("meeting audio playback", () => {
       shared2.enabled,
     ]).toEqual([true, true, true]);
     expect(player.playState()).toBe(false);
-    expect(
-      view.container.querySelector("audio")!.srcObject,
-    ).toBe(output);
+    expect(output(view.container).srcObject).toBe(
+      originalOutput,
+    );
     player.setSourceMuted("alice", microphoneId, true);
     const replacementMic = track();
     // SessionService updates the stream without replacing peer metadata.
@@ -523,8 +763,7 @@ describe("meeting audio playback", () => {
     } as ClientInfo);
     const view = setup();
     await flush();
-    const output =
-      view.container.querySelector("audio")!.srcObject;
+    const originalOutput = output(view.container).srcObject;
     expect(player.hasPeerAudio("alice")).toBe(true);
     player.setPeerMuted("alice", true);
     expect(microphone.enabled).toBe(false);
@@ -532,9 +771,9 @@ describe("meeting audio playback", () => {
     expect(other.enabled).toBe(true);
     expect(player.isPeerMuted("alice")).toBe(true);
     expect(player.isPeerMuted("bob")).toBe(false);
-    expect(
-      view.container.querySelector("audio")!.srcObject,
-    ).toBe(output);
+    expect(output(view.container).srcObject).toBe(
+      originalOutput,
+    );
     const added = track();
     stream.add(added);
     expect(added.enabled).toBe(false);
@@ -585,9 +824,7 @@ describe("meeting audio playback", () => {
     player.setPlay(true);
     await flush();
     expect(player.playState()).toBe(true);
-    expect(
-      view.container.querySelector("audio")?.srcObject,
-    ).toBeTruthy();
+    expect(output(view.container)?.srcObject).toBeTruthy();
   });
 
   it("lets an explicit gesture retry blocked autoplay", async () => {
@@ -616,7 +853,7 @@ describe("meeting audio playback", () => {
     const activeTrack = track();
     connect(new Stream([activeTrack]));
     await flush();
-    const audio = view.container.querySelector("audio")!;
+    const audio = output(view.container);
     oldStream.add(track());
     await flush();
     expect(
@@ -669,10 +906,14 @@ it("plays native screen audio and applies screen mute independently of the micro
   );
   const view = setup();
   await flush();
-  const audio = view.container.querySelector("audio")!;
+  const [microphonePlayer, systemPlayer] = outputs(
+    view.container,
+  );
   expect(
-    (audio.srcObject as MediaStream).getAudioTracks(),
-  ).toEqual([microphone, system]);
+    outputs(view.container).map((element) =>
+      (element.srcObject as MediaStream).getAudioTracks(),
+    ),
+  ).toEqual([[microphone], [system]]);
   player.setSourceMuted(
     "alice",
     JSON.stringify(["alice", video.id]),
@@ -695,8 +936,12 @@ it("plays native screen audio and applies screen mute independently of the micro
   );
   await flush();
   expect(player.hasPeerAudio("alice")).toBe(true);
+  expect(microphonePlayer.srcObject).toBeNull();
+  expect(outputs(view.container)).toEqual([systemPlayer]);
   expect(
-    (audio.srcObject as MediaStream).getAudioTracks(),
+    (
+      systemPlayer.srcObject as MediaStream
+    ).getAudioTracks(),
   ).toEqual([system]);
   setAppState(
     "session",

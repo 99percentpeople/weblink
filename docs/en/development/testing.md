@@ -190,6 +190,7 @@ bun run test:e2e:protocol
 bun run test:e2e:recovery
 bun run test:e2e:native-screen
 bun run test:e2e:playback
+bun run test:e2e:audio-playback
 bun run test:e2e:transfer
 bun run test:e2e:cache
 bun run test:e2e:tasks
@@ -265,6 +266,17 @@ The codec lifecycle integration checks cover per-receiver format selection, mixe
 H.265/H.264 viewers and delayed native encoder retirement without restarting other peers.
 Native PiP return
 events are simulated; it does not establish iPhone Safari rendering correctness.
+
+`test:e2e:audio-playback` runs the production audio controller and view in Chromium.
+It captures only its isolated test tab's rendered audio and checks distinct tone
+frequencies, covering simultaneous native-style Web Audio tracks, received WebRTC
+tracks, and mixtures of both. It checks independent source/member/global mute,
+default output routing, new tracks, view remounts, reconnection and borrowed-track
+cleanup. The tab's local playback is suppressed during measurement, and Chromium
+uses a fake hardware output so headless checks do not require speakers. Unit tests
+cover alternate-device routing, pending selections, partial failures and rollback
+without requiring physical audio devices. The browser check does not mock `play()`
+or infer audible output from track presence.
 
 `test:e2e:protocol` also covers three independent room-chat protocol instances
 over real unordered mesh DataChannels, including partial delivery, connection
