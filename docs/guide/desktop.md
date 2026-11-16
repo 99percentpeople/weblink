@@ -40,6 +40,7 @@ For an installed app, follow the confirmation prompts. Installation ends active 
 ## Choose your next step {#troubleshooting}
 
 - **Control this computer from a phone or another device:** set up [remote desktop](remote-control.md).
+- **Bring the host online automatically and accept approved devices:** configure [unattended access](remote-control.md#unattended).
 - **Let an AI client perform authorized actions:** configure [MCP and automation](automation.md).
 - **Preset your own service addresses in a desktop package:** follow [Tauri configuration](../deployment/tauri.md#configuration).
 - **Fix a blank window or an app that will not start:** check the [desktop runtime requirements](faq.md#desktop-start).

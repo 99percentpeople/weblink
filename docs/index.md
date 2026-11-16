@@ -30,6 +30,8 @@ A request from the participant tile can share **Screen 1 and its audio with all 
 
 When finished, choose **End control** and stop screen sharing on the host if it remains active. [Remote desktop](guide/remote-control.md) covers selecting a monitor and releasing input.
 
+To approve future requests without someone at the host, configure [unattended access](guide/remote-control.md#unattended).
+
 ::: details Using your own server, or wondering where data is saved?
 
 ### Connections and local data {#how-connections-work}

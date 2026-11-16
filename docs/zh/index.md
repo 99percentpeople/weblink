@@ -30,6 +30,8 @@ outline: 2
 
 结束时点击**结束控制**；主机若仍在共享屏幕，也要停止共享。选择显示器和释放输入的操作见[远程桌面](guide/remote-control.md)。
 
+希望以后无需在主机前批准请求时，配置[无人值守访问](guide/remote-control.md#unattended)。
+
 ::: details 使用自建服务器，或想了解数据保存在哪里？
 
 ### 连接与本地数据 {#how-connections-work}

@@ -91,6 +91,22 @@ These responses refer to `/turn-credentials`, not the WebSocket connection itsel
 
 Signaling can work without managed TURN, but a network requiring a relay still needs another working TURN configuration. Keep provider keys on the backend. If WebSockets use `/ws`, the credential endpoint still belongs at `/turn-credentials` on the same origin; the included Nginx template only proxies `/ws` by default. See [Server TURN](../deployment/backend.md#turn) or [Worker TURN](../deployment/worker.md#turn).
 
+## Unattended remote desktop {#remote-desktop}
+
+### Why is the host offline after restarting or closing its window? {#unattended-offline}
+
+First check that the host is signed in to Windows, online, and awake. **Launch at startup** runs after user sign-in; it does not start Weblink at the system login screen.
+
+In **Settings → Application** on the host, confirm that both **Launch at startup** and **Auto join** are enabled and that the room and signaling address are still correct. If moving the application causes a startup-path mismatch message, choose **Repair**.
+
+To stay online after closing the window, set **When closing the window** to **Hide to system tray**; quitting the application disconnects it. Test while someone can still operate the host. See [unattended access](remote-control.md#unattended) for setup.
+
+### Why does unattended access still ask for approval, or show no Request control action? {#unattended-approval}
+
+- On the host, check that **the current controller** has **Always allow** for remote control. **Allow for this session** does not save ongoing permission.
+- **Receive content** and **Share screen** must also be allowed; denying either blocks remote control. With **Expose remote control capability** disabled, only allowlisted devices can discover and request control.
+- After changing browser profiles, clearing site data, or changing devices, the controller may appear as a new device and need authorization again. Follow [pairing repair](device-trust.md#repair) if an identity-mismatch warning appears; a matching name does not prove it is the original device.
+
 ## Audio, video, and recording {#media}
 
 ### Why does H.265 work in Chrome but fail when Edge sends or receives? {#hevc-browsers}

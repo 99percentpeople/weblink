@@ -40,6 +40,7 @@
 ## 接下来想了解什么？ {#troubleshooting}
 
 - **想从手机或另一台设备控制这台电脑**：继续设置[远程桌面](remote-control.md)。
+- **想让电脑自动上线并接受已授权设备的控制**：配置[无人值守访问](remote-control.md#unattended)。
 - **想让 AI 客户端执行已授权操作**：继续配置 [MCP 与自动化](automation.md)。
 - **想将自建服务地址预置到安装包中**：阅读 [Tauri 端配置](../deployment/tauri.md#configuration)。
 - **遇到白屏或无法启动**：检查[桌面端运行环境](faq.md#desktop-start)。

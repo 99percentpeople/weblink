@@ -20,7 +20,7 @@ Open permissions from member details, or select a device in **Settings → Clien
 | Remote control    | Operating this computer's monitor                                   | Ask                                             |
 | Automation groups | Reading and diagnostics, Sharing and control, Terminal and commands | Ask separately for each group                   |
 
-Remote control and automation support **Ask, Always allow, and Deny** per device. Automation also requires the destination to support the requested feature; operating-system tools require automation to be enabled. See [MCP and automation](automation.md#permissions).
+Remote control supports **Ask, Always allow, and Deny** per device. See [unattended access](remote-control.md#unattended) for automatic approval and host startup. Automation permissions are configured by group and require the destination to support the requested feature; operating-system tools require automation to be enabled. See [MCP and automation](automation.md#permissions).
 
 ## Handle permission requests {#requests}
 
