@@ -51,7 +51,8 @@ Detailed usage, configuration, and deployment instructions live in the
 | Install and use the desktop app               | [Desktop app][desktop]                                                  |
 | Chat and send files                           | [Rooms and chat][rooms] · [File transfers][files]                       |
 | Choose storage and manage files               | [File storage][storage]                                                 |
-| Call, share a screen, or record               | [Audio, video, and recording][media]                                    |
+| Call or share a screen                        | [Screen sharing and calls][media]                                       |
+| Record a source and save the file             | [Recording and saving][recording]                                       |
 | Control another computer                      | [Remote desktop][remote-control]                                        |
 | Pair devices and manage access                | [Device pairing and permissions][device-trust]                          |
 | Connect an MCP client                         | [MCP and automation][automation]                                        |
@@ -80,6 +81,7 @@ and [NVENC interface](apps/web/public/licenses/nvcodec.txt).
 [files]: https://docs.webl.ink/guide/files.html
 [storage]: https://docs.webl.ink/guide/storage.html
 [media]: https://docs.webl.ink/guide/media.html
+[recording]: https://docs.webl.ink/guide/recording.html
 [remote-control]: https://docs.webl.ink/guide/remote-control.html
 [device-trust]: https://docs.webl.ink/guide/device-trust.html
 [automation]: https://docs.webl.ink/guide/automation.html

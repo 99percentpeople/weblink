@@ -144,7 +144,7 @@ Weblink 会综合本地编码能力和已连接设备的解码能力。自动模
 
 对完整文件，播放器必须同时支持容器和其中的视频、音频编码。**MP4 不一定是 H.264**，Weblink 可以将 H.265 原样保存在 MP4 录制文件中。选择容器或修改扩展名不能保证转换编码。
 
-可换用支持实际编码的播放器。后续录制若需要更广的播放兼容性，可在来源端使用可用的 H.264，并先用一段短录制验证目标播放器。格式选择见[录制说明](media.md#recording)；Edge 的 HEVC 文件播放取决于其 [Windows 解码路径](https://learn.microsoft.com/en-us/troubleshoot/microsoft-edge/development/video-playback-issues)。
+可换用支持实际编码的播放器。后续录制若需要更广的播放兼容性，可在来源端使用可用的 H.264，并先用一段短录制验证目标播放器。格式选择见[录制格式](recording.md#formats)；Edge 的 HEVC 文件播放取决于其 [Windows 解码路径](https://learn.microsoft.com/en-us/troubleshoot/microsoft-edge/development/video-playback-issues)。
 
 ## 文件访问与保存 {#files}
 
@@ -186,5 +186,6 @@ Weblink 会综合本地编码能力和已连接设备的解码能力。自动模
 
 - **问题解决后，想重新连接设备**：回到[连接两台设备](../index.md#connect-two-devices)。
 - **想更换不可达的信令端点，或配置中继**：前往[连接设置](connection.md)。
-- **想调整采集、编码或录制设置**：继续阅读[音视频与录制](media.md)。
+- **想调整采集与编码设置**：继续阅读[屏幕共享与通话](media.md#quality)。
+- **想选择录制格式或找到保存的文件**：按[录制与保存](recording.md)操作。
 - **想运行自己的信令服务，并从用户网络验证可达性**：选择 [Server 部署](../deployment/backend.md)或 [Worker 部署](../deployment/worker.md)。

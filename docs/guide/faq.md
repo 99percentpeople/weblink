@@ -144,7 +144,7 @@ First confirm the file finished saving. A recording interrupted by refresh, a cr
 
 For a completed file, the player must support both its container and its video/audio codecs. **MP4 does not necessarily mean H.264**: Weblink can preserve H.265 in an MP4 recording. Selecting a container or renaming the extension does not guarantee conversion to another codec.
 
-Try a player that supports the actual codecs. For future recordings that need broader playback support, use H.264 at the source when available and verify a short recording on the intended player. See [recording formats](media.md#recording); HEVC playback in Edge depends on its [Windows decoder path](https://learn.microsoft.com/en-us/troubleshoot/microsoft-edge/development/video-playback-issues).
+Try a player that supports the actual codecs. For future recordings that need broader playback support, use H.264 at the source when available and verify a short recording on the intended player. See [recording formats](recording.md#formats); HEVC playback in Edge depends on its [Windows decoder path](https://learn.microsoft.com/en-us/troubleshoot/microsoft-edge/development/video-playback-issues).
 
 ## File access and saving {#files}
 
@@ -186,5 +186,6 @@ Remove room passwords, MCP tokens, TURN credentials, and private network details
 
 - **Connect your devices again after resolving the failure:** return to [connecting two devices](../index.md#connect-two-devices).
 - **Replace an unreachable signaling endpoint or configure a relay:** use [connection settings](connection.md).
-- **Adjust capture, encoding, or recording settings:** follow [audio, video, and recording](media.md).
+- **Adjust capture and encoding settings:** follow [screen sharing and calls](media.md#quality).
+- **Choose a recording format or find the saved file:** follow [recording and saving](recording.md).
 - **Run a signaling service you can verify from your users’ networks:** choose [Server deployment](../deployment/backend.md) or [Worker deployment](../deployment/worker.md).

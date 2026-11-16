@@ -1,62 +1,80 @@
-# Audio, video, and recording
+---
+description: Start a voice or video call, share a screen with sound, check what others receive, and stop sharing.
+---
 
-After joining a room and connecting devices, enable your microphone, camera, or screen sharing. Browsers use the system capture picker; Windows desktop also provides native monitor and window sharing.
+# Screen sharing and calls
 
-## Enable voice and camera {#camera-and-microphone}
+Use the meeting controls to talk, turn on a camera, or show a screen to other room members. To save a video source as a file, use the separate [recording and saving guide](recording.md).
 
-1. Enable the microphone or camera using the conversation's media controls.
-2. Grant browser and operating-system permissions when prompted.
-3. Choose devices and preferences in **Settings → Audio and video**.
-4. Check the local preview and mute state, then ask the other device to confirm sound and video.
+## Before your first call or screen share {#before-you-start}
 
-Browsers generally require HTTPS or localhost. Being able to open a LAN HTTP page does not mean camera, microphone, or screen capture is available.
+1. [Connect the devices](../index.md#connect-two-devices) and confirm a chat message reaches the other side.
+2. Open the meeting controls at the bottom of the conversation. If the controls are collapsed, expand them.
+3. Have the microphone, camera, or screen you want to use ready. Browsers generally require HTTPS or localhost and browser/system permission. Opening a LAN HTTP page alone does not make capture available.
+4. If two devices are in the same physical room, use headphones or mute one playback device to avoid feedback.
 
-## Share a monitor or window {#screen-sharing}
+Microphone audio and captured system audio are separate sources. Muting the microphone does not necessarily mute sound shared with a screen.
 
-Use screen sharing to select a source and confirm capture. System audio availability depends on the platform, browser, and source type.
+## Make a voice or video call {#camera-and-microphone}
 
-The Windows desktop picker distinguishes monitors from windows. Window sharing is for viewing. To let another device control the computer, select a monitor and authorize it through [Remote desktop](remote-control.md).
+1. **On the speaker's device**, choose **Enable microphone** in the bottom controls. Grant microphone permission when prompted.
+2. To send video as well, choose **Turn camera on** and grant camera permission.
+3. Use **Audio devices** or **Camera devices** beside the corresponding control to choose a device. More preferences are in **Settings → Audio & video**.
+4. Check the local camera preview. **On the other device**, confirm that the speaker is audible and the camera picture is visible; check playback volume and that the member is not muted.
+5. For a two-way call, repeat the microphone/camera steps on the other device.
 
-Stop sharing through the sharing status or the source's stop action. Hiding the main window or closing a source menu does not end existing sharing.
+**Success means:** the other device receives your voice or camera picture. A local preview only confirms local capture. You can leave the camera off for a voice-only conversation.
+
+Use **Mute microphone** or **Turn camera off** to stop that source while remaining in the room.
+
+## Share a screen with optional system sound {#screen-sharing}
+
+1. **On the sharing device**, choose **Share screen** in the bottom controls.
+2. In the capture picker, select the screen, window, or browser tab offered by your client. Confirm the selected source before starting.
+3. If you want to send system or tab sound, enable the audio option when the picker offers it. Audio availability depends on the operating system, browser, and source type.
+4. **On the receiving device**, select the shared source in the meeting area to open it as the main view. Ask the recipient to confirm both the picture and any sound you intended to send.
+5. While already sharing, use **Add screen** if you want another source and the client offers that action.
+
+The Windows desktop picker distinguishes monitors from windows. A window is suitable for showing one application. To let someone operate the computer, share a monitor and follow [remote desktop authorization](remote-control.md#connect); viewing permission alone does not allow input.
+
+**Success means:** the receiver sees changes as you move something in the selected source. If you included sound, play a short sample and have the receiver confirm it. Opening a video menu or seeing your own preview is not this check.
+
+A phone can receive shared screens and act as a remote controller. Screen capture on the phone itself depends on the browser and platform; do not assume it has the desktop capture picker.
 
 ## Adjust picture and sound {#quality}
 
-In **Settings → Audio and video**, adjust resolution, frame rate, and bitrate. Higher settings need more bandwidth and device performance; these are targets or limits, not guaranteed results.
+Open **Settings → Audio & video**. Keep automatic codec and encoder selection for the first connection, then change one setting at a time.
 
-Automatic encoding chooses among formats the sender can encode and the target device can decode. Native screen and camera publication choose per receiver. A manual choice still needs a compatible receiver.
+| Your priority                       | What to adjust                                                                                                   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Read text and desktop details       | Start with a legible resolution, then balance frame rate and bitrate                                             |
+| Show movement smoothly              | Increase frame rate only as far as the available bandwidth and processing capacity allow                         |
+| Reduce bandwidth or processing load | Lower resolution or frame rate; a higher bitrate limit does not add network capacity                             |
+| Choose a specific desktop encoder   | Select a detected encoder/format pair supported by the receiving device, then restart sharing                    |
+| Hear the intended sound             | Check microphone mute, capture-audio selection, the receiving member/source mute, and playback volume separately |
 
-Available desktop capture methods and encoders depend on the system and hardware. Resolution, frame rate, and bitrate can affect active streams. Encoder, codec, or capture-backend changes require starting sharing again to use the new choice. Use automatic options when unsure.
+Resolution, frame rate, and bitrate are targets or limits, not guaranteed results. They can affect active streams. Changing the encoder, codec, or capture backend requires starting sharing again to use the new selection.
 
-For audio, check the source's mute state and the viewer's playback volume. To share system sound, select an audio-capable capture source and include audio in the capture picker when offered.
+Automatic encoding chooses formats the sender can encode and the receiver can decode; native screen and camera publication choose per receiver. A manual choice still needs a compatible receiver. Hardware encoding, native decoding, and GPU presentation are separate stages, so choosing an encoder alone does not determine the whole path.
 
-For deliberate quality adjustments:
+Where supported by the source, the viewer can request lower received resolution, FPS, or bitrate within the publisher's limits. Detailed browser/native behavior is covered in [encoding, decoding, and GPU display](../architecture/codecs.md).
 
-1. Start with automatic codec/encoder selection, and confirm that the target device receives a picture.
-2. For text and detailed desktop work, prioritize legible resolution. For motion, balance frame rate against the available bitrate and processing capacity.
-3. Change one parameter at a time. Raising the bitrate limit cannot increase the link's capacity; reduce frame rate or resolution when the current budget cannot sustain them.
-4. On desktop, choose a detected encoder/format pair when you need explicit control. Hardware encoding, native decoding, and GPU presentation are separate stages.
-5. A viewer can request lower received resolution, FPS, or bitrate where the source supports these controls; the request stays within the publisher's limits.
+## Stop sharing or leave the call {#stop-sharing}
 
-The [encoding, decoding, and GPU display article](../architecture/codecs.md) explains these tradeoffs and compares browser and native paths, including hardware acceleration and CPU fallback. Browser-specific failures remain in the FAQ.
+- **Stop your microphone or camera:** use its control in the bottom bar.
+- **Stop a shared picture:** use that local source's close action. **Stop sharing** in the meeting controls ends screen sharing.
+- **Leave the conversation:** leave the room to end your live connections.
 
-## Record one video source {#recording}
+Check that the source disappears on the receiver. Closing the source menu, hiding the main window, or switching panels does not stop an active share. Microphone, camera, and screen sharing are separate: check each source you enabled before you finish.
 
-1. Start recording from the menu of the video source you want to capture.
-2. Watch recording status, elapsed time, and written size at the top of the conversation.
-3. Pause when needed; resuming continues in the same file.
-4. Stop and wait for saving to finish, then preview or save a copy from the file library.
+## Record a source you are watching {#recording}
 
-One local or received video source and its associated audio can be recorded at a time. Recording does not automatically include every participant in the meeting.
+Choose **Start recording** in the video source's picture actions. One local or received video source and its associated audio can be recorded at a time; recording does not automatically include every participant.
 
-Choose Automatic, MKV, or MP4 in **Settings → Audio and video → Recording**. When reusing the original media codecs, Automatic generally saves H.264/H.265 as MP4 and other supported video codecs as MKV; G.722, PCMU, or PCMA audio uses MKV. Available formats depend on the source and runtime, so check the completed file's extension. External players must also support the codecs inside the file.
-
-Recording uses the [storage location](storage.md) selected when it starts. Changing the default directory does not move it. Closing its menu or file panel does not stop it; the source ending or being replaced, or leaving the conversation, ends and saves it.
+For preparation, pause/resume, **Stop and save**, and finding the completed file, follow [recording and saving](recording.md). Its [format guide](recording.md#formats) explains MP4, MKV, and playback compatibility.
 
 ## Choose your next step {#troubleshooting}
 
-- **Operate the remote computer while viewing its screen:** set up [remote desktop](remote-control.md).
-- **Choose where recordings are saved:** configure the [storage location](storage.md#choose-storage).
-- **Compare browser and native codecs, GPU acceleration, and CPU fallback:** read [encoding, decoding, and GPU presentation](../architecture/codecs.md#comparison).
-- **Understand microphone capture, system sound, and native PCM playback:** read the [audio path comparison](../architecture/audio.md#comparison).
-- **Follow live media into a recording container:** read about [media transport and recording](../architecture/media.md).
-- **Check H.265 support or fix black video and unplayable recordings:** use the [codec and video FAQ](faq.md#media).
+- **Operate the computer whose screen you can see:** set up [remote desktop](remote-control.md).
+- **Understand hardware acceleration and CPU fallback:** compare the [video](../architecture/codecs.md#comparison) and [audio](../architecture/audio.md#comparison) paths.
+- **The browser cannot capture, sound is missing, or video is black:** use the [capture](faq.md#capture), [audio](faq.md#no-audio), or [video](faq.md#video) FAQ.

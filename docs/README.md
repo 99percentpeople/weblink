@@ -13,7 +13,8 @@ The public documentation covers using, understanding the architecture of, config
 | [房间与聊天](zh/guide/rooms.md)            | [Rooms and chat](guide/rooms.md)                           |
 | [文件传输与共享](zh/guide/files.md)        | [File transfers and sharing](guide/files.md)               |
 | [文件存储与管理](zh/guide/storage.md)      | [File storage and management](guide/storage.md)            |
-| [音视频与录制](zh/guide/media.md)          | [Audio, video, and recording](guide/media.md)              |
+| [屏幕共享与通话](zh/guide/media.md)        | [Screen sharing and calls](guide/media.md)                 |
+| [录制与保存](zh/guide/recording.md)        | [Recording and saving](guide/recording.md)                 |
 | [远程桌面](zh/guide/remote-control.md)     | [Remote desktop](guide/remote-control.md)                  |
 | [设备配对与权限](zh/guide/device-trust.md) | [Device pairing and permissions](guide/device-trust.md)    |
 | [MCP 与自动化](zh/guide/automation.md)     | [MCP and automation](guide/automation.md)                  |

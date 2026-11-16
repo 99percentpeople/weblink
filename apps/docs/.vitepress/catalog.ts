@@ -2,7 +2,14 @@ export type Locale = "zh" | "en";
 
 export interface DocPage {
   route: string;
-  section: "guide" | "architecture" | "deployment";
+  section:
+    | "start"
+    | "features"
+    | "connections"
+    | "advanced"
+    | "help"
+    | "architecture"
+    | "deployment";
   zh: string;
   en: string;
 }
@@ -10,67 +17,73 @@ export interface DocPage {
 export const pages: DocPage[] = [
   {
     route: "index",
-    section: "guide",
+    section: "start",
     zh: "快速开始",
     en: "Quick start",
   },
   {
     route: "guide/desktop",
-    section: "guide",
+    section: "start",
     zh: "安装与使用桌面端",
     en: "Desktop app",
   },
   {
     route: "guide/rooms",
-    section: "guide",
+    section: "start",
     zh: "房间与聊天",
     en: "Rooms & chat",
   },
   {
+    route: "guide/remote-control",
+    section: "features",
+    zh: "远程桌面",
+    en: "Remote desktop",
+  },
+  {
+    route: "guide/media",
+    section: "features",
+    zh: "屏幕共享与通话",
+    en: "Screen sharing & calls",
+  },
+  {
+    route: "guide/recording",
+    section: "features",
+    zh: "录制与保存",
+    en: "Recording & saving",
+  },
+  {
     route: "guide/files",
-    section: "guide",
+    section: "features",
     zh: "文件传输与共享",
     en: "File transfers & sharing",
   },
   {
     route: "guide/storage",
-    section: "guide",
+    section: "features",
     zh: "文件存储与管理",
     en: "File storage & management",
   },
   {
-    route: "guide/media",
-    section: "guide",
-    zh: "音视频与录制",
-    en: "Audio, video & recording",
-  },
-  {
-    route: "guide/remote-control",
-    section: "guide",
-    zh: "远程桌面",
-    en: "Remote desktop",
+    route: "guide/connection",
+    section: "connections",
+    zh: "连接设置与测速",
+    en: "Connection settings & speed tests",
   },
   {
     route: "guide/device-trust",
-    section: "guide",
+    section: "connections",
     zh: "设备配对与权限",
     en: "Device pairing & permissions",
   },
   {
     route: "guide/automation",
-    section: "guide",
+    section: "advanced",
     zh: "MCP 与自动化",
     en: "MCP & automation",
   },
   {
-    route: "guide/connection",
-    section: "guide",
-    zh: "连接设置与测速",
-    en: "Connection settings & speed tests",
-  },
-  {
     route: "guide/faq",
-    section: "guide",
+    section: "help",
     zh: "常见问题",
     en: "Troubleshooting",
   },

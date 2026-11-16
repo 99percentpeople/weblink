@@ -54,16 +54,34 @@ export function navigation(
     sidebar: [
       {
         text: zh ? "开始使用" : "Get started",
-        items: sectionItems("guide"),
+        items: sectionItems("start"),
+      },
+      {
+        text: zh ? "日常功能" : "Everyday features",
+        items: sectionItems("features"),
+      },
+      {
+        text: zh
+          ? "连接与权限"
+          : "Connections & permissions",
+        items: sectionItems("connections"),
+      },
+      {
+        text: zh ? "进阶功能" : "Advanced features",
+        collapsed: true,
+        items: sectionItems("advanced"),
       },
       {
         text: zh ? "设计架构" : "Architecture",
+        collapsed: true,
         items: sectionItems("architecture"),
       },
       {
         text: zh ? "自行部署" : "Self-hosting",
+        collapsed: true,
         items: sectionItems("deployment"),
       },
+      ...sectionItems("help"),
     ],
     outline: {
       level: [2, 3],

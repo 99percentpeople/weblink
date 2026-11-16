@@ -48,7 +48,8 @@
 | 安装和使用桌面端           | [桌面端使用][desktop]                                       |
 | 聊天和发送文件             | [房间与聊天][rooms] · [文件传输][files]                     |
 | 选择存储位置、管理文件     | [文件存储与管理][storage]                                   |
-| 通话、共享屏幕或录制       | [音视频与录制][media]                                       |
+| 通话或共享屏幕             | [屏幕共享与通话][media]                                     |
+| 录制来源并保存文件         | [录制与保存][recording]                                     |
 | 控制另一台电脑             | [远程桌面][remote-control]                                  |
 | 配对设备、调整权限         | [设备配对与权限][device-trust]                              |
 | 接入 MCP 客户端            | [MCP 与自动化][automation]                                  |
@@ -76,6 +77,7 @@ Weblink 基于 [MIT License](LICENSE) 开源。
 [files]: https://docs.webl.ink/zh/guide/files.html
 [storage]: https://docs.webl.ink/zh/guide/storage.html
 [media]: https://docs.webl.ink/zh/guide/media.html
+[recording]: https://docs.webl.ink/zh/guide/recording.html
 [remote-control]: https://docs.webl.ink/zh/guide/remote-control.html
 [device-trust]: https://docs.webl.ink/zh/guide/device-trust.html
 [automation]: https://docs.webl.ink/zh/guide/automation.html

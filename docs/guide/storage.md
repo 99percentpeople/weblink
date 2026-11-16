@@ -49,6 +49,6 @@ After an upgrade, older browser file storage may migrate automatically. The app 
 ## Choose your next step {#troubleshooting}
 
 - **Let other devices browse files you select:** set up a [shared file list](files.md#shared-files).
-- **Save a screen or video source as a recording:** follow the [recording steps](media.md#recording).
+- **Save a screen or video source as a recording:** follow the [recording steps](recording.md#start).
 - **Understand partial-file recovery and when data is deleted:** explore the [storage lifecycle](../architecture/storage.md).
 - **Recover access to an unreadable file or investigate a save failure:** check the [file access and saving FAQ](faq.md#files).
