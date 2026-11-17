@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1192 352" lang="zh-CN" role="img" aria-labelledby="title desc">
   <title id="title">从开始采集到屏幕显示的时间点</title>
-  <desc id="desc">一帧依次经过采集开始、采集帧 C、封包前回调 P、传输提交 T、末包收齐 R、解码完成 D、提交合成 S 和屏幕显示。端到端统计 C 到 S，接收与呈现延迟在 R 相接。X 为浏览器预计显示时刻。</desc>
+  <desc id="desc">一帧依次经过采集开始、采集帧 C、封包前回调 P、传输提交 T、末包收齐 R、解码完成 D、提交合成 S 和屏幕显示。浏览器端到端统计 C 到 X，桌面原生 GPU 统计 C 到 S。上方标出发送延迟 C 到 T、灰色传输区间 T 到 R 和处理延迟 R 到 S，下方标出接收延迟 C 到 R。X 为浏览器预计显示时刻。区间宽度展示一种可能的耗时分布。</desc>
   <style>
     :root { color-scheme:light dark; --ink:#24292f; --muted:#57606a; --line:#aeb7c2; --first:#a96717; --first-bg:#fcf1df; --second:#2475ab; --second-bg:#e7f2fa; --display:#f1f3f5; }
     @media (prefers-color-scheme:dark) { :root { --ink:#e6edf3; --muted:#aeb9c5; --line:#667585; --first:#eab66b; --first-bg:#392c1b; --second:#79c0ff; --second-bg:#193247; --display:#252c34; } }
@@ -11,49 +11,52 @@
     .muted { fill:var(--muted); }
   </style>
   <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M1 1L7 4.5L1 8" fill="none" stroke="var(--line)" stroke-width="1.5"/></marker></defs>
-  <text class="label" x="556" y="30" text-anchor="middle">端到端 C → S</text>
-  <path d="M168 58V46H944V58" fill="none" stroke="var(--line)" stroke-width="1.5"/>
-  <rect x="40" y="70" width="128" height="50" fill="var(--display)"/>
-  <rect x="168" y="70" width="480" height="50" fill="var(--first-bg)"/>
-  <rect x="648" y="70" width="296" height="50" fill="var(--second-bg)"/>
-  <rect x="944" y="70" width="208" height="50" fill="var(--display)"/>
-  <rect x="168" y="116" width="480" height="4" fill="var(--first)"/>
-  <rect x="648" y="116" width="296" height="4" fill="var(--second)"/>
-  <text class="muted" x="104" y="101" text-anchor="middle">来源采集</text>
-  <text class="label" x="408" y="101" text-anchor="middle">接收延迟</text>
-  <text class="label" x="796" y="101" text-anchor="middle">呈现延迟</text>
-  <text class="muted" x="1048" y="101" text-anchor="middle">显示阶段</text>
-  <line x1="40" y1="172" x2="168" y2="172" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5"/>
-  <line x1="168" y1="172" x2="648" y2="172" stroke="var(--first)" stroke-width="2"/>
-  <line x1="648" y1="172" x2="944" y2="172" stroke="var(--second)" stroke-width="2"/>
-  <line x1="944" y1="172" x2="1152" y2="172" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
+  <text class="label" x="664" y="30" text-anchor="middle">浏览器端到端 C → X</text>
+  <path d="M176 58V46H1152V58" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+  <rect x="40" y="70" width="136" height="50" fill="var(--display)"/>
+  <rect x="176" y="70" width="304" height="50" fill="var(--first-bg)"/>
+  <rect x="480" y="70" width="168" height="50" fill="var(--display)"/>
+  <rect x="648" y="70" width="272" height="50" fill="var(--second-bg)"/>
+  <rect x="920" y="70" width="232" height="50" fill="var(--display)"/>
+  <rect x="176" y="116" width="304" height="4" fill="var(--first)"/>
+  <rect x="648" y="116" width="272" height="4" fill="var(--second)"/>
+  <text class="muted" x="108" y="101" text-anchor="middle">来源采集</text>
+  <text class="label" x="328" y="101" text-anchor="middle">发送延迟</text>
+  <text class="muted" x="564" y="101" text-anchor="middle">网络传输</text>
+  <text class="label" x="784" y="101" text-anchor="middle">处理延迟</text>
+  <text class="muted" x="1036" y="101" text-anchor="middle">显示等待</text>
+  <line x1="40" y1="172" x2="176" y2="172" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <line x1="176" y1="172" x2="480" y2="172" stroke="var(--first)" stroke-width="2"/>
+  <line x1="480" y1="172" x2="648" y2="172" stroke="var(--line)" stroke-width="2"/>
+  <line x1="648" y1="172" x2="920" y2="172" stroke="var(--second)" stroke-width="2"/>
+  <line x1="920" y1="172" x2="1152" y2="172" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#arrow)"/>
   <circle cx="40" cy="172" r="4" fill="var(--muted)"/>
   <text x="40" y="208" text-anchor="start">开始采集</text>
-  <text class="code" x="168" y="152" text-anchor="middle">C</text>
-  <circle cx="168" cy="172" r="6" fill="var(--first)"/>
-  <text x="168" y="208" text-anchor="middle">采集帧</text>
-  <text class="code" x="328" y="152" text-anchor="middle">P</text>
-  <circle cx="328" cy="172" r="4" fill="var(--first)"/>
-  <text x="328" y="208" text-anchor="middle">封包前回调</text>
-  <text class="code" x="488" y="152" text-anchor="middle">T</text>
-  <circle cx="488" cy="172" r="4" fill="var(--first)"/>
-  <text x="488" y="208" text-anchor="middle">传输提交</text>
+  <text class="code" x="176" y="152" text-anchor="middle">C</text>
+  <circle cx="176" cy="172" r="6" fill="var(--first)"/>
+  <text x="176" y="208" text-anchor="middle">采集帧</text>
+  <text class="code" x="368" y="152" text-anchor="middle">P</text>
+  <circle cx="368" cy="172" r="4" fill="var(--first)"/>
+  <text x="368" y="208" text-anchor="middle">封包前回调</text>
+  <text class="code" x="480" y="152" text-anchor="middle">T</text>
+  <circle cx="480" cy="172" r="4" fill="var(--first)"/>
+  <text x="480" y="208" text-anchor="middle">传输提交</text>
   <text class="code" x="648" y="152" text-anchor="middle">R</text>
   <circle cx="648" cy="172" r="6" fill="var(--ink)"/>
   <text x="648" y="208" text-anchor="middle">末包收齐</text>
-  <text class="code" x="796" y="152" text-anchor="middle">D</text>
-  <circle cx="796" cy="172" r="4" fill="var(--second)"/>
-  <text x="796" y="208" text-anchor="middle">解码完成</text>
-  <text class="code" x="944" y="152" text-anchor="middle">S</text>
-  <circle cx="944" cy="172" r="6" fill="var(--second)"/>
-  <text x="944" y="208" text-anchor="middle">提交合成</text>
+  <text class="code" x="808" y="152" text-anchor="middle">D</text>
+  <circle cx="808" cy="172" r="4" fill="var(--second)"/>
+  <text x="808" y="208" text-anchor="middle">解码完成</text>
+  <text class="code" x="920" y="152" text-anchor="middle">S</text>
+  <circle cx="920" cy="172" r="6" fill="var(--second)"/>
+  <text x="920" y="208" text-anchor="middle">提交合成</text>
   <text class="code muted" x="1152" y="152" text-anchor="middle">X</text>
   <text x="1152" y="208" text-anchor="end">屏幕显示</text>
   <text class="detail muted" x="1152" y="230" text-anchor="end">预计时刻</text>
-  <path d="M168 266V276H488V266" fill="none" stroke="var(--first)" stroke-width="1.5"/>
-  <text class="detail" x="328" y="311" text-anchor="middle">发送延迟 C → T</text>
-  <path d="M796 266V276H944V266" fill="none" stroke="var(--second)" stroke-width="1.5"/>
-  <text class="detail" x="870" y="311" text-anchor="middle">解码后 D → S</text>
-  <path d="M944 266V276H1152V266" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5"/>
-  <text class="detail muted" x="1048" y="311" text-anchor="middle">显示等待 S → X</text>
+  <path d="M176 266V276H648V266" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+  <text class="detail" x="412" y="311" text-anchor="middle">接收延迟 C → R</text>
+  <path d="M808 266V276H920V266" fill="none" stroke="var(--second)" stroke-width="1.5"/>
+  <text class="detail" x="864" y="311" text-anchor="middle">解码后 D → S</text>
+  <path d="M920 266V276H1152V266" fill="none" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <text class="detail muted" x="1036" y="311" text-anchor="middle">显示等待 S → X</text>
 </svg>

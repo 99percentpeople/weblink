@@ -1132,10 +1132,12 @@ Local preview reports dimensions and preview-submission counters, including
 static refresh submissions. The overlay reports submitted, encoded, decoded and
 presented FPS, using cumulative compositor counters where supported. Player drop
 counts and receive-to-presentation timing appear when samples are available.
-Remote end-to-end latency uses the same frame's mapped capture timestamp and
-compositor submission timestamp. Browser and desktop share this endpoint:
-receive latency covers capture to the last packet, and presentation latency
-covers the last packet to submission. Metric definitions and the pipeline diagram
+Remote end-to-end latency uses the same frame's mapped capture timestamp:
+browsers end at expected display and native GPU desktop ends at compositor
+submission. Receive latency covers capture to the last packet; receiver processing
+latency covers the last packet to submission. Browser totals also include display
+wait. Desktop software and hardware sources retain original WGC / DXGI frame
+timestamps through capture delivery, GPU handoff and scheduling. Metric definitions and the pipeline diagram
 are in [Video statistics and latency](../../architecture/statistics.md).
 Browser and native GPU samplers share the `VideoPresentationStats` and
 `VideoPresentationSampler` contracts in `packages/platform`. Both report 1% Low
@@ -2525,8 +2527,8 @@ at submission and native submission duration. Shared-buffer mode retains worker,
 packing, lease and renderer stage counters and bounded timing summaries.
 Detailed automation diagnostics export numeric fields for these local stages.
 Native GPU presentation uses compositor counters; browser presentation uses
-video frame callbacks. Both paths use compositor submission for same-frame
-latency. See [Video statistics and latency](../../architecture/statistics.md).
+video frame callbacks. Browser end-to-end latency includes expected display
+wait; native GPU latency ends at compositor submission. See [Video statistics and latency](../../architecture/statistics.md).
 
 ## Receiver video quality {#receiver-video-quality}
 
