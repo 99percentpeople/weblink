@@ -903,36 +903,30 @@ and range. Changing colour preferences never changes the encoder or codec.
 Legacy RGB/4:4:4 preferences are ignored; all native shares use YUV 4:2:0.
 Restart sharing to apply colour or encoding changes.
 
-The **Show stream statistics** action is available in the main picture's controls
-when it has video. Its overlay is temporary state for that picture, defaults to
-off, and is discarded when the picture is removed or replaced. It is not saved
-in application preferences. The overlay samples only while displayed. It keeps
-each peer and local preview separate; rates and
-per-frame processing times use successive counter differences. Unavailable values
-remain absent. Actual bitrate is RTP payload byte growth over the report interval,
-independent of display FPS. Sender rows separately show the WebRTC target, the
-last bitrate successfully applied to the encoder, and the selected transport's outgoing
-bandwidth estimate when available. These are budgets, not measured traffic or
-guaranteed capacity. Each receiver has its own encoder and congestion feedback;
-compare its sender row with that same receiver, not another peer's bitrate. A
-receiving browser's outgoing bandwidth estimate describes the reverse path and
-is not displayed as incoming video capacity. Native hardware encode time measures input preparation through output,
-including conversion, driver and worker latency, rather than WebRTC's encoded-frame passthrough.
-Hardware input wait is measured separately. Capture-to-encoded time starts at
-arrival in the application's capture callback; cached static repeats are excluded.
-Packet-send queue delay uses packet counts, not frame counts. RTT belongs to the
-selected ICE candidate pair. Neither RTT nor a sum of these overlapping stage
-measurements is a glass-to-glass latency measurement. Only small counters cross
-Tauri IPC; statistics never change capture, transport or borrowed track lifetimes.
-Copying statistics includes the latest two raw counter samples for each stream.
-Native `captureFrames` counts converted frames available to preview, excluding
-static repeats. Hardware `replacedInputs` counts pending inputs replaced by newer
-frames; `rateLimitedInputs` counts inputs skipped to respect the encoder budget.
-Receiver frame, packet loss, NACK, PLI and freeze counters remain separate from
-player drops. Cumulative decoder frame intervals and their squared sum also
-preserve timing variation that average FPS hides. Compare interval deltas while
-the source is moving; a static desktop can legitimately send fewer frames than
-the configured FPS.
+The **Show stream statistics** action opens a temporary floating window for the
+main picture. Sampling runs while the window is displayed, with separate records
+for each peer and local preview. Rates and interval averages use successive
+counter differences; same-frame latency uses frame timestamps. Available fields
+appear as their samples arrive.
+Actual bitrate is RTP payload byte growth over the report interval. Sender rows
+show the WebRTC target, the last bitrate successfully applied to the encoder and
+the selected transport's outgoing bandwidth estimate as separate budget fields.
+Each receiver has its own encoder and congestion feedback, so comparisons pair
+that receiver with its corresponding sender row. A receiving browser's outgoing
+bandwidth estimate describes the reverse path.
+Native hardware encode time covers input preparation through output, including
+conversion, driver and worker latency. Hardware input wait is measured separately.
+Capture-to-encoded time starts when a fresh frame arrives in the application's
+capture callback. Packet-send queues use packet counts; RTT uses the selected
+ICE candidate pair. Tauri IPC carries small counter snapshots, and copied
+statistics include the latest two raw samples for each stream.
+Native `captureFrames` counts fresh converted frames available to preview.
+Hardware `replacedInputs` counts pending inputs replaced by newer frames;
+`rateLimitedInputs` counts inputs skipped to respect the encoder budget.
+Receiver frame, packet loss, NACK, PLI and freeze counters accompany player drop
+counts. Cumulative decoder frame intervals and their squared sum describe cadence
+variation. Compare interval deltas while the source is moving; static desktops
+use sparse refresh frames.
 
 Native capture retains the original GPU texture. H.264 and H.265 hardware encoders
 share a D3D11 texture input path: GPU shaders scale, rotate, composite the DXGI
@@ -1134,77 +1128,70 @@ requiring CPU pixels and no visible previews, the CPU conversion worker sleeps a
 releases its staging and composition buffers; GPU hardware senders keep running.
 Capture retains the latest GPU source, including an unpublished final update,
 so a static screen can resume without another capture arrival.
-The preview has no codec, bitrate, encode/decode delay or jitter-buffer statistic;
-only its available dimensions and preview-submission counters (including static
-refresh submissions) are shown. The overlay separates submitted/encoded/decoded
-FPS from the video element's presentation FPS, using cumulative compositor
-counters where supported. Player
-drops and receive-to-presentation timing are shown only when available. These are
-presentation measurements, not physical display scan-out or end-to-end latency.
+Local preview reports dimensions and preview-submission counters, including
+static refresh submissions. The overlay reports submitted, encoded, decoded and
+presented FPS, using cumulative compositor counters where supported. Player drop
+counts and receive-to-presentation timing appear when samples are available.
+Remote end-to-end latency uses the same frame's mapped capture timestamp and
+compositor submission timestamp. Browser and desktop share this endpoint:
+receive latency covers capture to the last packet, and presentation latency
+covers the last packet to submission. Metric definitions and the pipeline diagram
+are in [Video statistics and latency](../../architecture/statistics.md).
 Browser and native GPU samplers share the `VideoPresentationStats` and
 `VideoPresentationSampler` contracts in `packages/platform`. Both report 1% Low
 as the reciprocal of the mean slowest 1% of completed presentation intervals in
 the last ten seconds of visible playback. Native intervals are recorded after
-successful compositor submissions, independently for each bound view; hiding a
-view resets its interval window. Browser coalesced callbacks and bounded native
-history truncation are marked as estimates. Unavailable measurements remain
-absent; an active supported sampler with no completed intervals reports zero.
-Decoded FPS and its pipeline timings remain separate from presentation metrics.
-MCP presentation samples include document visibility: cumulative player drop
-counters can include background frames and must not be interpreted alone as
-foreground stutter. Browser receive diagnostics expose first-packet-to-decoded
-processing time, target/minimum jitter-buffer delay and the power-efficient decoder
-flag when supported; missing fields remain unavailable rather than zero.
+successful compositor submissions for each bound view; hiding a view resets its
+interval window. Browser coalesced callbacks and bounded native history
+truncation use the estimated state. An active supported sampler starts at zero
+and updates as frame intervals complete.
+MCP presentation samples include document visibility. Foreground-stutter analysis
+uses visibility together with changes in cumulative player drop counts.
+Browser receive diagnostics provide first-packet-to-decoded processing time,
+target/minimum jitter-buffer delay and the power-efficient decoder flag
+according to browser support.
 Closing or navigating releases both shared-buffer mappings. A silent local audio
 track carries consent, mute and ownership through existing controls; actual system
 audio remains native.
 The preview has no network feedback and cannot throttle remote senders. Window resize
 updates are observed after the source repaints at its new size.
 
-`capture_pipeline_stats` exposes bounded rolling mean/P95/max timings for lock wait,
-GPU preparation, Map, composition, conversion, CPU scaling and publication, plus
-input/readback dimensions, GPU fallback reason and active peer/encoder counts.
+`capture_pipeline_stats` exposes bounded rolling mean/P95/max timings for lock
+wait, GPU preparation, Map, composition, conversion, CPU scaling and publication,
+plus input/readback dimensions, GPU fallback reason and active peer/encoder counts.
 It also reports capture wait, per-group hardware input wait, input-to-output and
 capture-to-encoded distributions, replaced input counts and in-flight samples.
-Each encoder's `stages` separates CPU preparation (excluding `contextLock`),
-immediate-context lock acquisition, backend `input`, `outputWait` (input return
-to output-event observation), `eventDispatch` (event observation to worker output
-processing), `output` (extraction/copy/bitstream normalization), `delivery` and
-live `bitrateUpdate` calls. Each stage reports cumulative `samples`/`totalSeconds`
-and rolling `meanMs`/`p95Ms`/`maxMs`. Preparation/input count accepted inputs;
-Output stages count matched completed packets for both MF and NVENC. NVENC
-records completion before publishing its ready flag and starts output timing
-before locking the bitstream; its bounded per-slot timestamps use the same Rust
-monotonic clock as input timing. Zero samples means unobserved or unsupported,
-not a measured zero. GPU preparation times measure CPU command submission, not GPU execution.
-`outputWait` also includes GPU dependencies and callback scheduling, so it is not
-pure hardware encode time. The existing aggregate `encode`/`encodeMs` retains
-its conversion-start-to-output semantics. Stages with different sampling windows
-must not be summed into an end-to-end latency estimate.
-`outputInterval` measures intervals between delivered encoder outputs, including
-capture/idle gaps; it is a cadence diagnostic, not an additional encoding stage.
-`hardwareEncoders` counts unique workers. Each entry has a stable `groupId` and
-current `consumers` (peer IDs or `recording:<id>`), so membership changes do not
-look like encoder restarts.
-Per-peer statistics start a new sampling baseline when that peer changes groups,
-preventing counters from different workers from producing spurious rate/latency spikes.
-Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` distinguish actual texture
-submission from memory input and identify a fallback reason. CPU pipeline frame
-counts can remain zero while a hardware-only stream is encoding normally.
-`sourceFrames`, `sourceAgeMs`, `sourceIntervals` and `sourceCopy` measure actual
-OS frame arrivals and the source-copy path independently of CPU readback and
-preview visibility. A long source interval with a short encode time identifies
-an upstream gap; replaced inputs with a normal source cadence identify encoder
-backpressure. Neither alone proves the user's screen was continuously moving.
-Automation samples `capture.status` explicitly for fresh frame count, FPS and
-frame age even outside detailed mode. Lifecycle subscriptions intentionally omit
-counter ticks; failed diagnostic reads report unavailable instead of stale FPS.
-Hardware controls include the requested value, setter result and driver readback;
-an accepted setter alone does not establish that a low-latency/CBR/buffer request
-was honored. Unsupported optional controls remain diagnostic and do not silently
-disable otherwise usable hardware encoders.
-Preparation times measure CPU submission; GPU completion wait appears in Map.
-These diagnostics exclude network transit and presentation latency.
+Each encoder's `stages` records CPU preparation, `contextLock` acquisition,
+backend `input`, `outputWait` (input return to output-event observation),
+`eventDispatch` (event observation to worker output processing), `output`
+(extraction/copy/bitstream normalization), `delivery` and live `bitrateUpdate`
+calls. Each stage reports cumulative `samples`/`totalSeconds` and rolling
+`meanMs`/`p95Ms`/`maxMs`. Preparation/input count accepted inputs; output stages
+count matched completed packets for both MF and NVENC.
+NVENC records completion before publishing its ready flag and starts output
+timing before locking the bitstream. Its bounded per-slot timestamps use the same
+Rust monotonic clock as input timing. Sample counts identify the observations
+contributing to each duration. GPU preparation measures CPU command submission;
+`outputWait` includes GPU dependencies and callback scheduling.
+The aggregate `encode`/`encodeMs` spans conversion start to output. Each stage
+retains its own sampling window for comparisons. `outputInterval` measures
+encoder output cadence, including capture and idle gaps.
+`hardwareEncoders` counts unique workers. Each entry has a stable `groupId`
+and current `consumers` (peer IDs or `recording:<id>`) to track membership.
+Per-peer statistics start a new baseline when the peer changes groups.
+Per-encoder `gpuInputs`, `cpuInputs` and `gpuFallback` identify texture or
+memory input and the fallback reason. `sourceFrames`, `sourceAgeMs`,
+`sourceIntervals` and `sourceCopy` measure OS frame arrivals and source-copy
+work independently of CPU readback and preview visibility.
+A long source interval with a short encode time points to an upstream gap;
+replaced inputs with a regular source cadence point to encoder backpressure.
+Automation samples `capture.status` for fresh frame count, FPS and frame age
+in both normal and detailed modes. Lifecycle subscriptions track source state,
+and diagnostic reads supply current counters.
+Hardware controls report requested values, setter results, availability and
+driver readback. Driver readback records the applied settings. Preparation
+measures CPU submission, and Map includes GPU completion wait. These diagnostics
+describe the local capture and encoding pipeline.
 
 An opt-in synthetic benchmark exercises 1080p GPU input, hardware H.264,
 RTP and a native receiver in the same process at 60 and 120 FPS:
@@ -1228,10 +1215,9 @@ resolution only for the probe process, for controlled scheduling comparisons.
 Run serially with other GPU workloads idle. The pattern is precomputed, each
 stream warms up for three seconds, and RTP/receiver counters cover the remaining
 seven seconds. Pipeline distributions retain their latest 120 samples. Compare
-the same machine, build profile and workload; these intervals and overlapping
-stage times must not be summed as end-to-end latency. This benchmark captures no
-desktop pixels and excludes OS capture, a real network path, browser rendering
-and display scan-out. It checks delivery, without asserting timing thresholds.
+the same machine, build profile and workload. The benchmark measures synthetic
+GPU input, hardware encoding, in-process RTP delivery and native decoding,
+checking that frames reach the receiver.
 
 DXGI acquisition/release owns a dedicated D3D device. A second device on the same
 adapter receives frames through one reusable NT-shared texture with keyed ownership;
@@ -2535,12 +2521,12 @@ native receiver, audio sinks and shared buffer.
 
 Native inbound video reports include `nativeReceive` diagnostics. GPU mode
 reports decoded and presented frame counts, CPU-upload counts, decoded-frame age
-at submission and native submission duration. Shared-buffer mode retains the
-worker, packing, lease and renderer stage counters and bounded timing summaries.
-Detailed automation diagnostics export only known numeric fields. These are
-process-local durations, not end-to-end or physical display latency. A placeholder
-video's `requestVideoFrameCallback` does not measure native GPU presentation;
-comparisons must observe the same actual display boundary on both paths.
+at submission and native submission duration. Shared-buffer mode retains worker,
+packing, lease and renderer stage counters and bounded timing summaries.
+Detailed automation diagnostics export numeric fields for these local stages.
+Native GPU presentation uses compositor counters; browser presentation uses
+video frame callbacks. Both paths use compositor submission for same-frame
+latency. See [Video statistics and latency](../../architecture/statistics.md).
 
 ## Receiver video quality {#receiver-video-quality}
 

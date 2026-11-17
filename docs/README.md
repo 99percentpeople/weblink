@@ -32,6 +32,7 @@ The public documentation covers using, understanding the architecture of, config
 | [媒体传输与录制](zh/architecture/media.md)             | [Media transport and recording](architecture/media.md)             |
 | [编码、解码与 GPU 显示](zh/architecture/codecs.md)     | [Encoding, decoding, and GPU presentation](architecture/codecs.md) |
 | [音频采集、编解码与播放](zh/architecture/audio.md)     | [Audio capture, codecs, and playback](architecture/audio.md)       |
+| [视频统计与延迟口径](zh/architecture/statistics.md)    | [Video statistics and latency](architecture/statistics.md)         |
 | [设备身份与授权](zh/architecture/device-trust.md)      | [Device identity and authorization](architecture/device-trust.md)  |
 | [存储与文件生命周期](zh/architecture/storage.md)       | [Storage and file lifecycle](architecture/storage.md)              |
 

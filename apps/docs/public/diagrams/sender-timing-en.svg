@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" lang="en" role="img" aria-labelledby="title desc">
+  <title id="title">Same-frame sender timing intervals</title>
+  <desc id="desc">Desktop send latency covers C to T for one frame, combining capture to packetizer C to P and packetization and pacing P to T. Browser pre-packetizer latency covers C to P.</desc>
+  <style>
+    :root { color-scheme:light dark; --ink:#24292f; --muted:#57606a; --line:#aeb7c2; --first:#a96717; --first-bg:#fcf1df; --second:#977321; --second-bg:#f5efd9; }
+    @media (prefers-color-scheme:dark) { :root { --ink:#e6edf3; --muted:#aeb9c5; --line:#667585; --first:#eab66b; --first-bg:#392c1b; --second:#d7c17c; --second-bg:#332e1c; } }
+    text { font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif; font-size:17px; fill:var(--ink); }
+    .label { font-size:20px; font-weight:600; }
+    .code { font-size:16px; font-weight:600; }
+  </style>
+  <text class="label" x="400" y="29" text-anchor="middle">Desktop · Send latency</text>
+  <path d="M48 58V46H752V58" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+  <rect x="48" y="66" width="352" height="48" fill="var(--first-bg)"/>
+  <rect x="400" y="66" width="352" height="48" fill="var(--second-bg)"/>
+  <rect x="48" y="110" width="352" height="4" fill="var(--first)"/>
+  <rect x="400" y="110" width="352" height="4" fill="var(--second)"/>
+  <text class="label" x="224" y="96" text-anchor="middle">Capture to packetizer</text>
+  <text class="label" x="576" y="96" text-anchor="middle">Packetize and queue</text>
+  <line x1="48" y1="163" x2="400" y2="163" stroke="var(--first)" stroke-width="2"/>
+  <line x1="400" y1="163" x2="752" y2="163" stroke="var(--second)" stroke-width="2"/>
+  <text class="code" x="48" y="143" text-anchor="middle">C</text>
+  <circle cx="48" cy="163" r="6" fill="var(--first)"/>
+  <text x="48" y="197" text-anchor="middle">Captured</text>
+  <text x="48" y="219" text-anchor="middle">frame</text>
+  <text class="code" x="400" y="143" text-anchor="middle">P</text>
+  <circle cx="400" cy="163" r="4" fill="var(--ink)"/>
+  <text x="400" y="197" text-anchor="middle">Pre-packetizer</text>
+  <text x="400" y="219" text-anchor="middle">callback</text>
+  <text class="code" x="752" y="143" text-anchor="middle">T</text>
+  <circle cx="752" cy="163" r="6" fill="var(--second)"/>
+  <text x="752" y="197" text-anchor="middle">Transport</text>
+  <text x="752" y="219" text-anchor="middle">submit</text>
+  <path d="M48 242V252H400V242" fill="none" stroke="var(--first)" stroke-width="1.5"/>
+  <text x="224" y="280" text-anchor="middle">Browser · Pre-packetizer</text>
+</svg>

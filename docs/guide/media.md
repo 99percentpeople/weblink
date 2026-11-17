@@ -42,6 +42,10 @@ Open **Settings → Audio & video**. Start with automatic codec and encoder sele
 Automatic selection considers sender and receiver support; native publication selects per receiver. A viewer may request lower quality within the publisher's limits. Hardware encoding, decoding, and GPU display are separate stages; see the [video](../architecture/codecs.md#comparison) and [audio](../architecture/audio.md#comparison) comparisons.
 :::
 
+## View performance statistics {#statistics}
+
+To inspect stutter or delay, enable **Stream statistics** in the main picture's actions. Move the floating window, expand receiver details, or copy diagnostics. Reception prioritizes end-to-end latency, FPS, and bitrate; local preview shows the slowest receiver's sender-processing estimate, local FPS, and total bitrate. See [video statistics and latency](../architecture/statistics.md) for definitions and the measurement diagram.
+
 ## Stop sharing or leave {#stop-sharing}
 
 Use the microphone and camera controls to stop those sources. Close an individual shared picture through its source actions, or use **Stop sharing** in the bottom controls. Leave the room to end your live connections.

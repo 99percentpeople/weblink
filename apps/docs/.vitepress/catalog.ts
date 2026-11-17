@@ -130,6 +130,12 @@ export const pages: DocPage[] = [
     en: "Audio capture, codecs & playback",
   },
   {
+    route: "architecture/statistics",
+    section: "architecture",
+    zh: "视频统计与延迟口径",
+    en: "Video statistics & latency",
+  },
+  {
     route: "architecture/device-trust",
     section: "architecture",
     zh: "设备身份与授权",

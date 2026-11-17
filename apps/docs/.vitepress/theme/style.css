@@ -93,7 +93,7 @@
 .vp-doc .docs-diagram img {
   display: block;
   width: 100%;
-  min-width: 720px;
+  min-width: var(--diagram-min-width, 720px);
   max-width: none;
 }
 .vp-doc .docs-diagram figcaption {
