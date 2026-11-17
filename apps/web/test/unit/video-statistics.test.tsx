@@ -14,6 +14,70 @@ afterEach(() => {
   vi.restoreAllMocks();
   nativeSample.mockReset();
 });
+it("clears incompatible sender latency history while retaining frame rate history", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, "hidden", "get").mockReturnValue(
+    false,
+  );
+  const track = { readyState: "live" } as MediaStreamTrack;
+  const video = document.createElement("video");
+  let tick = 0;
+  const read = async (): Promise<VideoStatsBatch[]> => [
+    {
+      key: "pc",
+      direction: "send",
+      samples: [
+        {
+          id: "video",
+          codec: "video/VP8",
+          timestamp: ++tick * 1000,
+          frames: tick * 60,
+          encodeFrames: tick * 60,
+          encodeSeconds: tick * 0.12,
+          packetsSent: tick * 100,
+          sendDelaySeconds: tick * 0.1,
+          ...(tick >= 3
+            ? {
+                sendFrame: {
+                  ssrc: 7,
+                  rtpTimestamp: tick,
+                  ageMs: 0,
+                  captureToPacketizerMs: 10,
+                  endpoint: "packetizer-input" as const,
+                },
+              }
+            : {}),
+        },
+      ],
+    },
+  ];
+  let rows!: ReturnType<typeof createVideoStatistics>;
+  render(() => {
+    rows = createVideoStatistics(
+      () => track,
+      () => video,
+      read,
+      () => true,
+    );
+    return <span />;
+  });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(rows()[0].sendLatencyMs).toBeCloseTo(3);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(
+    rows()[0].history?.map((point) => point.sendLatencyMs),
+  ).toEqual([undefined, undefined, 10]);
+  expect(
+    rows()[0].history?.map((point) => point.fps),
+  ).toEqual([undefined, 60, 60]);
+  expect(
+    rows()
+      .find((row) => row.direction === "display")
+      ?.senderOverviewHistory?.map(
+        (point) => point.sendLatencyMs,
+      ),
+  ).toEqual([undefined, undefined, 10]);
+});
 it("serializes polling, discards late results and stops when the overlay is hidden", async () => {
   vi.useFakeTimers();
   vi.spyOn(document, "hidden", "get").mockReturnValue(
@@ -136,6 +200,10 @@ it("retains a presentation history gap when the native sampler temporarily has n
       .mockReturnValueOnce({
         fps: 59,
         onePercentLowFps: 40,
+        submitMs: 0.2,
+        presentationQueueMs: 1.5,
+        endToEndMs: 80,
+        endToEndState: "estimated",
       })
       .mockReturnValue({}),
     close,
@@ -170,6 +238,10 @@ it("retains a presentation history gap when the native sampler temporarily has n
     (row) => row.direction === "display",
   );
   expect(display?.fps).toBeUndefined();
+  expect(display?.endToEndMs).toBeUndefined();
+  expect(
+    display?.history?.map((point) => point.endToEndMs),
+  ).toEqual([80, undefined]);
   expect(
     display?.history?.map((point) => point.fps),
   ).toEqual([59, undefined]);
@@ -178,73 +250,154 @@ it("retains a presentation history gap when the native sampler temporarily has n
       (point) => point.onePercentLowFps,
     ),
   ).toEqual([40, undefined]);
+  expect(
+    display?.history?.map((point) => point.submitMs),
+  ).toEqual([0.2, undefined]);
+  expect(
+    display?.history?.map(
+      (point) => point.presentationQueueMs,
+    ),
+  ).toEqual([1.5, undefined]);
   view.unmount();
   expect(close).toHaveBeenCalledOnce();
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it("keeps histories with their transports when equally named peers reorder or reconnect", async () => {
-  vi.useFakeTimers();
-  vi.spyOn(document, "hidden", "get").mockReturnValue(
-    false,
-  );
-  const video = document.createElement("video");
-  const track = { readyState: "live" } as MediaStreamTrack;
-  const first = {};
-  let second = {};
-  let tick = 0;
-  let reverse = false;
-  let showFirst = true;
-  const batch = (
-    key: object,
-    fps: number,
-  ): VideoStatsBatch => ({
-    key,
-    direction: "receive",
-    peer: "Same name",
-    samples: [
-      {
-        id: "video",
-        codec: "video/VP8",
-        timestamp: tick * 1000,
-        frames: tick * fps,
-      },
-    ],
-  });
-  const read = vi.fn(async () => {
-    tick++;
-    const batches = [batch(second, 60)];
-    if (showFirst) batches.unshift(batch(first, 30));
-    return reverse ? batches.reverse() : batches;
-  });
-  let rows!: ReturnType<typeof createVideoStatistics>;
-  render(() => {
-    rows = createVideoStatistics(
-      () => track,
-      () => video,
-      read,
+it.each(["send", "receive"] as const)(
+  "keeps %s histories with their transports when equally named peers reorder or reconnect",
+  async (direction) => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(
+      false,
     );
-    return <span />;
-  });
-  await vi.advanceTimersByTimeAsync(1000);
-  reverse = true;
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(
-    rows()
-      .filter((row) => row.direction === "receive")
-      .map((row) => row.history?.map((point) => point.fps)),
-  ).toEqual([
-    [undefined, 60, 60],
-    [undefined, 30, 30],
-  ]);
-  showFirst = false;
-  await vi.advanceTimersByTimeAsync(1000);
-  showFirst = true;
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(rows()[1].history).toHaveLength(1);
-  second = {};
-  await vi.advanceTimersByTimeAsync(1000);
-  expect(rows()[0].history).toHaveLength(1);
-  expect(rows()[0].fps).toBeUndefined();
-  expect(read).toHaveBeenCalledTimes(6);
-});
+    const video = document.createElement("video");
+    const track = {
+      readyState: "live",
+    } as MediaStreamTrack;
+    const first = {};
+    let second = {};
+    let tick = 0;
+    let reverse = false;
+    let showFirst = true;
+    const batch = (
+      key: object,
+      fps: number,
+    ): VideoStatsBatch => ({
+      key,
+      direction,
+      peer: "Same name",
+      samples: [
+        {
+          id: "video",
+          codec: "video/VP8",
+          timestamp: tick * 1000,
+          frames: tick * fps,
+          ...(direction === "send"
+            ? {
+                encodeFrames: tick * fps,
+                encodeSeconds: tick * fps * 0.002,
+                packetsSent: tick * 100,
+                sendDelaySeconds: tick * 0.1,
+                bytes: tick * fps * 1000,
+              }
+            : {}),
+        },
+      ],
+    });
+    const read = vi.fn(async () => {
+      tick++;
+      const batches = [batch(second, 60)];
+      if (showFirst) batches.unshift(batch(first, 30));
+      return reverse ? batches.reverse() : batches;
+    });
+    let rows!: ReturnType<typeof createVideoStatistics>;
+    render(() => {
+      rows = createVideoStatistics(
+        () => track,
+        () => video,
+        read,
+        () => direction === "send",
+      );
+      return <span />;
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    reverse = true;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(
+      rows()
+        .filter((row) => row.direction === direction)
+        .map((row) =>
+          row.history?.map((point) => point.fps),
+        ),
+    ).toEqual([
+      [undefined, 60, 60],
+      [undefined, 30, 30],
+    ]);
+    if (direction === "send") {
+      for (const row of rows().filter(
+        (row) => row.direction === "send",
+      )) {
+        expect(row.sendLatencyBasis).toBe("encode");
+        expect(row.sendLatencyMs).toBeCloseTo(3);
+        expect(
+          row.history?.map((point) => point.sendLatencyMs),
+        ).toEqual([
+          undefined,
+          expect.closeTo(3),
+          expect.closeTo(3),
+        ]);
+      }
+    }
+    showFirst = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    showFirst = true;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(rows()[1].history).toHaveLength(1);
+    second = {};
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(rows()[0].history).toHaveLength(1);
+    expect(rows()[0].fps).toBeUndefined();
+    expect(rows()[0].sendLatencyMs).toBeUndefined();
+    expect(read).toHaveBeenCalledTimes(6);
+    const display = rows().find(
+      (row) => row.direction === "display",
+    );
+    if (direction === "send") {
+      expect(
+        display?.senderOverviewHistory?.map(
+          (point) => point.bitrate,
+        ),
+      ).toEqual([
+        undefined,
+        720_000,
+        720_000,
+        480_000,
+        undefined,
+        undefined,
+      ]);
+      expect(
+        display?.senderOverviewHistory?.map(
+          (point) => point.sendLatencyMs,
+        ),
+      ).toEqual([
+        undefined,
+        expect.closeTo(3),
+        expect.closeTo(3),
+        expect.closeTo(3),
+        expect.closeTo(3),
+        expect.closeTo(3),
+      ]);
+      // Sender aggregates must not turn into duplicate local-preview metrics.
+      expect(
+        display?.history?.every(
+          (point) =>
+            point.bitrate === undefined &&
+            point.sendLatencyMs === undefined,
+        ),
+      ).toBe(true);
+    } else
+      expect(
+        display?.senderOverviewHistory,
+      ).toBeUndefined();
+  },
+);

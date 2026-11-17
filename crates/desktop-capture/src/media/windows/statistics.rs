@@ -69,6 +69,8 @@ impl MediaSession {
                     _ => None,
                 });
                 Some(VideoStats {
+                    ssrc: s.stream.ssrc,
+                    send_frame: s.outbound.send_frame.clone(),
                     // A migration changes the hardware counter origin, even
                     // though the RTP transport stays alive. Reset rate baselines.
                     id: group_id.map_or_else(

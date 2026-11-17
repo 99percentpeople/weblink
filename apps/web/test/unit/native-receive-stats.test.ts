@@ -15,6 +15,9 @@ it("exports native GPU counters without treating them as shared-buffer or placeh
       uploadedFrames: 0,
       decodedQueueMs: 0.4,
       submitMs: 0.3,
+      endToEndMs: 80,
+      endToEndAgeMs: 20,
+      endToEndState: "estimated",
       privateTexture: "hidden",
     },
   });
@@ -26,6 +29,9 @@ it("exports native GPU counters without treating them as shared-buffer or placeh
       onePercentLowFps: 42,
       uploadedFrames: 0,
       decodedQueueMs: 0.4,
+      endToEndMs: 80,
+      endToEndAgeMs: 20,
+      endToEndState: "estimated",
     },
   });
   expect(JSON.stringify(stats)).not.toContain(

@@ -260,6 +260,9 @@ pub type CandidateHandler = Box<dyn Fn(IceCandidate) + Send + Sync>;
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoStats {
+    pub ssrc: u32,
+    /// Same-frame durations; null means supported but not currently available.
+    pub send_frame: Option<libwebrtc::stats::VideoSendFrameStats>,
     pub id: String,
     pub timestamp: f64,
     pub codec: String,

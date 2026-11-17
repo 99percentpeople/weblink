@@ -8,6 +8,7 @@ mod wake;
 pub use compositor::{Compositor, Layout};
 pub use recording::Recording;
 pub use source::{Frame, Source, Stats, Subscription, Texture};
+pub(crate) use statistics::FrameTiming;
 pub use statistics::ViewStats;
 #[cfg(test)]
 mod tests {

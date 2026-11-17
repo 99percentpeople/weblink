@@ -4,6 +4,56 @@ import { PresentationDiagnostics } from "@/libs/application/automation/presentat
 
 afterEach(() => vi.restoreAllMocks());
 
+it("exports end-to-end estimates and detailed playback counters without an overlay", () => {
+  vi.spyOn(document, "hidden", "get").mockReturnValue(
+    false,
+  );
+  const now = vi
+    .spyOn(performance, "now")
+    .mockReturnValue(1000);
+  const video = document.createElement("video");
+  let pending!: VideoFrameRequestCallback;
+  Object.assign(video, {
+    requestVideoFrameCallback: (
+      callback: VideoFrameRequestCallback,
+    ) => {
+      pending = callback;
+      return 1;
+    },
+    cancelVideoFrameCallback: vi.fn(),
+    getVideoPlaybackQuality: () => ({
+      totalVideoFrames: 100,
+      droppedVideoFrames: 2,
+    }),
+  });
+  const track = {} as MediaStreamTrack;
+  const diagnostics = new PresentationDiagnostics();
+  const close = diagnostics.watch(track, video);
+  pending(1000, {
+    presentedFrames: 98,
+    expectedDisplayTime: 1005,
+    presentationTime: 1000,
+    captureTime: 900,
+    receiveTime: 980,
+  } as VideoFrameCallbackMetadata);
+  expect(diagnostics.read(track)[0]).toMatchObject({
+    endToEndMs: 100,
+    endToEndState: "estimated",
+    receiveToPresentMs: 20,
+    captureToReceiveMs: 80,
+    displayWaitMs: 5,
+    latencyEndpoint: "compositor-submit",
+    totalFrames: 100,
+    droppedFrames: 2,
+  });
+  now.mockReturnValue(2600);
+  expect(
+    diagnostics.read(track)[0].endToEndMs,
+  ).toBeUndefined();
+  close();
+  expect(diagnostics.read(track)).toEqual([]);
+});
+
 it("does not let a retired cleanup remove a replacement observer", () => {
   const track = {} as MediaStreamTrack;
   const video = document.createElement("video");

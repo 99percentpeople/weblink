@@ -103,6 +103,7 @@ export class AutomationDiagnostics {
                     ? {
                         counters,
                         nativeReceive: sample.nativeReceive,
+                        sendFrame: sample.sendFrame,
                       }
                     : {}),
                 };

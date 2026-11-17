@@ -24,6 +24,7 @@ pub(super) struct Pixels {
     pub info: Frame,
     pub frame: BoxVideoFrame,
     ready: Instant,
+    timing: crate::presentation::FrameTiming,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +190,18 @@ impl MediaOutput {
             }
             Value::Object(color)
         });
+        let capture_us = frame.estimated_capture_time_us();
+        let receive_us = frame.receive_time_us();
+        let decoded_us = frame.decode_finish_time_us();
+        let clock_before = Instant::now();
+        let clock_us = crate::media::webrtc::clock_us();
+        let ready = Instant::now();
+        let instant = |us| super::timing::capture_instant(us, clock_us, clock_before, ready);
+        let timing = crate::presentation::FrameTiming {
+            captured: instant(capture_us),
+            received: instant(receive_us),
+            decoded: instant(decoded_us),
+        };
         let notify = {
             let mut p = self.presentation.lock().unwrap();
             if *self.closed.borrow() {
@@ -206,7 +219,8 @@ impl MediaOutput {
                     pixel_copy_ms: 0.0,
                 },
                 frame,
-                ready: Instant::now(),
+                ready,
+                timing,
             }));
             p.visible && !std::mem::replace(&mut p.frame_pending, true)
         };
@@ -244,7 +258,7 @@ impl MediaOutput {
                 };
                 texture
             };
-            source.publish(texture);
+            source.publish_with_timing(texture, pixels.timing);
         } else if notify {
             self.emit(json!({"type":"frame"}));
         }

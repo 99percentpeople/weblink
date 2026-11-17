@@ -4,11 +4,14 @@ const URI: &str = "http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time
 #[cfg(windows)]
 pub(crate) async fn set_local_offer(
     pc: &libwebrtc::peer_connection::PeerConnection,
-    offer: libwebrtc::session_description::SessionDescription,
+    mut offer: libwebrtc::session_description::SessionDescription,
     enable: bool,
 ) -> crate::Result<String> {
     use libwebrtc::session_description::{SdpType, SessionDescription};
 
+    // A browser receiving one-way video needs RRTR/DLRR to map the sender's
+    // capture clock. Advertise it even when the optional RTP extension is off.
+    offer.enable_receiver_reference_time_report();
     let sdp = offer.to_string();
     // The Rust transceiver API cannot configure header extensions. Publish the
     // extended SDP only if the native stack installed it on this connection.
@@ -76,6 +79,52 @@ fn with_capture_time(sdp: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn video_only_offers_negotiate_capture_clock_feedback() {
+        use libwebrtc::{
+            peer_connection::OfferOptions,
+            peer_connection_factory::{PeerConnectionFactory, RtcConfiguration},
+            rtp_transceiver::{RtpTransceiverDirection, RtpTransceiverInit},
+            MediaType,
+        };
+        tokio::runtime::Runtime::new().unwrap().block_on(async {
+            for extension in [false, true] {
+                let factory = PeerConnectionFactory::default();
+                let pc = factory
+                    .create_peer_connection(RtcConfiguration::default())
+                    .unwrap();
+                pc.add_transceiver_for_media(
+                    MediaType::Video,
+                    RtpTransceiverInit {
+                        direction: RtpTransceiverDirection::SendOnly,
+                        stream_ids: vec![],
+                        send_encodings: vec![],
+                    },
+                )
+                .unwrap();
+                let offer = pc.create_offer(OfferOptions::default()).await.unwrap();
+                let sdp = set_local_offer(&pc, offer, extension).await.unwrap();
+                assert!(sdp.contains("a=sendonly"));
+                assert!(!sdp.contains("m=audio"));
+                assert_eq!(sdp.contains(URI), extension);
+                let payload = sdp
+                    .lines()
+                    .find_map(|line| {
+                        line.strip_prefix("a=rtpmap:")
+                            .and_then(|mapping| mapping.split_once(" VP8/90000"))
+                            .map(|(payload, _)| payload)
+                    })
+                    .expect("VP8 sender codec");
+                assert!(
+                    sdp.contains(&format!("a=rtcp-fb:{payload} rrtr\r\n")),
+                    "Browser receivers need capture-clock feedback on send-only video: {sdp}"
+                );
+                pc.close();
+            }
+        });
+    }
 
     #[test]
     fn shares_a_free_id_only_across_active_sending_media() {

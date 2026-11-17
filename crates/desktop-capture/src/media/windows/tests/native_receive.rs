@@ -62,7 +62,9 @@ fn native_hevc(gpu: bool) {
         let mut recorded_sequence = 0;
         let mut recorded_frames = 0;
         let mut cadence = tokio::time::interval(Duration::from_millis(33));
-        for index in 0..120 {
+        // Capture-clock mapping needs multiple RTCP reports; keep sending until
+        // synchronization completes instead of assuming it fits in four seconds.
+        for index in 0..if gpu { 600 } else { 120 } {
             cadence.tick().await;
             let pending = std::mem::take(&mut *candidates.lock().unwrap());
             for candidate in pending {
@@ -85,6 +87,9 @@ fn native_hevc(gpu: bool) {
                     recorded_frames += 1;
                 }
             }
+            if gpu && index >= 119 && receiver.gpu.as_ref().unwrap().latest().is_some_and(|frame| frame.estimated_capture.is_some()) {
+                break;
+            }
         }
         if let Some(recording) = recording {
             assert!(recorded_frames > 20, "Too few recorded HEVC frames: {recorded_frames}");
@@ -93,12 +98,26 @@ fn native_hevc(gpu: bool) {
         }
         let stats = receiver.stats().await.unwrap();
 
+        let outgoing = media.stats("native-hevc").await.unwrap();
+        let sent = outgoing.iter().find_map(|s| s.send_frame.as_ref())
+            .expect("No same-frame sender timing reached the native statistics");
+        assert_eq!(sent.endpoint, "transport-submit");
+        assert!(sent.capture_to_send_ms > 0.0);
+        assert!((sent.capture_to_send_ms - sent.capture_to_packetizer_ms - sent.packetizer_to_send_ms).abs() < 0.001);
+        assert!((0.0..=1500.0).contains(&sent.age_ms));
+        eprintln!("Native sender same-frame timing: {sent:?}");
+
         let inbound = stats.as_array().unwrap().iter().find(|s| s["type"] == "inbound-rtp" && s["kind"] == "video").unwrap();
         assert!(inbound["framesDecoded"].as_u64().unwrap_or(0) > 20, "{inbound}");
         assert_processing_delay(inbound);
         let retained = if gpu {
             let source = receiver.gpu.as_ref().unwrap();
             let held = source.latest().expect("GPU decoded frame");
+            assert!(held.estimated_capture.is_some(), "RTCP capture clock was not preserved to native presentation: {inbound}");
+            assert!(held.estimated_capture.unwrap().elapsed() < Duration::from_secs(5), "Capture timestamp is not on the compositor clock");
+            assert!(held.received_at.is_some(), "Last packet timestamp was not preserved");
+            assert!(held.decoded_at.is_some(), "Decode completion timestamp was not preserved");
+            assert!(held.received_at.unwrap() <= held.decoded_at.unwrap());
             assert_eq!(held.texture.size, (1280,720));
             assert_eq!(source.stats().uploaded_frames, 0, "Hardware decode unexpectedly uploaded CPU frames");
             assert!(inbound["decoderImplementation"].as_str().unwrap_or("").contains("texture"), "{inbound}");

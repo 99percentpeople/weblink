@@ -1,4 +1,8 @@
-import type { RoomConnection } from "@weblink/platform";
+import type {
+  RoomConnection,
+  VideoSendFrameStats,
+} from "@weblink/platform";
+import { readSendFrameStats } from "./video-send-frame-stats";
 import type {
   EncodedVideoPacket,
   EncodedAudioPacket,
@@ -51,6 +55,31 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
   private consumer?: Subscription;
   private disposed = false;
   private enabled = true;
+  private timing?: {
+    frame: VideoSendFrameStats;
+    at: number;
+  };
+  private frameTimingSupported = false;
+  sendFrameStats(): VideoSendFrameStats | null | undefined {
+    if (
+      this.disposed ||
+      !this.enabled ||
+      !this.frameTimingSupported ||
+      this.sender.track?.readyState === "ended"
+    )
+      return;
+    const snapshot = this.timing;
+    if (!snapshot) return null;
+    return (
+      readSendFrameStats({
+        ...snapshot.frame,
+        ageMs:
+          performance.timeOrigin +
+          performance.now() -
+          snapshot.at,
+      }) ?? null
+    );
+  }
   setEnabled(enabled: boolean): void {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
@@ -124,6 +153,16 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
           )
         : undefined;
     this.channel.port1.onmessage = ({ data }) => {
+      if ("timing" in data && this.direction === "send") {
+        this.frameTimingSupported ||=
+          data.timingSupported === true;
+        const frame = readSendFrameStats(data.timing);
+        this.timing =
+          frame && Number.isFinite(data.timingAt)
+            ? { frame, at: data.timingAt }
+            : undefined;
+        return;
+      }
       const consumer = this.consumer;
       if (!consumer || data.id !== consumer.id) return;
       if (!this.enabled) {
@@ -353,6 +392,7 @@ export class RtpEncodedMediaTrack implements EncodedVideoSource {
   }
 
   end(error?: Error): void {
+    this.timing = undefined;
     const consumer = this.consumer;
     if (!consumer || consumer.stopping) return;
     this.send("pause", consumer.id);

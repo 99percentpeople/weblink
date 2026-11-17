@@ -77,6 +77,43 @@ function setup(workers?: RtpEncodedMediaWorkers) {
   taps.push(tap);
   return { track, sender, pc, tap };
 }
+it("reads frame timing without a recording and expires it using the worker observation time", async () => {
+  const { tap } = setup();
+  const timingAt =
+    performance.timeOrigin + performance.now();
+  ports[0].postMessage({
+    timingSupported: true,
+    timingAt,
+    timing: {
+      ssrc: 7,
+      rtpTimestamp: 123,
+      ageMs: 0,
+      captureToPacketizerMs: 12,
+      endpoint: "packetizer-input",
+    },
+  });
+  await vi.waitFor(() =>
+    expect(
+      tap.sendFrameStats()?.captureToPacketizerMs,
+    ).toBe(12),
+  );
+  ports[0].postMessage({
+    timingSupported: true,
+    timingAt: timingAt - 2000,
+    timing: {
+      ssrc: 7,
+      rtpTimestamp: 124,
+      ageMs: 0,
+      captureToPacketizerMs: 12,
+      endpoint: "packetizer-input",
+    },
+  });
+  await vi.waitFor(() =>
+    expect(tap.sendFrameStats()).toBeNull(),
+  );
+  tap.dispose();
+  expect(tap.sendFrameStats()).toBeUndefined();
+});
 it("shares a worker across video senders and releases it only after its last owner", () => {
   const workers = new RtpEncodedMediaWorkers();
   const first = setup(workers),

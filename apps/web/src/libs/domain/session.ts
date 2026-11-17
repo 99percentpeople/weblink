@@ -4,6 +4,7 @@ import {
   type RoomConnection,
   type RoomTransport,
   type RoomScreenTransport,
+  type VideoSendFrameStats,
 } from "@weblink/platform";
 import {
   applicationChannel,
@@ -634,6 +635,11 @@ export class PeerSession {
     track: MediaStreamTrack,
   ): EncodedVideoSource | undefined {
     return this.media.getEncodedVideo(track);
+  }
+  getSendFrameStats(
+    track: MediaStreamTrack,
+  ): VideoSendFrameStats | null | undefined {
+    return this.media.getSendFrameStats(track);
   }
   getRecordingMediaSources(
     track: MediaStreamTrack,

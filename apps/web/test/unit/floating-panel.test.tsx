@@ -14,11 +14,15 @@ import {
 import { createFloatingPanel } from "@/libs/hooks/create-floating-panel";
 
 let disconnect: ReturnType<typeof vi.fn>;
+let notifyResize: () => void;
 beforeEach(() => {
   disconnect = vi.fn();
   vi.stubGlobal(
     "ResizeObserver",
     class {
+      constructor(callback: () => void) {
+        notifyResize = callback;
+      }
       observe() {}
       disconnect = disconnect;
     },
@@ -56,8 +60,8 @@ function setup() {
     clientHeight: { value: 600 },
   });
   Object.defineProperties(panel, {
-    offsetWidth: { value: 300 },
-    offsetHeight: { value: 200 },
+    offsetWidth: { value: 300, configurable: true },
+    offsetHeight: { value: 200, configurable: true },
   });
   vi.spyOn(
     boundary,
@@ -72,13 +76,14 @@ function setup() {
     type: string,
     id = 1,
     primary = true,
+    point = { x: 80, y: 80 },
   ) => {
     const event = new MouseEvent(type, {
       bubbles: true,
       cancelable: true,
       button: 0,
-      clientX: 80,
-      clientY: 80,
+      clientX: point.x,
+      clientY: point.y,
     });
     Object.defineProperties(event, {
       pointerId: { value: id },
@@ -89,6 +94,7 @@ function setup() {
   };
   return {
     ...view,
+    panel,
     handle,
     floating,
     capture,
@@ -122,15 +128,45 @@ it("owns only the primary drag pointer and ignores unrelated releases", () => {
   expect(release).toHaveBeenCalledExactlyOnceWith(1);
 });
 
+it.each(["initial notification", "statistics update"])(
+  "keeps the first drag active through a resize from %s",
+  (cause) => {
+    const { pointer, floating, capture, release, panel } =
+      setup();
+    pointer("pointerdown");
+    if (cause === "statistics update") {
+      pointer("pointermove", 1, true, { x: 100, y: 100 });
+      Object.defineProperties(panel, {
+        offsetWidth: { value: 360 },
+        offsetHeight: { value: 240 },
+      });
+    }
+    notifyResize();
+    expect(floating.dragging()).toBe(true);
+    expect(release).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledExactlyOnceWith(1);
+    const before = floating.position();
+    expect(
+      pointer("pointermove", 1, true, { x: 120, y: 120 })
+        .defaultPrevented,
+    ).toBe(true);
+    expect(floating.position()).not.toEqual(before);
+    pointer("pointerup");
+    expect(floating.dragging()).toBe(false);
+    expect(release).toHaveBeenCalledExactlyOnceWith(1);
+  },
+);
+
 it.each([
   "pointerup",
   "lostpointercapture",
   "blur",
+  "resize",
   "fullscreenchange",
 ])("ends a drag on %s", (type) => {
   const { pointer, floating, release } = setup();
   pointer("pointerdown");
-  if (type === "blur")
+  if (type === "blur" || type === "resize")
     window.dispatchEvent(new Event(type));
   else if (type === "fullscreenchange")
     document.dispatchEvent(new Event(type));

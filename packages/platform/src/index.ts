@@ -1,6 +1,8 @@
 export * from "./recording";
 export * from "./presentation-layout";
 export type * from "./presentation-stats";
+export type * from "./send-frame-stats";
+import type { VideoSendFrameStats } from "./send-frame-stats";
 import type { VideoPresentationSampler } from "./presentation-stats";
 export type * from "./media-receive";
 export type * from "./room-peer";
@@ -494,6 +496,7 @@ export type NativeVideoSettings = Pick<
 
 /** Remote encoding stays native; local raw presentation has its own memory boundary. */
 export interface NativeVideoStats {
+  sendFrame?: VideoSendFrameStats | null;
   id: string;
   timestamp: number;
   codec: string;

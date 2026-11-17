@@ -296,6 +296,7 @@ impl RoomPeer {
             )
             .map_err(|e| e.to_string())?;
         if matches!(capture, CaptureSource::Video(_)) {
+            transceiver.sender().enable_video_frame_timing();
             let formats = self
                 .factory
                 .get_rtp_sender_capabilities(libwebrtc::MediaType::Video)
@@ -442,7 +443,7 @@ impl RoomPeer {
     }
     pub async fn local_description(&self) -> Result<Value> {
         let _guard = self.negotiation.lock().await;
-        let desc = match self.pc.signaling_state() {
+        let mut desc = match self.pc.signaling_state() {
             SignalingState::Stable => {
                 self.pc
                     .create_offer(OfferOptions {
@@ -458,6 +459,7 @@ impl RoomPeer {
             _ => return Err("Unexpected native local description state".into()),
         }
         .map_err(|e| e.to_string())?;
+        desc.enable_receiver_reference_time_report();
         let kind = desc.sdp_type();
         let sdp = if kind == SdpType::Offer {
             let screens = !self.screens.lock().unwrap().is_empty();

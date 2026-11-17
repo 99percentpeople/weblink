@@ -13,6 +13,12 @@ export interface GpuStats {
   uploadedFrames: number;
   decodedQueueMs: number;
   submitMs: number;
+  endToEndMs?: number | null;
+  endToEndAgeMs?: number | null;
+  timingAgeMs?: number | null;
+  captureToReceiveMs?: number | null;
+  receiveToPresentMs?: number | null;
+  decodeToPresentMs?: number | null;
   onePercentLowFps?: number | null;
   onePercentLowState?:
     | VideoPresentationStats["onePercentLowState"]
@@ -56,6 +62,18 @@ export function createNativePresentation(
       return createNativePresentationStats(() => ({
         at: surface.statsAt,
         frames: surface.latestStats?.presentedFrames ?? 0,
+        submitMs: surface.latestStats?.submitMs,
+        endToEndMs: surface.latestStats?.endToEndMs,
+        endToEndAgeMs: surface.latestStats?.endToEndAgeMs,
+        timingAgeMs: surface.latestStats?.timingAgeMs,
+        captureToReceiveMs:
+          surface.latestStats?.captureToReceiveMs,
+        receiveToPresentMs:
+          surface.latestStats?.receiveToPresentMs,
+        decodeToPresentMs:
+          surface.latestStats?.decodeToPresentMs,
+        presentationQueueMs:
+          surface.latestStats?.decodedQueueMs,
         onePercentLowFps:
           surface.latestStats?.onePercentLowFps,
         onePercentLowState:

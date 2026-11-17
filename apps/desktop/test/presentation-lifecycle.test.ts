@@ -53,7 +53,7 @@ beforeEach(() => {
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
 });
-it("passes native per-frame low FPS through the shared presentation sampler", async () => {
+it("passes native frame intervals and presentation timings through the shared sampler", async () => {
   let frames = 100;
   let low = 25;
   mockIPC((command) => {
@@ -62,6 +62,10 @@ it("passes native per-frame low FPS through the shared presentation sampler", as
         presentedFrames: frames,
         onePercentLowFps: low,
         onePercentLowState: null,
+        submitMs: 0.25,
+        decodedQueueMs: 1.5,
+        endToEndMs: 80,
+        endToEndAgeMs: 0,
       };
   });
   const presentation = createNativePresentation();
@@ -79,6 +83,12 @@ it("passes native per-frame low FPS through the shared presentation sampler", as
     pixels as unknown as MediaStreamTrack,
   )!;
   expect(sampler.read().onePercentLowFps).toBe(25);
+  expect(sampler.read()).toMatchObject({
+    submitMs: 0.25,
+    presentationQueueMs: 1.5,
+    endToEndMs: 80,
+    endToEndState: "estimated",
+  });
   await vi.advanceTimersByTimeAsync(1000);
   frames = 160;
   low = 40;
@@ -86,6 +96,8 @@ it("passes native per-frame low FPS through the shared presentation sampler", as
   expect(sampler.read()).toMatchObject({
     fps: 60,
     onePercentLowFps: 40,
+    submitMs: 0.25,
+    presentationQueueMs: 1.5,
   });
   sampler.close();
   surface.close();

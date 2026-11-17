@@ -69,8 +69,9 @@ export async function streamStatisticsCheck(
     details.click();
     await until(() => {
       const text =
-        host.querySelector("[data-stream-statistics]")
-          ?.textContent ?? "";
+        host.querySelector(
+          '[data-stream-statistics] [role="group"]',
+        )?.textContent ?? "";
       return (
         /VP8|H264|VP9|AV1/i.test(text) &&
         /[1-9][\d.]* FPS/.test(text) &&
@@ -84,7 +85,7 @@ export async function streamStatisticsCheck(
         "Showing statistics replaced the video element",
       );
     const text = host.querySelector(
-      "[data-stream-statistics]",
+      '[data-stream-statistics] [role="group"]',
     )!.textContent;
     toggle(false);
     const stoppedAt = calls;

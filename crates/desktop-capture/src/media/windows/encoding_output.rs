@@ -42,7 +42,7 @@ impl Output {
         options: &super::MediaOptions,
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> crate::Result<Arc<Self>> {
-        let source = NativeVideoSource::new_encoded(VideoResolution::default());
+        let source = NativeVideoSource::new_encoded_with_capture_clock(VideoResolution::default());
         if !source.set_color_space(Some(options.color_space().rtc())) {
             return Err("Invalid shared video color space".into());
         }

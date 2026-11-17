@@ -25,13 +25,22 @@ export interface NativeReceivePipelineStats {
   leaseHoldMs?: ReceiveStageTiming;
   renderer?: Pick<
     VideoPresentationStats,
-    "onePercentLowFps" | "onePercentLowState"
+    | "onePercentLowFps"
+    | "onePercentLowState"
+    | "endToEndMs"
+    | "endToEndState"
+    | "latencyEndpoint"
+    | "captureToReceiveMs"
+    | "receiveToPresentMs"
+    | "decodeToPresentMs"
   > & {
     path?: "d3d11-composition";
     presentedFrames?: number;
     uploadedFrames?: number;
     decodedQueueMs?: number;
     submitMs?: number;
+    endToEndAgeMs?: number;
+    timingAgeMs?: number;
     receivedFrames?: number;
     submittedFrames?: number;
     coalescedFrames?: number;
@@ -131,6 +140,27 @@ export function readNativeReceiveStats(
           uploadedFrames: number(renderer.uploadedFrames),
           decodedQueueMs: number(renderer.decodedQueueMs),
           submitMs: number(renderer.submitMs),
+          endToEndMs: number(renderer.endToEndMs),
+          endToEndAgeMs: number(renderer.endToEndAgeMs),
+          timingAgeMs: number(renderer.timingAgeMs),
+          latencyEndpoint:
+            renderer.latencyEndpoint === "compositor-submit"
+              ? "compositor-submit"
+              : undefined,
+          captureToReceiveMs: number(
+            renderer.captureToReceiveMs,
+          ),
+          receiveToPresentMs: number(
+            renderer.receiveToPresentMs,
+          ),
+          decodeToPresentMs: number(
+            renderer.decodeToPresentMs,
+          ),
+          endToEndState:
+            number(renderer.endToEndMs) !== undefined &&
+            renderer.endToEndState === "estimated"
+              ? "estimated"
+              : undefined,
           receivedFrames: number(renderer.receivedFrames),
           submittedFrames: number(renderer.submittedFrames),
           coalescedFrames: number(renderer.coalescedFrames),

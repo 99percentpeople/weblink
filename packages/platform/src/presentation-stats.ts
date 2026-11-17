@@ -8,8 +8,32 @@ export interface VideoPresentationStats {
   /** Coalesced or bounded samples are estimates; absent means measured. */
   onePercentLowState?: "estimated" | "unsupported";
   droppedPerSecond?: number;
-  /** Receiver-to-presentation timing, never end-to-end latency. */
+  /** Same remote frame's capture to compositor submission on the receiver
+   * clock, on both platforms. Not expected display or physical scan-out. */
+  endToEndMs?: number;
+  /** Cross-device capture-clock mapping makes this an estimate. */
+  endToEndState?: "estimated";
+  /** Explicit boundary for exported timings, including recordings of older builds. */
+  latencyEndpoint?: "compositor-submit";
+  /** Same frame's capture to LAST packet received, estimated clock mapping.
+   * Includes sender processing, packetization, pacing, transit and waiting
+   * for all packets; remaining assembly work belongs to receiveToPresentMs. */
+  captureToReceiveMs?: number;
+  /** LAST packet received to compositor submission, same frame.
+   * When both are available, captureToReceiveMs + this = endToEndMs. */
   receiveToPresentMs?: number;
+  /** Decoder completion to compositor submission, same frame; a SUBSET of
+   * receiveToPresentMs, including bridge/upload/queue/submission. */
+  decodeToPresentMs?: number;
+  /** Browser-only estimated submission-to-display wait; outside endToEndMs. */
+  displayWaitMs?: number;
+  /** Same frame's decoder processing duration, when supplied by the browser.
+   * Diagnostic only; cannot be combined with unrelated interval averages. */
+  frameDecodeMs?: number;
+  /** Latest completed frame's submission call to the presentation backend. */
+  submitMs?: number;
+  /** Latest completed frame's wait from ready to presentation submission. */
+  presentationQueueMs?: number;
   totalFrames?: number;
   implementation?: string;
 }

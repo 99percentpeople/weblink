@@ -1,4 +1,9 @@
 {
+  "404": {
+    "title": "404 未找到",
+    "description": "頁面未找到，路徑為 {{path}}",
+    "home": "返回首頁"
+  },
   "video_quality": {
     "source": "目前接收畫面",
     "title": "接收畫質",
@@ -617,11 +622,6 @@
     "title": "檔案快取",
     "usage": "已用 {{value}}, 總共 {{max}}, 剩餘 {{remaining}}"
   },
-  "404": {
-    "title": "404 未找到",
-    "description": "頁面未找到，路徑為 {{path}}",
-    "home": "返回首頁"
-  },
   "client": {
     "scroll_to_bottom": "回到最新訊息",
     "menu": {
@@ -671,8 +671,8 @@
     },
     "statistics": {
       "latency": "延遲",
-      "receive_to_decode": "解碼延遲",
-      "receive_to_decode_description": "接收 → 解碼",
+      "receive_to_decode": "接收處理",
+      "receive_to_decode_description": "從一幀的首個資料封包抵達到解碼完成的平均耗時，包含接收緩衝和等待。",
       "one_percent_low_short": "1% Low",
       "history_window": "最近 {{seconds}} 秒",
       "trend": "{{metric}} · 最近 {{seconds}} 秒 · 刻度 0–{{maximum}}",
@@ -694,9 +694,9 @@
       "encoder_bitrate": "編碼目標",
       "bandwidth_estimate": "頻寬估計",
       "copy": "複製統計",
-      "copy_manually": "無法自動複製，請長按或全選下方文字複製。",
+      "copy_manually": "長按或全選下方文字進行複製。",
       "receive_to_present": "呈現延遲",
-      "receive_to_present_description": "接收 → 呈現",
+      "receive_to_present_description": "同一影格末包抵達到提交合成，包含剩餘緩衝、解碼與呈現處理；是端到端的一部分。",
       "title": "串流統計",
       "send": "傳送",
       "receive": "接收",
@@ -709,7 +709,43 @@
       "capture_to_encode": "擷取編碼",
       "capture_to_encode_description": "擷取 → 編碼完成",
       "send_queue": "傳送佇列",
-      "rtt": "RTT"
+      "rtt": "RTT",
+      "send_pre_packetizer": "封包前延遲",
+      "send_pre_packetizer_description": "同一影格擷取到進入 RTP 封包前的編碼回呼，包含編碼與回呼排程。",
+      "send_latency_frame_description": "同一影格擷取到原始末包交付 RTP 傳輸層成功返回，包含擷取編碼、輸出交付、封包與節奏控制排隊。",
+      "capture_to_packetizer": "擷取到封包",
+      "capture_to_packetizer_description": "同一影格擷取到 RTP 封包前的編碼回呼，包含擷取、編碼、輸出交付與回呼排程。",
+      "packetizer_to_send": "封包與排隊",
+      "packetizer_to_send_description": "同一影格封包前回呼到原始末包交付 RTP 傳輸層成功返回，包含封包與節奏控制排隊；加上擷取到封包即為該影格傳送延遲。",
+      "submit_latency": "提交延遲",
+      "end_to_end": "端到端延遲",
+      "end_to_end_description": "同一影格從傳送端擷取到接收端提交合成，瀏覽器與桌面採相同定義。時間基於時鐘映射估算。",
+      "submit_latency_description": "最近一幀提交至呈現後端的呼叫耗時。",
+      "presentation_queue": "呈現等待",
+      "presentation_queue_description": "最近一幀從準備就緒到開始提交呈現的等待時間。",
+      "total_bitrate": "總位元率",
+      "total_bitrate_description": "全部接收端的統計就緒時，顯示各路影片傳送位元率的總和。",
+      "slowest_receiver": "目前有資料的最慢接收端：{{peer}}",
+      "unnamed_receiver": "未命名接收端",
+      "send_latency": "傳送延遲",
+      "send_latency_description": "傳送端處理耗時估算：擷取至編碼完成的每幀平均耗時 + 每封包平均傳送佇列等待。擷取至編碼已含編碼前等待。",
+      "send_latency_partial_description": "傳送端處理耗時估算：平均編碼耗時 + 每封包平均傳送佇列等待。",
+      "encode_latency": "編碼延遲",
+      "encode_latency_description": "取樣週期內每幀的平均編碼耗時。",
+      "decode_time": "解碼耗時",
+      "decode_time_description": "取樣週期內每幀的平均解碼耗時。",
+      "encode_frame_rate": "編碼幀率",
+      "decode_frame_rate": "解碼幀率",
+      "buffer_description": "平均接收抖動緩衝耗時，含組幀等待，已包含在接收處理內。",
+      "rtt_description": "目前連線的網路往返時間。",
+      "capture_to_receive": "接收延遲",
+      "capture_to_receive_description": "從傳送端擷取這一影格，到接收端收齊其全部封包的耗時，包含擷取、編碼、封包、傳送排隊和網路傳輸。收齊後的影格組合、緩衝、解碼和呈現計入呈現延遲；兩者相加等於同一影格的端到端延遲。",
+      "decode_to_present": "解碼後延遲",
+      "decode_to_present_description": "同幀解碼完成到提交合成，包含橋接、紋理準備、等待與提交；已包含在呈現延遲內。",
+      "display_wait": "顯示等待",
+      "display_wait_description": "瀏覽器估算的同一影格從提交合成到預計顯示的等待時間。",
+      "frame_decode": "單幀解碼",
+      "frame_decode_description": "最近呈現影格的解碼處理耗時。"
     }
   },
   "browser_unsupported": {

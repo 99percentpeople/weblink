@@ -164,6 +164,7 @@ it("separates packet waits, encoded frames and fresh capture frames", () => {
     id: "native",
     timestamp: 1000,
     encodeFrames: 100,
+    encodeSeconds: 1,
     encoderQueueSeconds: 0.2,
     freshFrames: 40,
     captureToEncodeSeconds: 0.8,
@@ -174,6 +175,7 @@ it("separates packet waits, encoded frames and fresh capture frames", () => {
     ...before,
     timestamp: 2000,
     encodeFrames: 150,
+    encodeSeconds: 1.4,
     encoderQueueSeconds: 0.3,
     freshFrames: 50,
     captureToEncodeSeconds: 1,
@@ -185,6 +187,9 @@ it("separates packet waits, encoded frames and fresh capture frames", () => {
   expect(value.encoderQueueMs).toBeCloseTo(2);
   expect(value.captureToEncodeMs).toBeCloseTo(20);
   expect(value.sendDelayMs).toBeCloseTo(3);
+  // Capture-to-encode already includes encoding and encoder waiting.
+  expect(value.sendLatencyMs).toBeCloseTo(23);
+  expect(value.sendLatencyBasis).toBe("capture");
   expect(value.roundTripMs).toBe(12);
   // Static repeated frames must not produce an apparent capture-age delay.
   expect(
@@ -193,6 +198,31 @@ it("separates packet waits, encoded frames and fresh capture frames", () => {
       after,
     ).captureToEncodeMs,
   ).toBeUndefined();
+  for (const update of [
+    { freshFrames: 50 },
+    { captureToEncodeSeconds: undefined },
+    { captureToEncodeSeconds: 0 },
+    { captureToEncodeSeconds: Infinity },
+  ]) {
+    const idle = videoStatsValue(
+      {
+        ...after,
+        timestamp: 3000,
+        encodeFrames: 200,
+        encodeSeconds: 1.8,
+        freshFrames: 60,
+        captureToEncodeSeconds: 1.2,
+        packetsSent: 1400,
+        sendDelaySeconds: 3.2,
+        ...update,
+      },
+      after,
+    );
+    expect(idle.encodeMs).toBeCloseTo(8);
+    expect(idle.sendDelayMs).toBeCloseTo(3);
+    expect(idle.sendLatencyMs).toBeUndefined();
+    expect(idle.sendLatencyBasis).toBeUndefined();
+  }
   expect(
     videoStatsValue(
       { ...after, timestamp: 3000, packetsSent: 1 },
@@ -203,6 +233,59 @@ it("separates packet waits, encoded frames and fresh capture frames", () => {
     videoStatsValue({ id: "no-metrics", timestamp: 1000 })
       .roundTripMs,
   ).toBeUndefined();
+});
+it("estimates browser sender processing from encoding and per-packet queue time", () => {
+  const before = {
+    ...sample,
+    packetsSent: 1000,
+    sendDelaySeconds: 2,
+  };
+  const after = {
+    ...before,
+    timestamp: 2000,
+    encodeFrames: 80,
+    encodeSeconds: 0.37,
+    packetsSent: 1200,
+    sendDelaySeconds: 2.6,
+    roundTripSeconds: 1,
+  };
+  const value = videoStatsValue(after, before);
+  expect(value.sendLatencyMs).toBeCloseTo(8);
+  expect(value.sendLatencyBasis).toBe("encode");
+  expect(
+    videoStatsValue(after).sendLatencyMs,
+  ).toBeUndefined();
+  for (const change of [
+    { encodeFrames: before.encodeFrames },
+    { encodeSeconds: undefined },
+    { encodeSeconds: NaN },
+    { packetsSent: before.packetsSent },
+    { packetsSent: 1 },
+    { sendDelaySeconds: undefined },
+    { sendDelaySeconds: 0 },
+    { sendDelaySeconds: Infinity },
+    { codec: "video/VP9" },
+  ]) {
+    const missing = videoStatsValue(
+      { ...after, ...change },
+      before,
+    );
+    expect(missing.sendLatencyMs).toBeUndefined();
+    expect(missing.sendLatencyBasis).toBeUndefined();
+  }
+  expect(
+    videoStatsValue(
+      {
+        ...after,
+        encodeSeconds: before.encodeSeconds,
+        sendDelaySeconds: before.sendDelaySeconds,
+      },
+      before,
+    ),
+  ).toMatchObject({
+    sendLatencyMs: 0,
+    sendLatencyBasis: "encode",
+  });
 });
 it("reads packet queue counters and RTT only from the selected track transport", async () => {
   const track = {} as MediaStreamTrack;

@@ -7,6 +7,14 @@ export interface NativePresentationSnapshot {
   at: number;
   frames: number;
   visible: boolean;
+  submitMs?: number;
+  presentationQueueMs?: number;
+  endToEndMs?: number | null;
+  endToEndAgeMs?: number | null;
+  timingAgeMs?: number | null;
+  captureToReceiveMs?: number | null;
+  receiveToPresentMs?: number | null;
+  decodeToPresentMs?: number | null;
   onePercentLowFps?: number | null;
   onePercentLowState?:
     | VideoPresentationStats["onePercentLowState"]
@@ -20,7 +28,7 @@ export function createNativePresentationStats(
   let fps: number | undefined;
   let closed = false;
   return {
-    read() {
+    read(at = performance.now()) {
       const sample = current();
       if (
         closed ||
@@ -58,8 +66,44 @@ export function createNativePresentationStats(
         typeof low === "number" &&
         Number.isFinite(low) &&
         low >= 0;
+      const age =
+        sample.timingAgeMs ?? sample.endToEndAgeMs;
+      const fresh =
+        typeof age === "number" &&
+        Number.isFinite(age) &&
+        age >= 0 &&
+        at >= sample.at &&
+        age + at - sample.at <= 1500;
+      const timing = (value?: number | null) =>
+        fresh &&
+        sample.frames > 0 &&
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= 0
+          ? value
+          : undefined;
+      const endToEndMs = timing(sample.endToEndMs);
       return {
         fps,
+        ...(fresh
+          ? {
+              latencyEndpoint: "compositor-submit" as const,
+            }
+          : {}),
+        captureToReceiveMs: timing(
+          sample.captureToReceiveMs,
+        ),
+        receiveToPresentMs: timing(
+          sample.receiveToPresentMs,
+        ),
+        decodeToPresentMs: timing(sample.decodeToPresentMs),
+        ...(endToEndMs !== undefined
+          ? { endToEndMs, endToEndState: "estimated" }
+          : {}),
+        submitMs: timing(sample.submitMs),
+        presentationQueueMs: timing(
+          sample.presentationQueueMs,
+        ),
         onePercentLowFps: hasLow ? low : undefined,
         onePercentLowState: hasLow
           ? sample.onePercentLowState === "estimated"

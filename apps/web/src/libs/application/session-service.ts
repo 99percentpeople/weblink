@@ -328,6 +328,8 @@ export class SessionService {
         pc: session.peerConnection,
         native: this.nativeScreens.get(session),
         camera: this.cameras.get(session),
+        sendFrameStats: (track: MediaStreamTrack) =>
+          session.getSendFrameStats(track),
         name:
           this.clientViewData[session.clientId]?.name ??
           session.clientId,

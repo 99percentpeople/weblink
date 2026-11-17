@@ -26,6 +26,7 @@ use std::{
 pub const FRAME_CAPACITY: usize = 3840 * 2160 * 3 / 2;
 pub type Events = Arc<dyn Fn(Value) -> bool + Send + Sync>;
 mod output;
+mod timing;
 pub use output::{Frame, MediaOutput};
 pub struct Receiver {
     pub pc: PeerConnection,
@@ -175,11 +176,12 @@ impl Receiver {
             )
             .await
             .map_err(|e| e.to_string())?;
-        let answer = self
+        let mut answer = self
             .pc
             .create_answer(AnswerOptions::default())
             .await
             .map_err(|e| e.to_string())?;
+        answer.enable_receiver_reference_time_report();
         let sdp = answer.to_string();
         self.pc
             .set_local_description(answer)

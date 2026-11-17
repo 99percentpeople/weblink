@@ -1,4 +1,5 @@
 import type { RoomConnection } from "@weblink/platform";
+import { readSendFrameStats } from "./video-send-frame-stats";
 import {
   readNativeReceiveStats,
   type NativeReceivePipelineStats,
@@ -6,6 +7,11 @@ import {
 
 /** Cumulative counters. Times use seconds; sample timestamps use milliseconds. */
 export interface VideoStatsSample {
+  ssrc?: number;
+  /** Null means frame timing is supported but currently has no fresh sample. */
+  sendFrame?:
+    | import("@weblink/platform").VideoSendFrameStats
+    | null;
   id: string;
   timestamp: number;
   codec?: string;
@@ -84,6 +90,16 @@ export interface VideoStatsValue {
   encoderQueueMs?: number;
   captureToEncodeMs?: number;
   sendDelayMs?: number;
+  /** Estimated sender processing: capture-to-encode (or encoding only) plus
+   * mean packet queue delay. Excludes network transit and local presentation. */
+  sendLatencyMs?: number;
+  sendLatencyBasis?: "capture" | "encode" | "frame";
+  /** Mixed frame/packet means, with an unmeasured packetization gap.
+   * Never a complete same-frame capture-to-last-packet-send duration. */
+  sendLatencyState?: "partial" | "measured";
+  sendLatencyEndpoint?: import("@weblink/platform").VideoSendFrameStats["endpoint"];
+  captureToPacketizerMs?: number;
+  packetizerToSendMs?: number;
   roundTripMs?: number;
 }
 
@@ -108,7 +124,24 @@ export function videoStatsValue(
   sample: VideoStatsSample,
   previous?: VideoStatsSample,
 ): VideoStatsValue {
+  const frame = readSendFrameStats(sample.sendFrame);
   const value: VideoStatsValue = {
+    ...(frame
+      ? {
+          sendLatencyMs:
+            frame.captureToSendMs ??
+            frame.captureToPacketizerMs,
+          sendLatencyBasis: "frame" as const,
+          sendLatencyState:
+            frame.endpoint === "transport-submit"
+              ? ("measured" as const)
+              : ("partial" as const),
+          sendLatencyEndpoint: frame.endpoint,
+          captureToPacketizerMs:
+            frame.captureToPacketizerMs,
+          packetizerToSendMs: frame.packetizerToSendMs,
+        }
+      : {}),
     codec: sample.codec,
     implementation: sample.implementation,
     powerEfficientDecoder: sample.powerEfficientDecoder,
@@ -144,7 +177,7 @@ export function videoStatsValue(
       bytes === undefined)
   )
     return value;
-  return {
+  const metrics: VideoStatsValue = {
     ...value,
     bitrate:
       bytes === undefined
@@ -210,6 +243,36 @@ export function videoStatsValue(
       delta(sample.packetsSent, previous.packetsSent),
     ),
   };
+  // Capture-to-encode already includes encoding and encoder queue time.
+  // Do not silently shorten the scope when capture counters reset or stall.
+  const captureTimed =
+    sample.captureToEncodeSeconds !== undefined ||
+    previous.captureToEncodeSeconds !== undefined;
+  const processing = number(
+    captureTimed
+      ? metrics.captureToEncodeMs
+      : metrics.encodeMs,
+  );
+  const queue = number(metrics.sendDelayMs);
+  const sendLatencyMs =
+    processing !== undefined && queue !== undefined
+      ? number(processing + queue)
+      : undefined;
+  // A supported per-frame path never silently switches to mixed averages when
+  // a frame becomes stale, is dropped or lacks capture metadata.
+  if (sample.sendFrame !== undefined) return metrics;
+  return {
+    ...metrics,
+    sendLatencyMs,
+    sendLatencyState:
+      sendLatencyMs === undefined ? undefined : "partial",
+    sendLatencyBasis:
+      sendLatencyMs === undefined
+        ? undefined
+        : captureTimed
+          ? "capture"
+          : "encode",
+  };
 }
 
 /** Select by the actual sender/receiver track, never by the first video report. */
@@ -217,6 +280,10 @@ export async function readBrowserVideoStats(
   pc: RoomConnection,
   track: MediaStreamTrack,
   direction: "send" | "receive",
+  frameStats?: () =>
+    | import("@weblink/platform").VideoSendFrameStats
+    | null
+    | undefined,
 ): Promise<VideoStatsSample[]> {
   if (pc.connectionState === "closed") return [];
   const endpoint = (
@@ -226,7 +293,18 @@ export async function readBrowserVideoStats(
   ).find((item) => item.track === track);
   if (!endpoint) return [];
   const report = await endpoint.getStats();
-  return readVideoStatsReport(report, direction);
+  const samples = readVideoStatsReport(report, direction);
+  if (direction === "send" && frameStats) {
+    const frame = frameStats();
+    for (const sample of samples) {
+      if (
+        frame === null ||
+        (frame && frame.ssrc === sample.ssrc)
+      )
+        sample.sendFrame = frame;
+    }
+  }
+  return samples;
 }
 
 export function readVideoStatsReport(
@@ -266,6 +344,13 @@ export function readVideoStatsReport(
         : undefined;
     samples.push({
       id: s.id,
+      ssrc: number(s.ssrc),
+      ...(direction === "send" && s.sendFrame !== undefined
+        ? {
+            sendFrame:
+              readSendFrameStats(s.sendFrame) ?? null,
+          }
+        : {}),
       timestamp: s.timestamp,
       codec,
       implementation: (direction === "send"

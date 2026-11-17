@@ -33,13 +33,17 @@ function setup() {
     count: number,
     time: number,
     receiveTime?: number,
+    captureTime?: number,
+    presentationTime = time,
   ) => {
     const call = pending!;
     pending = undefined;
     call(time, {
       presentedFrames: count,
       expectedDisplayTime: time + 5,
+      presentationTime,
       receiveTime,
+      captureTime,
     } as VideoFrameCallbackMetadata);
   };
   return {
@@ -53,6 +57,78 @@ function setup() {
   };
 }
 
+it("uses one remote frame's synchronized capture and submission, with display wait separate", () => {
+  const { stats, frame } = setup();
+  frame(1, 1000, 980, 900);
+  expect(stats.read(1000)).toMatchObject({
+    endToEndMs: 100,
+    endToEndState: "estimated",
+    captureToReceiveMs: 80,
+    receiveToPresentMs: 20,
+    displayWaitMs: 5,
+  });
+  expect(stats.read(2500).endToEndMs).toBe(100);
+  const stale = stats.read(2501);
+  expect(stale.endToEndMs).toBeUndefined();
+  expect(stale.endToEndState).toBeUndefined();
+  frame(2, 3000, 3000, 3000, 3000);
+  expect(stats.read(3000)).toMatchObject({
+    endToEndMs: 0,
+    endToEndState: "estimated",
+  });
+  stats.close();
+});
+
+it.each([
+  [undefined, 980, 1005],
+  [NaN, 980, 1005],
+  [Infinity, 980, 1005],
+  [-1, 980, 1005],
+  [990, 980, 1005],
+  [900, undefined, 1005],
+  [900, Infinity, 1005],
+  [900, 980, Infinity],
+  [900, 980, 970],
+])(
+  "omits unavailable or inconsistent remote timestamps: capture %s, receive %s, display %s",
+  (capture, receive, display) => {
+    const { stats, frame } = setup();
+    frame(1, 900, 880, 800);
+    expect(stats.read(900).endToEndMs).toBe(100);
+    frame(2, 1000, receive, capture, display);
+    expect(stats.read(1000).endToEndMs).toBeUndefined();
+    expect(stats.read(1000).endToEndState).toBeUndefined();
+    stats.close();
+  },
+);
+
+it("discards end-to-end timings across visibility changes and close", () => {
+  const { stats, frame, hidden } = setup();
+  frame(1, 1000, 980, 900);
+  expect(stats.read(1000).endToEndMs).toBe(100);
+  hidden.mockReturnValue(true);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(stats.read(1100)).toEqual({});
+  hidden.mockReturnValue(false);
+  document.dispatchEvent(new Event("visibilitychange"));
+  expect(stats.read(1200).endToEndMs).toBeUndefined();
+  frame(2, 2000, 1980, 1900);
+  expect(stats.read(2000).endToEndMs).toBe(100);
+  stats.close();
+  expect(stats.read(2100)).toEqual({});
+});
+
+it("does not refresh stale frame timings when its callback runs late", () => {
+  const { stats, frame } = setup();
+  frame(1, 4000, 90, 0, 100);
+  const value = stats.read(4000);
+  expect(value.endToEndMs).toBeUndefined();
+  expect(value.captureToReceiveMs).toBeUndefined();
+  expect(value.receiveToPresentMs).toBeUndefined();
+  expect(value.displayWaitMs).toBeUndefined();
+  stats.close();
+});
+
 it("measures compositor frame counters independently of callback count or 100 FPS decode", () => {
   const { stats, frame, quality } = setup();
   frame(20, 1000, 980);
@@ -64,9 +140,11 @@ it("measures compositor frame counters independently of callback count or 100 FP
   expect(stats.read(2000)).toEqual({
     fps: 60,
     droppedPerSecond: 40,
-    receiveToPresentMs: 25,
+    receiveToPresentMs: 20,
     onePercentLowFps: expect.closeTo(60),
     onePercentLowState: "estimated",
+    latencyEndpoint: "compositor-submit",
+    displayWaitMs: 5,
   });
   expect(stats.read(4000)).toEqual({
     fps: 0,

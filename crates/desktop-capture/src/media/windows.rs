@@ -953,7 +953,7 @@ impl MediaSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let offer_capture_time = !preview && recording.is_none() && current.audio;
+        let offer_capture_time = !preview && recording.is_none();
         let (options, encoder_id, factory) = if let Some(codecs) = codecs {
             let options = codecs.apply(&current)?;
             let hardware = if options.encoder == "software" {
@@ -1137,6 +1137,7 @@ impl MediaSession {
                 }
                 Self::configure_screen_codecs(&factory, &transceiver, &options, pre_encoded)?;
                 let sender = transceiver.sender();
+                sender.enable_video_frame_timing();
                 sender.set_video_encoder_backend(if pre_encoded {
                     VideoEncoderBackend::PreEncoded
                 } else {

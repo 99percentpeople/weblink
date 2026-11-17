@@ -4,6 +4,7 @@ type Point = { x: number; y: number };
 type Gesture = {
   id: number;
   start: Point;
+  last: Point;
   origin: Point;
   scale: Point;
 };
@@ -28,6 +29,14 @@ export function createFloatingPanel(options: {
     let preferred = initial;
     let gesture: Gesture | undefined;
 
+    const readScale = (): Point | undefined => {
+      const rect = boundary.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      return {
+        x: boundary.clientWidth / rect.width,
+        y: boundary.clientHeight / rect.height,
+      };
+    };
     const clamp = (point: Point): Point => ({
       x: Math.max(
         8,
@@ -55,11 +64,28 @@ export function createFloatingPanel(options: {
         handle.releasePointerCapture(previous.id);
     };
     const resize = () => {
-      release();
-      if (!boundary.clientWidth || !boundary.clientHeight)
+      if (!boundary.clientWidth || !boundary.clientHeight) {
+        release();
         return;
+      }
       // Temporary keyboard/layout clamping must not overwrite the user's position.
-      setPosition(clamp(preferred));
+      const next = clamp(preferred);
+      setPosition(next);
+      if (!gesture) return;
+      const scale = readScale();
+      if (!scale) {
+        release();
+        return;
+      }
+      // Live statistics can resize the panel mid-drag. Keep capture and rebase
+      // at the last pointer so clamping does not leave movement stuck at an edge.
+      gesture.start = gesture.last;
+      gesture.origin = next;
+      gesture.scale = scale;
+    };
+    const endDragAndResize = () => {
+      release();
+      resize();
     };
     const move = (point: Point) => {
       preferred = clamp(point);
@@ -74,20 +100,22 @@ export function createFloatingPanel(options: {
           event.isPrimary === false
         )
           return;
-        const rect = boundary.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
+        const scale = readScale();
+        if (!scale) return;
         event.preventDefault();
         // Mouse users can continue with arrow keys; touch keeps an open IME.
         if (event.pointerType !== "touch")
           handle.focus({ preventScroll: true });
+        const point = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         gesture = {
           id: event.pointerId,
-          start: { x: event.clientX, y: event.clientY },
+          start: point,
+          last: point,
           origin: position(),
-          scale: {
-            x: boundary.clientWidth / rect.width,
-            y: boundary.clientHeight / rect.height,
-          },
+          scale,
         };
         handle.setPointerCapture?.(event.pointerId);
         setDragging(true);
@@ -100,6 +128,10 @@ export function createFloatingPanel(options: {
         if (!gesture || gesture.id !== event.pointerId)
           return;
         event.preventDefault();
+        gesture.last = {
+          x: event.clientX,
+          y: event.clientY,
+        };
         move({
           x:
             gesture.origin.x +
@@ -162,21 +194,29 @@ export function createFloatingPanel(options: {
     const observer = new ResizeObserver(resize);
     observer.observe(boundary);
     observer.observe(panel);
-    doc.addEventListener("fullscreenchange", resize, {
-      signal: life.signal,
-    });
+    doc.addEventListener(
+      "fullscreenchange",
+      endDragAndResize,
+      {
+        signal: life.signal,
+      },
+    );
     doc.addEventListener("visibilitychange", release, {
       signal: life.signal,
     });
-    win.addEventListener("resize", resize, {
+    win.addEventListener("resize", endDragAndResize, {
       signal: life.signal,
     });
     win.addEventListener("blur", release, {
       signal: life.signal,
     });
-    win.visualViewport?.addEventListener("resize", resize, {
-      signal: life.signal,
-    });
+    win.visualViewport?.addEventListener(
+      "resize",
+      endDragAndResize,
+      {
+        signal: life.signal,
+      },
+    );
     resize();
     onCleanup(() => {
       life.abort();

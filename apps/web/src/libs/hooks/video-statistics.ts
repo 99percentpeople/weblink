@@ -14,6 +14,7 @@ import { createVideoPresentationStats } from "../domain/video-presentation-stats
 import type { VideoPresentationStats } from "@weblink/platform";
 import { createPresentationVisible } from "./presentation-visible";
 import { platform } from "@/libs/platform/runtime";
+import { senderStatisticsOverview } from "./video-statistics-senders";
 import {
   appendStatisticsHistory,
   type StatisticsHistoryPoint,
@@ -22,6 +23,7 @@ import {
 interface PreviousStatistics {
   sample: VideoStatsSample;
   history: StatisticsHistoryPoint[];
+  sendScope?: string;
 }
 
 export interface VideoStatisticsRow
@@ -30,6 +32,8 @@ export interface VideoStatisticsRow
   preview?: boolean;
   peer?: string;
   history?: readonly StatisticsHistoryPoint[];
+  /** Sampled sender totals, retained across viewer joins/leaves on local playback. */
+  senderOverviewHistory?: readonly StatisticsHistoryPoint[];
   /** Two bounded snapshots preserve drop/loss counters for copied diagnostics. */
   counters?: {
     current: VideoStatsSample;
@@ -68,6 +72,8 @@ export function createVideoStatistics(
       Map<string, PreviousStatistics>
     >();
     let displayHistory: StatisticsHistoryPoint[] = [];
+    let senderHistory: StatisticsHistoryPoint[] = [];
+    let senderScope: string | undefined;
     const poll = async () => {
       try {
         if (current.readyState === "ended") {
@@ -101,14 +107,35 @@ export function createVideoStatistics(
                 sample,
                 before?.sample,
               );
+              const sendScope =
+                sample.sendFrame?.endpoint ??
+                (sample.sendFrame === undefined
+                  ? "interval"
+                  : before?.sendScope);
+              const earlier = before?.history ?? [];
+              const compatible =
+                sendScope &&
+                before?.sendScope &&
+                sendScope !== before.sendScope
+                  ? earlier.map((point) => ({
+                      ...point,
+                      sendLatencyMs: undefined,
+                      captureToPacketizerMs: undefined,
+                      packetizerToSendMs: undefined,
+                    }))
+                  : earlier;
               const history = appendStatisticsHistory(
                 before?.sample.codec === sample.codec
-                  ? (before?.history ?? [])
+                  ? compatible
                   : [],
                 value,
                 at,
               );
-              samples.set(key, { sample, history });
+              samples.set(key, {
+                sample,
+                history,
+                sendScope,
+              });
               return {
                 ...value,
                 history,
@@ -123,6 +150,24 @@ export function createVideoStatistics(
             });
           });
         previous = next;
+        if (isLocal) {
+          const overview = senderStatisticsOverview(values);
+          if (
+            overview.sendScope &&
+            senderScope &&
+            overview.sendScope !== senderScope
+          )
+            senderHistory = senderHistory.map((point) => ({
+              ...point,
+              sendLatencyMs: undefined,
+            }));
+          senderScope = overview.sendScope ?? senderScope;
+          senderHistory = appendStatisticsHistory(
+            senderHistory,
+            overview,
+            at,
+          );
+        }
         const display = presentation.read();
         displayHistory = appendStatisticsHistory(
           displayHistory,
@@ -133,12 +178,16 @@ export function createVideoStatistics(
           values.push({
             ...display,
             history: displayHistory,
+            senderOverviewHistory: isLocal
+              ? senderHistory
+              : undefined,
             direction: "display",
             preview: isLocal,
             width: element.videoWidth || undefined,
             height: element.videoHeight || undefined,
           });
         } else if (
+          isLocal ||
           Object.values(display).some(
             (value) => value !== undefined,
           ) ||
@@ -147,12 +196,18 @@ export function createVideoStatistics(
             (point) =>
               point.fps !== undefined ||
               point.receiveToPresentMs !== undefined ||
+              point.endToEndMs !== undefined ||
+              point.submitMs !== undefined ||
+              point.presentationQueueMs !== undefined ||
               point.onePercentLowFps !== undefined,
           )
         ) {
           values.push({
             ...display,
             history: displayHistory,
+            senderOverviewHistory: isLocal
+              ? senderHistory
+              : undefined,
             direction: "display",
             preview: isLocal,
           });
@@ -163,6 +218,8 @@ export function createVideoStatistics(
         if (!stopped) {
           previous.clear();
           displayHistory = [];
+          senderHistory = [];
+          senderScope = undefined;
           setRows([]);
         }
       } finally {
@@ -177,6 +234,7 @@ export function createVideoStatistics(
       clearTimeout(timer);
       previous.clear();
       displayHistory = [];
+      senderHistory = [];
     });
   });
   return rows;

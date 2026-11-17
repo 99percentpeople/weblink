@@ -306,10 +306,16 @@ fn run(native: &Native, shared: &Mutex<State>, wake: &Wake) {
             } else {
                 let at = Instant::now();
                 let submit_ms = at.duration_since(start).as_secs_f64() * 1000.;
-                statistics
-                    .lock()
-                    .unwrap()
-                    .presented(at, queue_ms, submit_ms);
+                statistics.lock().unwrap().presented_frame(
+                    at,
+                    queue_ms,
+                    submit_ms,
+                    super::FrameTiming {
+                        captured: frame.estimated_capture,
+                        received: frame.received_at,
+                        decoded: frame.decoded_at,
+                    },
+                );
                 source.presented(queue_ms, submit_ms);
             }
             view.lease = Some(frame);

@@ -10,6 +10,7 @@ import {
 } from "./browser-video-quality";
 import type { VideoQualityLimits } from "./video-quality";
 import { readBrowserVideoStats } from "./video-stats";
+import { RtpEncodedMediaTrack } from "./rtp-encoded-media";
 
 export interface CameraSettings {
   limits: VideoQualityLimits;
@@ -58,6 +59,7 @@ export function cameraPublication(
         id: string;
         pc: RTCPeerConnection;
         video: RTCRtpSender;
+        timing?: RtpEncodedMediaTrack;
       }
     | undefined;
   const limits = () =>
@@ -131,7 +133,12 @@ export function cameraPublication(
           if (ice?.candidate) candidate?.(ice.toJSON());
         };
         const video = sendTrack(pc, camera, codecs.video);
-        active = { id, pc, video };
+        active = {
+          id,
+          pc,
+          video,
+          timing: RtpEncodedMediaTrack.install(video, pc),
+        };
         if (microphone)
           sendTrack(pc, microphone, codecs.audio);
         await pc.setLocalDescription(
@@ -139,6 +146,7 @@ export function cameraPublication(
         );
         return pc.localDescription!.sdp;
       } catch (error) {
+        if (active?.id === id) active.timing?.dispose();
         if (active?.id === id) active = undefined;
         pc.close();
         throw error;
@@ -158,6 +166,7 @@ export function cameraPublication(
     async closePeer(id) {
       if (active?.id !== id) return;
       active.pc.onicecandidate = null;
+      active.timing?.dispose();
       active.pc.close();
       active = undefined;
     },
@@ -172,8 +181,14 @@ export function cameraPublication(
       );
     },
     async getSenderStats(id) {
-      return active && active.id === id
-        ? readBrowserVideoStats(active.pc, camera, "send")
+      const current = active;
+      return current && current.id === id
+        ? readBrowserVideoStats(
+            current.pc,
+            camera,
+            "send",
+            () => current.timing?.sendFrameStats(),
+          )
         : [];
     },
   };

@@ -4,6 +4,7 @@ import {
   type EncodedAudioPacket,
 } from "./encoded-video";
 import { recordingAudioFormat } from "@weblink/platform";
+import { browserSendFrameStats } from "./video-send-frame-stats";
 
 // The transform lives as long as the RTP endpoint. Recording only switches copying;
 // detaching a transform can stop Chromium's RTP pipeline.
@@ -30,6 +31,7 @@ scope.addEventListener("rtctransform", (event: Event) => {
   ).transformer;
   const port = transformer.options.port;
   const audio = transformer.options.kind === "audio";
+  let lastTimingAt = -Infinity;
   let codecs: RTCRtpCodecParameters[] = [];
   let id = 0;
   let active = false;
@@ -86,6 +88,37 @@ scope.addEventListener("rtctransform", (event: Event) => {
         RTCEncodedVideoFrame | RTCEncodedAudioFrame
       >({
         transform(frame, controller) {
+          // Read the clock before recording copies or asynchronous output work.
+          // Publish bounded small snapshots, including when recording is inactive.
+          if (
+            !audio &&
+            transformer.options.direction === "send"
+          ) {
+            try {
+              const now = performance.now();
+              if (now - lastTimingAt >= 250) {
+                lastTimingAt = now;
+                const metadata =
+                  frame.getMetadata() as RTCEncodedVideoFrameMetadata & {
+                    captureTime?: number;
+                  };
+                notify({
+                  timing:
+                    browserSendFrameStats(
+                      metadata,
+                      frame.timestamp,
+                      now,
+                    ) ?? null,
+                  timingSupported:
+                    typeof metadata.captureTime ===
+                    "number",
+                  timingAt: performance.timeOrigin + now,
+                });
+              }
+            } catch {
+              /* Missing metadata must never interrupt media. */
+            }
+          }
           let packet:
             | EncodedVideoPacket
             | EncodedAudioPacket

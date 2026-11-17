@@ -149,17 +149,23 @@ fn one_connection_carries_multiple_video_tracks_and_binary_data_across_renegotia
         }
         let frame = vec![128; 160 * 96 * 3 / 2];
         tokio::time::timeout(Duration::from_secs(15), async {
-            while [camera_key, screen_key]
-                .iter()
-                .any(|&key| b.peer.output(key).unwrap().decoded_frames() == 0)
-            {
+            while [camera_key, screen_key].iter().any(|&key| {
+                b.peer
+                    .output(key)
+                    .unwrap()
+                    .gpu
+                    .as_ref()
+                    .unwrap()
+                    .latest()
+                    .is_none_or(|frame| frame.estimated_capture.is_none())
+            }) {
                 camera.yuv_frame(160, 96, &frame, true).unwrap();
                 screen.yuv_frame(160, 96, &frame, false).unwrap();
                 tokio::time::sleep(Duration::from_millis(40)).await;
             }
         })
         .await
-        .expect("both tracks must decode");
+        .expect("both tracks must decode and synchronize their capture clocks");
         a.peer.remove_capture("display").unwrap();
         a.negotiate(&b).await;
         assert!(b.peer.output(screen_key).is_none());

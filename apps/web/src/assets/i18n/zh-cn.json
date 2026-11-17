@@ -1,4 +1,9 @@
 {
+  "404": {
+    "title": "404 未找到",
+    "description": "页面未找到，路径为 {{path}}",
+    "home": "返回首页"
+  },
   "video_quality": {
     "source": "当前接收画面",
     "title": "接收画质",
@@ -646,11 +651,6 @@
     "title": "文件缓存",
     "usage": "已用 {{value}}, 总共 {{max}}, 剩余 {{remaining}}"
   },
-  "404": {
-    "title": "404 未找到",
-    "description": "页面未找到，路径为 {{path}}",
-    "home": "返回首页"
-  },
   "client": {
     "scroll_to_bottom": "回到最新消息",
     "menu": {
@@ -700,8 +700,8 @@
     },
     "statistics": {
       "latency": "延迟",
-      "receive_to_decode": "解码延迟",
-      "receive_to_decode_description": "接收 → 解码",
+      "receive_to_decode": "接收处理",
+      "receive_to_decode_description": "从一帧的首个数据包到达到解码完成的平均耗时，包含接收缓冲和等待。",
       "one_percent_low_short": "1% Low",
       "history_window": "最近 {{seconds}} 秒",
       "trend": "{{metric}} · 最近 {{seconds}} 秒 · 刻度 0–{{maximum}}",
@@ -723,9 +723,9 @@
       "encoder_bitrate": "编码目标",
       "bandwidth_estimate": "带宽估计",
       "copy": "复制统计",
-      "copy_manually": "自动复制不可用，请长按或全选下方文本复制。",
+      "copy_manually": "长按或全选下方文本进行复制。",
       "receive_to_present": "呈现延迟",
-      "receive_to_present_description": "接收 → 呈现",
+      "receive_to_present_description": "同一帧末包到达到提交合成，包含剩余缓冲、解码和呈现处理；是端到端的一部分。",
       "title": "串流统计",
       "send": "发送",
       "receive": "接收",
@@ -738,7 +738,43 @@
       "capture_to_encode": "采编延迟",
       "capture_to_encode_description": "采集 → 编码完成",
       "send_queue": "发送队列",
-      "rtt": "RTT"
+      "rtt": "RTT",
+      "send_pre_packetizer": "封包前延迟",
+      "send_pre_packetizer_description": "同一帧采集到进入 RTP 封包前的编码回调，包含编码与回调调度。",
+      "send_latency_frame_description": "同一帧采集到原始末包交付 RTP 传输层成功返回，包含采编、编码输出交付、封包与节奏控制排队。",
+      "capture_to_packetizer": "采集到封包",
+      "capture_to_packetizer_description": "同一帧采集到进入 RTP 封包前的编码回调，包含采集、编码、输出交付和回调调度。",
+      "packetizer_to_send": "封包与排队",
+      "packetizer_to_send_description": "同一帧封包前回调到原始末包交付 RTP 传输层成功返回，包含封包和节奏控制排队；与采集到封包相加等于该帧发送延迟。",
+      "submit_latency": "提交延迟",
+      "end_to_end": "端到端延迟",
+      "end_to_end_description": "同一帧从发送端采集到接收端提交合成，浏览器与桌面口径一致。时间基于时钟映射估算。",
+      "submit_latency_description": "最近一帧提交给呈现后端的调用耗时。",
+      "presentation_queue": "呈现等待",
+      "presentation_queue_description": "最近一帧从准备就绪到开始提交呈现的等待时间。",
+      "total_bitrate": "总码率",
+      "total_bitrate_description": "全部接收端的统计就绪时，显示各路视频发送码率之和。",
+      "slowest_receiver": "当前有数据的最慢接收端：{{peer}}",
+      "unnamed_receiver": "未命名接收端",
+      "send_latency": "发送延迟",
+      "send_latency_description": "发送端处理耗时估算：采集至编码完成的每帧平均耗时 + 每包平均发送排队。采编部分已含编码前等待。",
+      "send_latency_partial_description": "发送端处理耗时估算：平均编码耗时 + 每包平均发送排队。",
+      "encode_latency": "编码延迟",
+      "encode_latency_description": "采样周期内每帧的平均编码耗时。",
+      "decode_time": "解码耗时",
+      "decode_time_description": "采样周期内每帧的平均解码耗时。",
+      "encode_frame_rate": "编码帧率",
+      "decode_frame_rate": "解码帧率",
+      "buffer_description": "平均接收抖动缓冲耗时，含组帧等待，已包含在接收处理内。",
+      "rtt_description": "当前连接的网络往返时间。",
+      "capture_to_receive": "接收延迟",
+      "capture_to_receive_description": "从发送端采集这一帧，到接收端收齐其全部数据包的耗时，包含采编、封包、发送排队和网络传输。收齐后的组帧、缓冲、解码和呈现计入呈现延迟；两者相加等于同帧端到端延迟。",
+      "decode_to_present": "解码后延迟",
+      "decode_to_present_description": "同一帧解码完成到提交合成，包含桥接、纹理准备、呈现等待与提交；已包含在呈现延迟内。",
+      "display_wait": "显示等待",
+      "display_wait_description": "浏览器估算的同一帧从提交合成到预计显示的等待时间。",
+      "frame_decode": "单帧解码",
+      "frame_decode_description": "最近呈现帧的解码处理耗时。"
     }
   },
   "browser_unsupported": {

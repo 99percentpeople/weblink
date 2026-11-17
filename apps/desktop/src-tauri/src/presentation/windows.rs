@@ -211,6 +211,10 @@ pub fn presentation_stats(
     Ok(
         json!({"path":"d3d11-composition", "presentedFrames":view.presented_frames, "uploadedFrames":stats.uploaded_frames,
         "onePercentLowFps":view.one_percent_low_fps, "onePercentLowState":view.one_percent_low_state,
+          "endToEndMs":view.end_to_end_ms, "endToEndState":view.end_to_end_state, "endToEndAgeMs":view.end_to_end_age_ms,
+        "latencyEndpoint":"compositor-submit", "timingAgeMs":view.timing_age_ms,
+        "captureToReceiveMs":view.capture_to_receive_ms, "receiveToPresentMs":view.receive_to_present_ms,
+        "decodeToPresentMs":view.decode_to_present_ms,
         "decodedQueueMs":view.decoded_queue_ms, "submitMs":view.submit_ms, "error":stats.error}),
     )
 }

@@ -1,4 +1,9 @@
 {
+  "404": {
+    "title": "404 Not Found",
+    "description": "The page you are looking for does not exist, path: {{path}}",
+    "home": "Go to Home"
+  },
   "video_quality": {
     "source": "Incoming videos",
     "title": "Receive quality",
@@ -646,11 +651,6 @@
     "title": "File Cache",
     "usage": "{{value}} used, {{max}} total, {{remaining}} remaining"
   },
-  "404": {
-    "title": "404 Not Found",
-    "description": "The page you are looking for does not exist, path: {{path}}",
-    "home": "Go to Home"
-  },
   "client": {
     "scroll_to_bottom": "Scroll to bottom",
     "menu": {
@@ -700,8 +700,8 @@
     },
     "statistics": {
       "latency": "Latency",
-      "receive_to_decode": "Decode latency",
-      "receive_to_decode_description": "Receive → decoded",
+      "receive_to_decode": "Receive processing",
+      "receive_to_decode_description": "Average time from receiving the first packet of a frame to completing decoding, including receive buffering and waiting.",
       "one_percent_low_short": "1% Low",
       "history_window": "Last {{seconds}} s",
       "trend": "{{metric}} · last {{seconds}} s · range 0–{{maximum}}",
@@ -723,9 +723,9 @@
       "encoder_bitrate": "Encoder target",
       "bandwidth_estimate": "Bandwidth estimate",
       "copy": "Copy statistics",
-      "copy_manually": "Automatic copy is unavailable. Select the text below to copy it.",
+      "copy_manually": "Select the text below to copy it.",
       "receive_to_present": "Presentation",
-      "receive_to_present_description": "Receive → present",
+      "receive_to_present_description": "Same frame: last packet received to compositor submission, including remaining buffering, decoding and presentation. Part of end-to-end latency.",
       "title": "Stream statistics",
       "send": "Send",
       "receive": "Receive",
@@ -738,7 +738,43 @@
       "capture_to_encode": "Capture/encode",
       "capture_to_encode_description": "Capture → encoded",
       "send_queue": "Send queue",
-      "rtt": "RTT"
+      "rtt": "RTT",
+      "send_pre_packetizer": "Pre-packetizer",
+      "send_pre_packetizer_description": "Same frame, capture to the encoded callback before RTP packetization, including callback scheduling.",
+      "send_latency_frame_description": "Same frame, capture to successful original marker-packet submission to the RTP transport. Includes capture/encoding, output delivery, packetization and pacing.",
+      "capture_to_packetizer": "Capture to packetizer",
+      "capture_to_packetizer_description": "Same frame, capture to the encoded callback before RTP packetization, including capture, encoding, output delivery and callback scheduling.",
+      "packetizer_to_send": "Packetize and queue",
+      "packetizer_to_send_description": "Same frame, pre-packetizer callback to successful original marker-packet transport submission. Includes packetization and pacing. Added to capture-to-packetizer, equals this frame's sender latency.",
+      "submit_latency": "Submit latency",
+      "end_to_end": "End-to-end latency",
+      "end_to_end_description": "Same frame: sender capture to receiver compositor submission on both browser and desktop. Timing uses estimated clock mapping.",
+      "submit_latency_description": "Latest frame: time spent submitting to the presentation backend.",
+      "presentation_queue": "Present wait",
+      "presentation_queue_description": "Latest frame: wait from being ready until presentation submission begins.",
+      "total_bitrate": "Total bitrate",
+      "total_bitrate_description": "Sum of outgoing video bitrates, shown when statistics are ready for all receivers.",
+      "slowest_receiver": "Slowest receiver with available data: {{peer}}",
+      "unnamed_receiver": "Unnamed receiver",
+      "send_latency": "Send latency",
+      "send_latency_description": "Estimated sender processing: mean capture-to-encode time per frame + mean send queue time per packet. Capture-to-encode includes encoder waiting.",
+      "send_latency_partial_description": "Estimated sender processing: mean encoding time + mean send queue time per packet.",
+      "encode_latency": "Encode latency",
+      "encode_latency_description": "Average encoding time per frame during the sample interval.",
+      "decode_time": "Decode time",
+      "decode_time_description": "Average decoding time per frame during the sample interval.",
+      "encode_frame_rate": "Encode FPS",
+      "decode_frame_rate": "Decode FPS",
+      "buffer_description": "Mean receive jitter-buffer time, including assembly; already included in receive processing.",
+      "rtt_description": "Network round-trip time for this connection.",
+      "capture_to_receive": "Receive latency",
+      "capture_to_receive_description": "Time from capture of a frame at the sender until all its packets arrive at the receiver, including capture/encoding, packetization, send queues and network transport. Subsequent assembly, buffering, decoding and presentation count towards presentation latency; the two add up to same-frame end-to-end latency.",
+      "decode_to_present": "After decode",
+      "decode_to_present_description": "Same frame: decoder completion to compositor submission, including bridging, texture preparation, waiting and submission. Already included in presentation latency.",
+      "display_wait": "Display wait",
+      "display_wait_description": "Browser estimate of the time from compositor submission to expected display of the same frame.",
+      "frame_decode": "Frame decode",
+      "frame_decode_description": "Decoder processing for the latest presented frame."
     }
   },
   "browser_unsupported": {

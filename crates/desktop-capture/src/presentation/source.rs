@@ -25,6 +25,9 @@ pub struct Frame {
     pub sequence: u64,
     pub texture: Texture,
     pub(super) ready: Instant,
+    pub(crate) estimated_capture: Option<Instant>,
+    pub(crate) received_at: Option<Instant>,
+    pub(crate) decoded_at: Option<Instant>,
 }
 type Wake = Arc<dyn Fn() + Send + Sync>;
 struct Watcher {
@@ -94,6 +97,28 @@ impl Drop for Subscription {
 }
 impl Source {
     pub fn publish(&self, texture: Texture) {
+        self.publish_with_capture(texture, None);
+    }
+
+    pub(crate) fn publish_with_capture(
+        &self,
+        texture: Texture,
+        estimated_capture: Option<Instant>,
+    ) {
+        self.publish_with_timing(
+            texture,
+            super::statistics::FrameTiming {
+                captured: estimated_capture,
+                ..Default::default()
+            },
+        );
+    }
+
+    pub(crate) fn publish_with_timing(
+        &self,
+        texture: Texture,
+        timing: super::statistics::FrameTiming,
+    ) {
         if texture.cpu_upload {
             self.stats.lock().unwrap().uploaded_frames += 1;
         }
@@ -110,6 +135,9 @@ impl Source {
                 sequence: self.sequence.fetch_add(1, Ordering::Relaxed) + 1,
                 texture,
                 ready: Instant::now(),
+                estimated_capture: timing.captured,
+                received_at: timing.received,
+                decoded_at: timing.decoded,
             }));
             state
                 .watchers

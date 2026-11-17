@@ -2,6 +2,7 @@ import type {
   VideoPresentationStats,
   VideoPresentationSampler,
 } from "@weblink/platform";
+import { videoFrameLatency } from "./video-frame-latency";
 export type {
   VideoPresentationStats,
   VideoPresentationSampler,
@@ -124,7 +125,7 @@ export function createVideoPresentationStats(
   let callback: number | undefined;
   let frames: number | undefined;
   const intervals = new PresentationIntervals();
-  let receiveToPresentMs: number | undefined;
+  let latency: VideoPresentationStats = {};
   let timingAt: number | undefined;
   let previous:
     | { at: number; frames?: number; dropped?: number }
@@ -148,18 +149,11 @@ export function createVideoPresentationStats(
           );
           frames = metadata.presentedFrames;
         }
-        const receiveTime = (
-          metadata as VideoFrameCallbackMetadata & {
-            receiveTime?: number;
-          }
-        ).receiveTime;
-        receiveToPresentMs =
-          valid(receiveTime) &&
-          valid(metadata.expectedDisplayTime) &&
-          metadata.expectedDisplayTime >= receiveTime!
-            ? metadata.expectedDisplayTime - receiveTime!
-            : undefined;
-        timingAt = now;
+        latency = videoFrameLatency(metadata);
+        // A delayed callback must not refresh the age of an old frame.
+        timingAt = valid(metadata.presentationTime)
+          ? metadata.presentationTime
+          : undefined;
         schedule();
       },
     );
@@ -168,7 +162,8 @@ export function createVideoPresentationStats(
     if (callback !== undefined)
       video.cancelVideoFrameCallback(callback);
     callback = undefined;
-    frames = receiveToPresentMs = timingAt = undefined;
+    frames = timingAt = undefined;
+    latency = {};
     intervals.reset();
     previous = undefined;
     schedule();
@@ -201,19 +196,17 @@ export function createVideoPresentationStats(
         now >= before
           ? ((now - before) * 1000) / (at - previous.at)
           : undefined;
+      const freshTiming =
+        timingAt !== undefined &&
+        at >= timingAt &&
+        at - timingAt <= 1500;
       const value: VideoPresentationStats = {
         fps: rate(presented, previous?.frames),
         ...(callbacks
           ? intervals.low(at)
           : { onePercentLowState: "unsupported" }),
         droppedPerSecond: rate(dropped, previous?.dropped),
-        // This is receiver-to-presentation timing, never glass-to-glass latency.
-        receiveToPresentMs:
-          timingAt !== undefined &&
-          at >= timingAt &&
-          at - timingAt <= 1500
-            ? receiveToPresentMs
-            : undefined,
+        ...(freshTiming ? latency : {}),
       };
       previous = { at, frames: presented, dropped };
       return value;

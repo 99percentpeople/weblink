@@ -256,6 +256,9 @@ fn invalid_crops_and_subresources_are_rejected_before_gpu_submission() {
         texture.size = size;
         texture.subresource = subresource;
         assert!(describe(&Frame {
+            estimated_capture: None,
+            received_at: None,
+            decoded_at: None,
             sequence: 1,
             texture,
             ready: Instant::now()

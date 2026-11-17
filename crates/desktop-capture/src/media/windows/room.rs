@@ -113,6 +113,7 @@ impl MediaSession {
             tracks.push(t.clone());
             Self::configure_screen_codecs(factory, &t, &options, consumer.is_some())?;
             let sender = t.sender();
+            sender.enable_video_frame_timing();
             let software_sender = if consumer.is_some() {
                 sender.set_video_encoder_backend(VideoEncoderBackend::PreEncoded);
                 None

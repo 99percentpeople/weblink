@@ -53,6 +53,6 @@ pub(super) fn software_preset(
 }
 
 /// The clock used by both native video and encoded audio capture timestamps.
-pub(super) fn clock_us() -> i64 {
-    libwebrtc::audio_source::native::NativeAudioSource::capture_clock_us()
+pub(crate) fn clock_us() -> i64 {
+    libwebrtc::video_source::native::NativeVideoSource::capture_clock_us()
 }

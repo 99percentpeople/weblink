@@ -4,20 +4,10 @@ import {
 } from "@solid-primitives/i18n";
 import { createMemo, createResource } from "solid-js";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { setAppOptions } from "./options";
-import {
-  localeOptions,
   localeOptionsMap,
   type Locale,
   type SupportedLocale,
 } from "@/libs/i18n/locale";
-import { appState } from "@/libs/state/app-state";
 import { resolvedLocale } from "@/libs/state/app-locale";
 
 import en from "@/assets/i18n/en-us.json";
@@ -94,28 +84,6 @@ export const localeLabel = (locale: Locale): string =>
     ? t("setting.appearance.language.system")
     : localeOptionsMap[locale];
 
-const LocaleSelector = () => {
-  return (
-    <Select<Locale>
-      value={appState.options.locale}
-      onChange={(value) => {
-        if (value) setAppOptions("locale", value);
-      }}
-      options={localeOptions}
-      itemComponent={(props) => (
-        <SelectItem item={props.item}>
-          {localeLabel(props.item.rawValue)}
-        </SelectItem>
-      )}
-    >
-      <SelectTrigger>
-        <SelectValue<Locale>>
-          {(state) => localeLabel(state.selectedOption())}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent />
-    </Select>
-  );
-};
-
-export { t, LocaleSelector };
+// Keep this module free of components: a Solid refresh boundary would update
+// the component but leave existing consumers of t bound to the old dictionary.
+export { t };

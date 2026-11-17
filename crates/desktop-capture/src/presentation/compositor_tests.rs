@@ -133,6 +133,49 @@ fn presented(source: &Source, frames: u64) {
 }
 
 #[test]
+fn compositor_reports_capture_to_submission_for_the_presented_frame() {
+    let window = Window::new();
+    let compositor = Compositor::new(window.hwnd).unwrap();
+    let source = Arc::new(Source::default());
+    let (device, _) = windows_capture::d3d11::create_d3d_device().unwrap();
+    let pixels = texture(&device, 644, 364);
+    let layout = Layout {
+        width: 64.,
+        height: 36.,
+        visible: true,
+        ..Default::default()
+    };
+    compositor.bind(1, source.clone(), layout).unwrap();
+    source.publish_with_capture(
+        pixels.clone(),
+        Some(Instant::now() - Duration::from_millis(80)),
+    );
+    presented(&source, 1);
+    let sample = compositor.stats(1).unwrap();
+    assert!(sample
+        .end_to_end_ms
+        .is_some_and(|ms| ms >= 80. && ms.is_finite()));
+    assert_eq!(sample.end_to_end_state, Some("estimated"));
+    source.publish(pixels.clone());
+    presented(&source, 2);
+    assert_eq!(compositor.stats(1).unwrap().end_to_end_ms, None);
+    source.publish_with_capture(pixels, Some(Instant::now()));
+    presented(&source, 3);
+    assert!(compositor.stats(1).unwrap().end_to_end_ms.is_some());
+    compositor
+        .bind(
+            1,
+            source,
+            Layout {
+                visible: false,
+                ..layout
+            },
+        )
+        .unwrap();
+    assert_eq!(compositor.stats(1).unwrap().end_to_end_ms, None);
+}
+
+#[test]
 fn compositor_sleeps_recovers_visibility_and_releases_frame_leases() {
     let window = Window::new();
     let compositor = Compositor::new(window.hwnd).unwrap();

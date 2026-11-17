@@ -26,6 +26,11 @@ async function setup(
       segment: number;
     };
     error?: string;
+    timingSupported?: boolean;
+    timing?: {
+      captureToPacketizerMs: number;
+      endpoint: string;
+    };
   }[] = [];
   channel.port1.onmessage = ({ data }) => {
     messages.push(data);
@@ -94,6 +99,39 @@ const frame = (
       synchronizationSource: 1,
     }),
   }) as unknown as RTCEncodedVideoFrame;
+it("measures sender frames while recording is paused and forwards the original without copying", async () => {
+  const f = await setup();
+  await f.command("pause");
+  const value = frame("delta");
+  const captureTime = performance.now() - 12;
+  value.getMetadata = () =>
+    ({
+      synchronizationSource: 7,
+      captureTime,
+    }) as RTCEncodedVideoFrameMetadata;
+  Object.defineProperty(value, "data", {
+    get() {
+      throw new Error("timing must not copy payload");
+    },
+  });
+  f.controller.enqueue(value);
+  await vi.waitFor(() =>
+    expect(f.forwarded).toEqual([value]),
+  );
+  await vi.waitFor(() =>
+    expect(f.messages.some((m) => m.timingSupported)).toBe(
+      true,
+    ),
+  );
+  const timing = f.messages.find((m) => m.timing)?.timing;
+  expect(timing?.endpoint).toBe("packetizer-input");
+  expect(
+    timing?.captureToPacketizerMs,
+  ).toBeGreaterThanOrEqual(12);
+  expect(f.messages.some((m) => m.packet || m.error)).toBe(
+    false,
+  );
+});
 it.each(["video/VP8", "video/VP9", "video/AV1"])(
   "forwards %s originals and copies only keyframe-led recording segments, without pausing the network",
   async (codec) => {

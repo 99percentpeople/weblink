@@ -4,6 +4,7 @@ import type {
   RoomTrackEvent,
   RoomTransceiver,
   RoomSender,
+  VideoSendFrameStats,
 } from "@weblink/platform";
 import type {
   StreamAudioSource,
@@ -145,6 +146,14 @@ export class PeerSessionMediaController {
       this.remoteTracks.get(track)?.transceiver.receiver;
     return receiver
       ? this.encodedReceivers.get(receiver)
+      : undefined;
+  }
+  getSendFrameStats(
+    track: MediaStreamTrack,
+  ): VideoSendFrameStats | null | undefined {
+    const sender = this.senders.get(track);
+    return sender
+      ? this.encodedVideo.get(sender)?.sendFrameStats()
       : undefined;
   }
   getRecordingMediaSources(

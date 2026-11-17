@@ -1,4 +1,7 @@
-import type { RoomConnection } from "@weblink/platform";
+import type {
+  RoomConnection,
+  VideoSendFrameStats,
+} from "@weblink/platform";
 import { getNativeScreenPublication } from "./native-screen-service";
 import {
   readBrowserVideoStats,
@@ -15,6 +18,9 @@ export interface VideoStatisticsPeer {
     ): Promise<VideoStatsBatch[]>;
   };
   name?: string;
+  sendFrameStats?(
+    track: MediaStreamTrack,
+  ): VideoSendFrameStats | null | undefined;
 }
 
 /** UI-facing read API. Diagnostics neither renegotiate nor own media tracks. */
@@ -27,7 +33,13 @@ export async function readVideoStatistics(
   const pending: Promise<VideoStatsBatch[]>[] = [];
   if (publication?.getPreviewStats)
     pending.push(publication.getPreviewStats());
-  for (const { pc, native, camera, name } of peers) {
+  for (const {
+    pc,
+    native,
+    camera,
+    name,
+    sendFrameStats,
+  } of peers) {
     if (camera)
       pending.push(
         camera.stats(track).then((batches) =>
@@ -60,18 +72,19 @@ export async function readVideoStatistics(
         "receive",
       ] as const) {
         pending.push(
-          readBrowserVideoStats(pc, track, direction).then(
-            (samples) =>
-              samples.length
-                ? [
-                    {
-                      key: pc,
-                      direction,
-                      peer: name,
-                      samples,
-                    },
-                  ]
-                : [],
+          readBrowserVideoStats(pc, track, direction, () =>
+            sendFrameStats?.(track),
+          ).then((samples) =>
+            samples.length
+              ? [
+                  {
+                    key: pc,
+                    direction,
+                    peer: name,
+                    samples,
+                  },
+                ]
+              : [],
           ),
         );
       }
