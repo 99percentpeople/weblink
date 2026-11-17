@@ -2,15 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.3.8] - 2026-11-15
+## [1.3.8] - 2026-11-17
 
-Weblink 1.3.8 adds scoped Windows screen-sharing performance controls, live automation status updates and saved MCP token usage, and fixes floating video controls when the on-screen keyboard opens.
+Weblink 1.3.8 improves Windows screen-sharing performance, adds compact stream statistics with per-frame latency timing, fixes simultaneous playback of received audio, and adds live automation status and saved MCP token usage.
 
 ### Windows screen sharing
 
 - **Application-scoped NVIDIA power preference.** Before graphics initialization, set and verify a persistent maximum-performance preference for the current Weblink executable. Preserve global and shared driver profiles and other applications' settings. The preference remains saved across app exits; static screen content still refreshes at 2 FPS.
 - **Scoped streaming priorities.** While a screen has remote viewers, request 1 ms timer resolution and higher capture, hardware-encoder and GPU scheduling priorities. Share timer and GPU requests across concurrent captures and release them after their final user leaves. Thread priorities are restored after each work scope. Local preview and recording-only sessions do not activate these requests, and unavailable or failed requests leave streaming operational.
 - **Performance diagnostics.** Report the startup GPU power-policy result separately from active stream scheduling, including remote viewer leases, timer resolution, GPU scheduling and capture/encoder thread status. Detailed automation reports preserve known status labels and error codes while filtering arbitrary driver text.
+- **More complete capture timing.** Include Windows capture delivery and scheduling waits in latency statistics. Preserve each frame's original system timestamp through software and hardware encoding, and align capture and WebRTC clocks so encoder startup and retained-frame replay keep the frame's capture age.
 
 ### MCP and automation
 
@@ -18,11 +19,19 @@ Weblink 1.3.8 adds scoped Windows screen-sharing performance controls, live auto
 - **Live runtime status.** Push permission, approval, job, audit, controller and listener changes from the native service. Guard updates by session and revision so stale events cannot replace current state, and remove frontend status polling and heartbeats.
 - **Event-driven maintenance.** Schedule native maintenance from state changes and deadlines. Observe Windows network changes through native notifications, with a bounded address-only fallback.
 
-### Video controls
+### Video controls and stream statistics
 
-- **Movable stream statistics.** Open diagnostics only for the main video and move the compact window across the entire meeting interface by dragging its title bar or using the arrow keys. Keep it inside the main video's fullscreen surface when fullscreen is active, and close it when that source leaves the main view. Prioritize latency and presentation frame rate, followed by 1% Low, in a compact summary with small text and line charts covering the last 60 seconds. Label latency by its measurement stage and keep per-stream frame rates, bitrate and drop counters in expandable details. Preserve gaps in missing data and isolate each connection's history. Close the window directly and copy the complete report even when details are collapsed.
+- **Compact movable statistics.** Open diagnostics for the main video and move the window across the meeting by dragging its title bar or using the arrow keys. Keep it within the fullscreen video surface when fullscreen is active. Use small text and line charts, size the window automatically, keep expanded and collapsed widths consistent, and reserve ten monospace characters for numeric readings. Stabilize initial positioning and dragging as samples arrive, and copy the complete report from either view.
+- **Focused summaries and receiver details.** Show end-to-end latency, frame rate and bitrate for received video. For local video, show send latency for the slowest receiver, local frame rate and total outgoing bitrate; hover to identify the receiver and expand for individual receiver statistics. Put 1% Low and latency components in the expanded view, combine local-preview readings, and show timing metrics as their data becomes available.
+- **Same-frame receiver latency.** Measure browser end-to-end latency from capture to expected display, including display wait, and native GPU latency from capture to compositor submission. Separate capture-to-receive, receiver-processing and display-wait intervals, with concise labels and full definitions in tooltips. Copied statistics and diagnostics retain detailed counters, timing endpoints and sample freshness.
+- **Per-receiver sender timing.** Measure each frame from capture through encoding and packet queues to transport submission on desktop, and from capture to the pre-packetizer callback in browsers. Keep sender timing for each viewer, and expose stage averages and RTT as separate diagnostic measurements.
+- **Consistent playback statistics.** Use a shared browser and desktop statistics contract. Calculate 1% Low from the slowest completed frame intervals in the last ten seconds of visible playback. Keep frame counters and histories independent for each view and connection, preserve gaps when samples are unavailable, and reset interval history while a view is hidden.
 - **Stable controls with the on-screen keyboard.** Keep the floating control dot docked to the video edge as the keyboard opens, closes or changes the viewport. Preserve its saved position through temporary layout changes, and keep keyboard focus when opening or dragging the dot.
-- **Consistent playback statistics.** Use a shared statistics contract for browser and desktop presentation. Add native 1% Low from individual compositor frame intervals, using the same rolling window and definition as the browser. Keep frame counters and timing histories independent for each native view, and reset interval history while a view is hidden.
+
+### Meeting audio
+
+- **Simultaneous received audio.** Play each received audio track independently so browser and native audio sources remain audible together. Preserve microphone, shared-screen and participant mute controls as tracks arrive, end or reconnect.
+- **Consistent output-device selection.** Apply the selected speaker to all playback tracks and route new tracks before starting playback. Roll back successful switches when another track fails to change devices, keeping the selected output consistent.
 
 ### Maintenance
 
