@@ -37,12 +37,12 @@ it("exports end-to-end estimates and detailed playback counters without an overl
     receiveTime: 980,
   } as VideoFrameCallbackMetadata);
   expect(diagnostics.read(track)[0]).toMatchObject({
-    endToEndMs: 100,
+    endToEndMs: 105,
     endToEndState: "estimated",
     receiveToPresentMs: 20,
     captureToReceiveMs: 80,
     displayWaitMs: 5,
-    latencyEndpoint: "compositor-submit",
+    latencyEndpoint: "expected-display",
     totalFrames: 100,
     droppedFrames: 2,
   });
