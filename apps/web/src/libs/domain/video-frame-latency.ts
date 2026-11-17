@@ -18,7 +18,7 @@ export function videoFrameLatency(timing: {
   } = timing;
   if (!valid(submit)) return {};
   const value: VideoPresentationStats = {
-    latencyEndpoint: "compositor-submit",
+    latencyEndpoint: "expected-display",
   };
   if (valid(display) && display >= submit)
     value.displayWaitMs = display - submit;
@@ -29,8 +29,10 @@ export function videoFrameLatency(timing: {
   value.receiveToPresentMs = submit - receive;
   if (valid(capture) && capture <= receive) {
     value.captureToReceiveMs = receive - capture;
-    value.endToEndMs = submit - capture;
-    value.endToEndState = "estimated";
+    if (value.displayWaitMs !== undefined) {
+      value.endToEndMs = display! - capture;
+      value.endToEndState = "estimated";
+    }
   }
   return value;
 }

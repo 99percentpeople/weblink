@@ -177,12 +177,16 @@ impl Duplication {
                 texture.GetDesc(&mut desc);
             }
             let damage = damage::read(&self.output, &info, (desc.Width, desc.Height));
+            // Cursor-only updates carry their own QPC timestamp.
+            let captured_at =
+                super::capture_time::qpc(info.LastPresentTime.max(info.LastMouseUpdateTime));
             self.transfer.deliver(
                 &self.context,
                 &texture,
                 self.rotation,
                 Some(&cursor),
                 damage.rects(),
+                captured_at,
                 |frame| Frames::deliver(frames, frame),
             )?;
         }

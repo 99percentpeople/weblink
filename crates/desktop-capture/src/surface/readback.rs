@@ -37,6 +37,7 @@ pub(crate) struct Readback {
 impl Readback {
     pub(crate) fn frame(&self) -> Option<TextureFrame<'_>> {
         Some(TextureFrame {
+            captured_at: self.captured_at,
             device: self.device.as_ref()?,
             context: self.context.as_ref()?,
             texture: self.texture.as_ref()?,
@@ -54,7 +55,10 @@ impl Readback {
     }
 
     pub fn copy(&mut self, frame: &TextureFrame<'_>) -> Result<()> {
-        self.copy_at(frame, std::time::Instant::now())
+        self.copy_at(
+            frame,
+            frame.captured_at.unwrap_or_else(std::time::Instant::now),
+        )
     }
     pub fn copy_at(
         &mut self,

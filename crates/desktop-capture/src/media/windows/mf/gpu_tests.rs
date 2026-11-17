@@ -48,6 +48,7 @@ fn gpu_nv12_surface_encodes_with_h264_and_hevc_without_memory_input() {
     let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
     let texture = image(&device);
     let frame = TextureFrame {
+        captured_at: None,
         dirty_regions: None,
         device: &device,
         context: &context,
@@ -137,6 +138,7 @@ fn gpu_adapter_selection_matches_real_devices_and_preserves_memory_fallback() {
             .label();
         let texture = image(&device);
         let frame = TextureFrame {
+            captured_at: None,
             dirty_regions: None,
             device: &device,
             context: &context,
@@ -245,6 +247,7 @@ fn gpu_dirty_region_hints_preserve_full_partial_and_unchanged_inputs() {
     let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
     let texture = image(&device);
     let frame = TextureFrame {
+        captured_at: None,
         device: &device,
         context: &context,
         texture: &texture,

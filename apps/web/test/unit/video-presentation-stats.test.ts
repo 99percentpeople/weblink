@@ -57,23 +57,23 @@ function setup() {
   };
 }
 
-it("uses one remote frame's synchronized capture and submission, with display wait separate", () => {
+it("includes display wait once in the same remote frame's end-to-end latency", () => {
   const { stats, frame } = setup();
   frame(1, 1000, 980, 900);
   expect(stats.read(1000)).toMatchObject({
-    endToEndMs: 100,
+    endToEndMs: 105,
     endToEndState: "estimated",
     captureToReceiveMs: 80,
     receiveToPresentMs: 20,
     displayWaitMs: 5,
   });
-  expect(stats.read(2500).endToEndMs).toBe(100);
+  expect(stats.read(2500).endToEndMs).toBe(105);
   const stale = stats.read(2501);
   expect(stale.endToEndMs).toBeUndefined();
   expect(stale.endToEndState).toBeUndefined();
   frame(2, 3000, 3000, 3000, 3000);
   expect(stats.read(3000)).toMatchObject({
-    endToEndMs: 0,
+    endToEndMs: 5,
     endToEndState: "estimated",
   });
   stats.close();
@@ -94,7 +94,7 @@ it.each([
   (capture, receive, display) => {
     const { stats, frame } = setup();
     frame(1, 900, 880, 800);
-    expect(stats.read(900).endToEndMs).toBe(100);
+    expect(stats.read(900).endToEndMs).toBe(105);
     frame(2, 1000, receive, capture, display);
     expect(stats.read(1000).endToEndMs).toBeUndefined();
     expect(stats.read(1000).endToEndState).toBeUndefined();
@@ -105,7 +105,7 @@ it.each([
 it("discards end-to-end timings across visibility changes and close", () => {
   const { stats, frame, hidden } = setup();
   frame(1, 1000, 980, 900);
-  expect(stats.read(1000).endToEndMs).toBe(100);
+  expect(stats.read(1000).endToEndMs).toBe(105);
   hidden.mockReturnValue(true);
   document.dispatchEvent(new Event("visibilitychange"));
   expect(stats.read(1100)).toEqual({});
@@ -113,7 +113,7 @@ it("discards end-to-end timings across visibility changes and close", () => {
   document.dispatchEvent(new Event("visibilitychange"));
   expect(stats.read(1200).endToEndMs).toBeUndefined();
   frame(2, 2000, 1980, 1900);
-  expect(stats.read(2000).endToEndMs).toBe(100);
+  expect(stats.read(2000).endToEndMs).toBe(105);
   stats.close();
   expect(stats.read(2100)).toEqual({});
 });
@@ -143,7 +143,7 @@ it("measures compositor frame counters independently of callback count or 100 FP
     receiveToPresentMs: 20,
     onePercentLowFps: expect.closeTo(60),
     onePercentLowState: "estimated",
-    latencyEndpoint: "compositor-submit",
+    latencyEndpoint: "expected-display",
     displayWaitMs: 5,
   });
   expect(stats.read(4000)).toEqual({

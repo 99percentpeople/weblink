@@ -16,7 +16,6 @@ use crate::media::latency::{
     CodecControl, Distribution, EncoderPipelineStats, HardwareEncoderSelection,
 };
 use crate::media::recording::{EncodedRecordingTap, Packet, PacketKind};
-use crate::media::webrtc::clock_us;
 use crate::Result;
 pub use backend::detect;
 use libwebrtc::video_frame::native::VideoFrameBufferExt;
@@ -493,8 +492,8 @@ fn run(
     // remain in the damage baseline until this receiver's MFT accepts a frame.
     let mut damage = Damage::default();
     let started = Instant::now();
-    let recording_origin = clock_us();
-    let mut timeline = timing::Timeline::new(started);
+    let mut timeline =
+        timing::Timeline::new(crate::media::webrtc::capture_clock::CaptureClock::read());
     let mut rate_control = if let Some(bitrate) = bitrate {
         BitrateController::with_start(options.max_bitrate as u32, bitrate)
     } else if preview {
@@ -747,7 +746,7 @@ fn run(
                             &EncodedVideoFrame {
                                 codec: active.codec,
                                 payload: &packet.bytes,
-                                timestamp_us: recording_origin + packet.timestamp_us,
+                                timestamp_us: packet.timestamp_us,
                                 frame_type: if packet.keyframe {
                                     EncodedFrameType::Key
                                 } else {
@@ -765,7 +764,7 @@ fn run(
                     // packet allocation into a bounded, non-waiting recording queue.
                     recording.publish(Packet {
                         bytes: packet.bytes,
-                        timestamp_us: recording_origin + packet.timestamp_us,
+                        timestamp_us: packet.timestamp_us,
                         keyframe: packet.keyframe,
                         kind: PacketKind::Video {
                             codec: match active.codec {

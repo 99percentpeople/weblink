@@ -219,6 +219,7 @@ mod tests {
             let mut readback = Readback::default();
             readback
                 .copy(&TextureFrame {
+                    captured_at: None,
                     dirty_regions: None,
                     device: &device,
                     context: &context,

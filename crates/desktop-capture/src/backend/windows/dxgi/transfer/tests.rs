@@ -72,11 +72,23 @@ fn isolated_transfer_preserves_inflight_pixels_resize_and_retained_source() {
         let mut copies = Vec::new();
         for (size, value) in [((8, 8), 32), ((16, 8), 96), ((16, 8), 160)] {
             let input = texture(&device, size, value);
+            let captured = std::time::Instant::now() - Duration::from_millis(40);
             transfer
-                .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
-                    retained.copy(&frame)
-                })
+                .deliver(
+                    &context,
+                    &input,
+                    Rotation::Identity,
+                    None,
+                    None,
+                    Some(captured),
+                    |frame| {
+                        assert_eq!(frame.captured_at, Some(captured));
+                        retained.copy(&frame)
+                    },
+                )
                 .unwrap();
+            assert_eq!(retained.captured_at, Some(captured));
+            assert_eq!(retained.frame().unwrap().captured_at, Some(captured));
             let notify = Arc::new(Notify::new());
             let pending = retained
                 .submit_notifying(size, None, notify.clone())
@@ -115,16 +127,28 @@ fn isolated_transfer_releases_on_sink_failure_and_rejects_positive_timeout() {
     drop(Access::acquire(&transfer.surface.write, 0, 0, 0).unwrap());
     let input = texture(&device, (8, 8), 64);
     assert_eq!(
-        transfer.deliver(&context, &input, Rotation::Identity, None, None, |_| Err(
-            "sink failed".into()
-        )),
+        transfer.deliver(
+            &context,
+            &input,
+            Rotation::Identity,
+            None,
+            None,
+            None,
+            |_| Err("sink failed".into())
+        ),
         Err("sink failed".into())
     );
     let mut retained = Readback::default();
     transfer
-        .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
-            retained.copy(&frame)
-        })
+        .deliver(
+            &context,
+            &input,
+            Rotation::Identity,
+            None,
+            None,
+            None,
+            |frame| retained.copy(&frame),
+        )
         .unwrap();
     let mapped = retained.map().unwrap();
     assert_eq!(&mapped.bytes()[..4], &[64, 64, 64, 255]);
@@ -138,9 +162,15 @@ fn isolated_readback_completes_while_acquisition_context_is_locked() {
         let mut retained = Readback::default();
         let input = texture(&device, (32, 16), 96);
         transfer
-            .deliver(&context, &input, Rotation::Identity, None, None, |frame| {
-                retained.copy(&frame)
-            })
+            .deliver(
+                &context,
+                &input,
+                Rotation::Identity,
+                None,
+                None,
+                None,
+                |frame| retained.copy(&frame),
+            )
             .unwrap();
         let protection: ID3D11Multithread = context.cast().unwrap();
         unsafe {
@@ -199,13 +229,20 @@ fn synthetic_dxgi_transfer_cost() {
                 let input = &inputs[index % 2];
                 if isolated {
                     transfer
-                        .deliver(&context, input, Rotation::Identity, None, None, |frame| {
-                            retained.copy(&frame)
-                        })
+                        .deliver(
+                            &context,
+                            input,
+                            Rotation::Identity,
+                            None,
+                            None,
+                            None,
+                            |frame| retained.copy(&frame),
+                        )
                         .unwrap();
                 } else {
                     retained
                         .copy(&TextureFrame {
+                            captured_at: None,
                             dirty_regions: None,
                             device: &device,
                             context: &context,

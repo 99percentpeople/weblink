@@ -73,7 +73,12 @@ fn native_hevc(gpu: bool) {
             let (width,height) = if index < 60 {(640,360)} else {(1280,720)};
             let mut frame = I420Buffer::new_black(width,height);
             frame.data_mut().0.fill(40 + (index % 160) as u8);
-            media.publish_frame(&VideoFrame::new(VideoRotation::VideoRotation0,frame));
+            let frame = VideoFrame::new(VideoRotation::VideoRotation0,frame);
+            // Inject known OS delivery age and preserve it through hardware,
+            // RTP/RTCP clock mapping, decode and the compositor handoff.
+            let captured = Instant::now() - Duration::from_millis(100);
+            media.capture_raw_frame(&frame, Some(captured));
+            media.publish_hardware_cpu(&frame, Some(captured), true);
             assert!(media.error().is_none(), "{:?}", media.error());
             if let Some(recording) = &recording {
                 let data = recording.read_frame(recorded_sequence).await.unwrap();
@@ -103,6 +108,7 @@ fn native_hevc(gpu: bool) {
             .expect("No same-frame sender timing reached the native statistics");
         assert_eq!(sent.endpoint, "transport-submit");
         assert!(sent.capture_to_send_ms > 0.0);
+        assert!(sent.capture_to_packetizer_ms >= 90.0, "Capture age was lost: {sent:?}");
         assert!((sent.capture_to_send_ms - sent.capture_to_packetizer_ms - sent.packetizer_to_send_ms).abs() < 0.001);
         assert!((0.0..=1500.0).contains(&sent.age_ms));
         eprintln!("Native sender same-frame timing: {sent:?}");
@@ -116,6 +122,7 @@ fn native_hevc(gpu: bool) {
             assert!(held.estimated_capture.is_some(), "RTCP capture clock was not preserved to native presentation: {inbound}");
             assert!(held.estimated_capture.unwrap().elapsed() < Duration::from_secs(5), "Capture timestamp is not on the compositor clock");
             assert!(held.received_at.is_some(), "Last packet timestamp was not preserved");
+            assert!(held.received_at.unwrap().duration_since(held.estimated_capture.unwrap()) >= Duration::from_millis(80), "RTCP mapping lost the injected 100 ms capture age");
             assert!(held.decoded_at.is_some(), "Decode completion timestamp was not preserved");
             assert!(held.received_at.unwrap() <= held.decoded_at.unwrap());
             assert_eq!(held.texture.size, (1280,720));

@@ -157,6 +157,8 @@ function StatisticsWindow(props: {
       "submit_latency",
       "encode_latency",
       "receive_to_decode",
+      "receive_to_present",
+      "display_wait",
       "buffer",
       "rtt",
       "frame_rate",

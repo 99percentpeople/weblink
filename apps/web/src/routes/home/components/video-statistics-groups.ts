@@ -70,6 +70,7 @@ export function formatVideoStatisticsGroups(
         "endToEndMs",
         "captureToReceiveMs",
         "receiveToPresentMs",
+        "displayWaitMs",
         "roundTripMs",
         ...(display.receiveToPresentMs === undefined
           ? ["receiveToDecodeMs"]

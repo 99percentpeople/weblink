@@ -299,8 +299,10 @@ impl MediaSession {
         // budget on scene cuts. Its real-time preset responds to rate control;
         // resolution/degradation and screen identity are still set explicitly.
         let screencast = options.codec.as_deref() != Some("video/h264");
-        let source = NativeVideoSource::new(VideoResolution::default(), screencast);
-        let preview_source = NativeVideoSource::new(VideoResolution::default(), screencast);
+        let source =
+            NativeVideoSource::new_with_capture_clock(VideoResolution::default(), screencast);
+        let preview_source =
+            NativeVideoSource::new_with_capture_clock(VideoResolution::default(), screencast);
         let color = options.color_space().rtc();
         if !source.set_color_space(Some(color)) || !preview_source.set_color_space(Some(color)) {
             return Err("Invalid native video color space".into());
@@ -700,9 +702,27 @@ impl MediaSession {
 
     #[cfg(test)]
     pub(crate) fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
-        self.source.capture_frame(frame);
-        self.preview_source.capture_frame(frame);
+        self.capture_raw_frame(frame, None);
         self.publish_hardware_cpu(frame, Some(Instant::now()), true);
+    }
+
+    fn capture_raw_frame<T: AsRef<dyn VideoBuffer>>(
+        &self,
+        frame: &VideoFrame<T>,
+        captured_at: Option<Instant>,
+    ) {
+        let clock = super::webrtc::capture_clock::CaptureClock::read();
+        let timestamp_us = captured_at
+            .and_then(|at| clock.timestamp(at))
+            .unwrap_or_else(super::webrtc::clock_us);
+        let stamped = VideoFrame {
+            rotation: frame.rotation,
+            timestamp_us,
+            frame_metadata: frame.frame_metadata.clone(),
+            buffer: &frame.buffer,
+        };
+        self.source.capture_frame(&stamped);
+        self.preview_source.capture_frame(&stamped);
     }
 
     fn publish_frame_at<T: AsRef<dyn VideoBuffer>>(
@@ -712,8 +732,7 @@ impl MediaSession {
     ) {
         // Both adapters borrow the same converted pixels; capture/readback and
         // BGRA conversion still happen only once per frame.
-        self.source.capture_frame(frame);
-        self.preview_source.capture_frame(frame);
+        self.capture_raw_frame(frame, captured_at);
         self.publish_hardware_cpu(frame, captured_at, false);
     }
     fn publish_hardware_cpu<T: AsRef<dyn VideoBuffer>>(
@@ -1337,7 +1356,8 @@ impl FrameSink for MediaSession {
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
-        let captured_at = Instant::now();
+        let arrived_at = Instant::now();
+        let captured_at = frame.captured_at.unwrap_or(arrived_at);
         self.performance.set_gpu_device(frame.device);
         self.performance
             .with_thread(crate::performance::ThreadRole::Capture, || {
@@ -1348,7 +1368,7 @@ impl FrameSink for MediaSession {
                 self.pipeline
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())
-                    .record_source(captured_at, captured_at.elapsed());
+                    .record_source(arrived_at, arrived_at.elapsed());
                 if self.has_consumers() {
                     self.wake_capture();
                 }

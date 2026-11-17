@@ -11,6 +11,8 @@ use windows::Win32::Graphics::Direct3D11::{ID3D11Device, ID3D11DeviceContext, ID
 /// The texture is valid only during `FrameSink::frame`. Copy it before returning.
 /// The capture backend owns acquisition/release; consumers own conversion and pacing.
 pub struct TextureFrame<'a> {
+    /// OS frame time mapped to Instant; retained through GPU handoffs and replay.
+    pub captured_at: Option<std::time::Instant>,
     pub device: &'a ID3D11Device,
     pub context: &'a ID3D11DeviceContext,
     pub texture: &'a ID3D11Texture2D,

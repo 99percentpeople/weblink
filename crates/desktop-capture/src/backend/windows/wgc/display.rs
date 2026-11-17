@@ -133,6 +133,9 @@ pub(in super::super) fn start(
                 }
                 let result = (|| -> Result<()> {
                     let frame = pool.TryGetNextFrame().map_err(|e| e.to_string())?;
+                    let captured_at = frame.SystemRelativeTime().ok().and_then(|time| {
+                        super::super::capture_time::system_relative(time.Duration)
+                    });
                     let result = (|| -> Result<()> {
                         let next_size = frame.ContentSize().map_err(|e| e.to_string())?;
                         if next_size.Width <= 0 || next_size.Height <= 0 {
@@ -160,6 +163,7 @@ pub(in super::super) fn start(
                             None
                         };
                         let texture = TextureFrame {
+                            captured_at,
                             device: &device,
                             context: &context,
                             texture: &texture,

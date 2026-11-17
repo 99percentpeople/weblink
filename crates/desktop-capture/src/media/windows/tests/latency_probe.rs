@@ -154,6 +154,7 @@ async fn run_probe() {
             cadence.tick().await;
             media
                 .frame(TextureFrame {
+                    captured_at: None,
                     dirty_regions: None,
                     device: &device,
                     context: &context,
@@ -238,6 +239,7 @@ async fn encoder_only(
     )
     .unwrap();
     let frame = |index: usize| TextureFrame {
+        captured_at: None,
         device,
         context,
         texture: &textures[index % textures.len()],

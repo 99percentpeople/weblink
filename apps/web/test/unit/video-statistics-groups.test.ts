@@ -4,6 +4,33 @@ import { formatVideoStatisticsGroups } from "@/routes/home/components/video-stat
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 
+it("shows display wait beside the other same-frame receiver intervals", () => {
+  const [group] = formatVideoStatisticsGroups([
+    { direction: "receive", peer: "sender" },
+    {
+      direction: "display",
+      latencyEndpoint: "expected-display",
+      endToEndMs: 42,
+      captureToReceiveMs: 12,
+      receiveToPresentMs: 10,
+      displayWaitMs: 20,
+    },
+  ]);
+  expect(
+    group.summary.map(({ key, value }) => [key, value]),
+  ).toEqual([
+    ["endToEndMs", "42.0 ms"],
+    ["captureToReceiveMs", "12.0 ms"],
+    ["receiveToPresentMs", "10.0 ms"],
+    ["displayWaitMs", "20.0 ms"],
+  ]);
+  expect(
+    group.details.some(
+      ({ key }) => key === "displayWaitMs",
+    ),
+  ).toBe(false);
+});
+
 it("merges raw local preview and presentation with one authoritative FPS and low", () => {
   const displayHistory = [
     {

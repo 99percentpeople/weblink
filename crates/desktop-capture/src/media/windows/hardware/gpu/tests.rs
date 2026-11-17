@@ -119,6 +119,7 @@ fn gpu_color_rotation_and_all_cursor_shapes_match_cpu_composition() {
                 }),
             });
             let frame = TextureFrame {
+                captured_at: None,
                 dirty_regions: None,
                 device: &device,
                 context: &context,
@@ -236,6 +237,7 @@ fn concurrent_encoders_share_conversion_but_separate_pixels_and_formats() {
     let pixels = [32, 96, 192, 255].repeat(64 * 32);
     let texture = texture(&device, &pixels);
     let frame = TextureFrame {
+        captured_at: None,
         device: &device,
         context: &context,
         texture: &texture,
@@ -321,6 +323,7 @@ fn shared_conversion_cache_is_bounded_and_rejects_other_devices() {
     let (device, context) = windows_capture::d3d11::create_d3d_device().unwrap();
     let texture = texture(&device, &[96, 96, 96, 255].repeat(64 * 32));
     let frame = TextureFrame {
+        captured_at: None,
         device: &device,
         context: &context,
         texture: &texture,

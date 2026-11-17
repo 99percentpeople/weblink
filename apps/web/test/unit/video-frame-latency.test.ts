@@ -15,14 +15,16 @@ it("partitions a frame without double-counting display wait, buffering or decode
           processingDuration: 0.002,
         });
         expect(
-          v.captureToReceiveMs! + v.receiveToPresentMs!,
+          v.captureToReceiveMs! +
+            v.receiveToPresentMs! +
+            v.displayWaitMs!,
         ).toBe(v.endToEndMs);
         expect(v.endToEndMs).toBe(
-          beforeReceive + afterReceive,
+          beforeReceive + afterReceive + 16,
         );
         expect(v.displayWaitMs).toBe(16);
         expect(v.frameDecodeMs).toBe(2);
-        expect(v.latencyEndpoint).toBe("compositor-submit");
+        expect(v.latencyEndpoint).toBe("expected-display");
       }
     }
   }
@@ -71,7 +73,7 @@ it("keeps missing, invalid and unsynchronized segments absent rather than clampi
     processingDuration: -1,
   });
   expect(v).toEqual({
-    latencyEndpoint: "compositor-submit",
+    latencyEndpoint: "expected-display",
   });
   expect(
     videoFrameLatency({
@@ -79,4 +81,34 @@ it("keeps missing, invalid and unsynchronized segments absent rather than clampi
       presentationTime: 20,
     }).endToEndMs,
   ).toBeUndefined();
+});
+
+it("retains receive and compositor timings while expected display is unavailable", () => {
+  for (const expectedDisplayTime of [
+    undefined,
+    NaN,
+    Infinity,
+    -1,
+    19,
+  ]) {
+    const value = videoFrameLatency({
+      captureTime: 0,
+      receiveTime: 10,
+      presentationTime: 20,
+      expectedDisplayTime,
+    });
+    expect(value).toEqual({
+      latencyEndpoint: "expected-display",
+      captureToReceiveMs: 10,
+      receiveToPresentMs: 10,
+    });
+  }
+  expect(
+    videoFrameLatency({
+      captureTime: 0,
+      receiveTime: 0,
+      presentationTime: 0,
+      expectedDisplayTime: 0,
+    }),
+  ).toMatchObject({ endToEndMs: 0, displayWaitMs: 0 });
 });

@@ -174,6 +174,10 @@ impl GraphicsCaptureApiHandler for Handler {
         Frames::deliver(
             &self.0.frames,
             crate::surface::TextureFrame {
+                captured_at: frame
+                    .timestamp()
+                    .ok()
+                    .and_then(|time| super::capture_time::system_relative(time.Duration)),
                 device: frame.device(),
                 context: frame.device_context(),
                 texture: frame.as_raw_texture(),

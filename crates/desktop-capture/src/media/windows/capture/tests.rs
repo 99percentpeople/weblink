@@ -192,6 +192,7 @@ fn frame<'a>(
     texture: &'a ID3D11Texture2D,
 ) -> TextureFrame<'a> {
     TextureFrame {
+        captured_at: None,
         dirty_regions: None,
         device,
         context,
@@ -220,6 +221,7 @@ fn retained_damage_survives_skipped_captures_and_independent_cpu_readback() {
     }];
     let mut retained = Readback::default();
     let input = |regions| TextureFrame {
+        captured_at: None,
         dirty_regions: Some(regions),
         ..frame(&device, &context, &source)
     };
@@ -251,6 +253,7 @@ fn retained_damage_survives_skipped_captures_and_independent_cpu_readback() {
     let resized = texture(&device, (120, 80), 96);
     retained
         .copy(&TextureFrame {
+            captured_at: None,
             dirty_regions: Some(&first),
             ..frame(&device, &context, &resized)
         })
@@ -557,6 +560,7 @@ fn preview_ack_backpressure_reuses_buffers_and_hiding_releases_them() {
                 let first = texture(&device, (16, 8), 32);
                 media
                     .frame(TextureFrame {
+                        captured_at: None,
                         cursor: Some(&cursor),
                         ..frame(&device, &context, &first)
                     })
@@ -575,6 +579,7 @@ fn preview_ack_backpressure_reuses_buffers_and_hiding_releases_them() {
                     let pixels = texture(&device, (16, 8), value);
                     media
                         .frame(TextureFrame {
+                            captured_at: None,
                             cursor: Some(&cursor),
                             ..frame(&device, &context, &pixels)
                         })

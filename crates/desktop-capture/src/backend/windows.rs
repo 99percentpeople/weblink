@@ -1,4 +1,5 @@
 //! Display and window capture have separate inventories and backend selection.
+mod capture_time;
 mod dxgi;
 mod geometry;
 mod screen;

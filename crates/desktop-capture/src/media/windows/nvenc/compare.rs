@@ -120,6 +120,7 @@ fn surfaces(
             }
             let texture = texture.unwrap();
             let frame = TextureFrame {
+                captured_at: None,
                 device,
                 context,
                 texture: &texture,

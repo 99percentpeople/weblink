@@ -66,6 +66,7 @@ impl Frames {
     ) {
         media
             .frame(TextureFrame {
+                captured_at: None,
                 dirty_regions: None,
                 device: &self.device,
                 context: &self.context,

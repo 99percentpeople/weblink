@@ -76,6 +76,7 @@ impl Transfer {
         rotation: Rotation,
         cursor: Option<&Cursor>,
         dirty_regions: Option<&[DirtyRect]>,
+        captured_at: Option<std::time::Instant>,
         consume: impl FnOnce(TextureFrame<'_>) -> Result<()>,
     ) -> Result<()> {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
@@ -98,6 +99,7 @@ impl Transfer {
         writing.release()?;
         let reading = Access::acquire(&self.surface.read, 1, 0, HANDOFF_TIMEOUT_MS)?;
         let result = consume(TextureFrame {
+            captured_at,
             device: &self.device,
             context: &self.context,
             texture: &self.surface.consumer,

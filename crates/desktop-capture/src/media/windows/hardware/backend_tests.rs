@@ -89,6 +89,7 @@ impl Image {
     }
     fn captured(&self) -> Arc<gpu::Captured> {
         let frame = TextureFrame {
+            captured_at: None,
             device: &self.device,
             context: &self.context,
             texture: &self.texture,
