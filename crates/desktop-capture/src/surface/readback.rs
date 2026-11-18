@@ -17,6 +17,9 @@ pub(crate) mod completion;
 #[derive(Default)]
 pub(crate) struct Readback {
     pub captured_at: Option<std::time::Instant>,
+    /// Local time the new texture became available to the capture workers.
+    /// The backend's capture timestamp may precede callback delivery.
+    pub available_at: Option<std::time::Instant>,
     texture: Option<ID3D11Texture2D>,
     staging: Option<ID3D11Texture2D>,
     staging_size: (u32, u32),
@@ -49,6 +52,7 @@ impl Readback {
 
     pub fn invalidate(&mut self) {
         self.captured_at = None;
+        self.available_at = None;
         self.dirty = true;
         self.generation = self.generation.wrapping_add(1);
         self.gpu_damage = Damage::default();
@@ -127,6 +131,7 @@ impl Readback {
         self.dirty = true;
         self.generation = self.generation.wrapping_add(1);
         self.captured_at = Some(captured_at);
+        self.available_at = Some(std::time::Instant::now());
         self.prepared = false;
         Ok(())
     }

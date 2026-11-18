@@ -88,9 +88,10 @@ fn capture_owner_observes_media_errors_before_or_after_subscription_and_detaches
 impl MediaSession {
     pub(super) fn flush(self: &Arc<Self>) -> Result<()> {
         let preview = self.subscribe_preview(true, |_| true)?;
+        let cadence = crate::media::cadence::CaptureCadence::new(Duration::ZERO, Instant::now());
         loop {
             preview.acknowledge(self.latest_sequence.load(Ordering::Acquire));
-            let work = self.capture_step(true)?;
+            let work = self.capture_step(&cadence)?;
             if work.pending.is_none() {
                 return if work.dirty {
                     Err("Synthetic source was not admitted for readback".into())
@@ -585,6 +586,89 @@ fn updates_live_senders_and_keeps_preview_quality_and_session_identity() {
             })
             .is_err());
     });
+}
+
+#[test]
+fn capture_cadence_tracks_the_fastest_viewer_and_visible_preview() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let _enter = runtime.enter();
+    let media = MediaSession::new(MediaOptions {
+        encoder: "software".into(),
+        codec: Some("video/vp8".into()),
+        frame_rate: 155,
+        ..Default::default()
+    })
+    .unwrap();
+    let viewer = |id| {
+        let peer = crate::room_peer::RoomPeer::open(
+            vec![],
+            false,
+            Arc::new(|_| true),
+            Arc::new(|_, _, _| true),
+        )
+        .unwrap();
+        peer.attach_screen(
+            &media,
+            id,
+            &super::super::SendCodecs {
+                video: "video/vp8".into(),
+                audio: "audio/opus".into(),
+            },
+            None,
+        )
+        .unwrap();
+        peer
+    };
+    let settings = |frame_rate| VideoSettings {
+        frame_rate,
+        max_width: 1280,
+        max_height: 720,
+        max_bitrate: 4_000_000,
+        degradation_preference: "balanced".into(),
+    };
+    let expect_fps = |fps: u32| {
+        assert_eq!(
+            media.frame_interval(),
+            Duration::from_secs_f64(1.0 / f64::from(fps))
+        );
+    };
+    let first = viewer("first");
+    expect_fps(155);
+    media
+        .update_peer_video_settings("first", settings(60))
+        .unwrap();
+    expect_fps(60);
+    let second = viewer("second");
+    expect_fps(155);
+    media
+        .update_peer_video_settings("second", settings(120))
+        .unwrap();
+    expect_fps(120);
+    media.update_video_settings(settings(90)).unwrap();
+    expect_fps(90);
+    media.update_video_settings(settings(155)).unwrap();
+    expect_fps(120);
+    second.detach_screen("second");
+    expect_fps(60);
+
+    let cpu = media.subscribe_preview(false, |_| true).unwrap();
+    let gpu = media.gpu_preview.subscribe(Arc::new(|| {}));
+    expect_fps(155);
+    gpu.set_active(false);
+    expect_fps(60);
+    cpu.set_visible(true);
+    media.notify_previews(1); // An outstanding pixel ACK does not hide the preview.
+    expect_fps(155);
+    gpu.set_active(true);
+    cpu.set_visible(false);
+    expect_fps(155);
+    drop(gpu);
+    expect_fps(60);
+    drop(cpu);
+    first.close();
+    second.close();
+    assert!(!media.has_consumers());
+    media.close();
 }
 
 #[test]

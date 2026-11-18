@@ -6,6 +6,15 @@ use crate::{
 use libwebrtc::prelude::VideoBuffer;
 use windows::Win32::Graphics::{Direct3D11::*, Dxgi::Common::*};
 
+fn unpaced() -> CaptureCadence {
+    CaptureCadence::new(Duration::ZERO, Instant::now())
+}
+
+fn pending_only() -> CaptureCadence {
+    // Drain completed copies without scheduling another before their watchdog.
+    CaptureCadence::new(READBACK_TIMEOUT, Instant::now() + READBACK_TIMEOUT)
+}
+
 #[test]
 fn pending_gpu_work_waits_for_an_event_or_its_watchdog() {
     let now = Instant::now();
@@ -438,7 +447,7 @@ fn bounded_readbacks_deliver_the_final_static_update_and_live_resize() {
                 for index in 0..12 {
                     let pixels = texture(&device, (16, 8), if index == 11 { 240 } else { 16 });
                     media.frame(frame(&device, &context, &pixels)).unwrap();
-                    media.capture_step(true).unwrap();
+                    media.capture_step(&unpaced()).unwrap();
                     let state = media.conversion.lock().unwrap();
                     assert!(state.pending.len() <= readback_buffers as usize);
                     assert!(
@@ -493,9 +502,9 @@ fn closing_with_pending_readback_releases_slots_without_publishing_late_frames()
             let pixels = texture(&device, (8, 8), 128);
             let _preview = media.subscribe_preview(true, |_| true).unwrap();
             media.frame(frame(&device, &context, &pixels)).unwrap();
-            assert!(media.capture_step(true).unwrap().pending.is_some());
+            assert!(media.capture_step(&unpaced()).unwrap().pending.is_some());
             media.close();
-            let state = media.capture_step(false).unwrap();
+            let state = media.capture_step(&pending_only()).unwrap();
             assert!(state.pending.is_none() && !state.dirty);
             assert!(media.latest.lock().unwrap().is_none());
             assert_eq!(media.latest_sequence.load(Ordering::Relaxed), 0);
@@ -520,9 +529,9 @@ fn hiding_during_readback_retains_the_final_static_update_for_resume() {
             let pixels = texture(&device, (8, 8), 128);
             let preview = media.subscribe_preview(true, |_| true).unwrap();
             media.frame(frame(&device, &context, &pixels)).unwrap();
-            assert!(media.capture_step(true).unwrap().pending.is_some());
+            assert!(media.capture_step(&unpaced()).unwrap().pending.is_some());
             preview.set_visible(false);
-            media.capture_step(false).unwrap();
+            media.capture_step(&pending_only()).unwrap();
             assert!(media.conversion.lock().unwrap().pending.is_empty());
             assert!(media.readback.lock().unwrap().dirty);
             assert_eq!(media.latest_sequence.load(Ordering::Acquire), 0);
@@ -584,7 +593,7 @@ fn preview_ack_backpressure_reuses_buffers_and_hiding_releases_them() {
                             ..frame(&device, &context, &pixels)
                         })
                         .unwrap();
-                    media.capture_step(true).unwrap();
+                    media.capture_step(&unpaced()).unwrap();
                     assert_eq!(media.latest_sequence.load(Ordering::Acquire), sequence);
                     let state = media.conversion.lock().unwrap();
                     assert_eq!(state.composed.as_ptr(), scratch);
@@ -603,7 +612,7 @@ fn preview_ack_backpressure_reuses_buffers_and_hiding_releases_them() {
                     assert_eq!(state.composed.as_ptr(), scratch);
                 }
                 preview.set_visible(false);
-                media.capture_step(false).unwrap();
+                media.capture_step(&pending_only()).unwrap();
                 {
                     let state = media.conversion.lock().unwrap();
                     assert!(state.pending.is_empty() && state.reusable.is_empty());

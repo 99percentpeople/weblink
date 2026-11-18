@@ -53,6 +53,7 @@ pub struct Stats {
 #[derive(Default)]
 pub struct Source {
     state: Mutex<SourceState>,
+    demand_wake: Option<Wake>,
     next: AtomicU64,
     sequence: AtomicU64,
     stats: Mutex<Stats>,
@@ -65,8 +66,14 @@ pub struct Subscription {
 impl Subscription {
     pub fn set_active(&self, active: bool) {
         if let Some(source) = self.source.upgrade() {
-            if let Some(watcher) = source.state.lock().unwrap().watchers.get_mut(&self.id) {
+            let mut state = source.state.lock().unwrap();
+            if let Some(watcher) = state.watchers.get_mut(&self.id) {
+                if watcher.demand == active {
+                    return;
+                }
                 watcher.demand = active;
+                drop(state);
+                source.wake_demand();
             }
         }
     }
@@ -91,11 +98,25 @@ impl Subscription {
 impl Drop for Subscription {
     fn drop(&mut self) {
         if let Some(source) = self.source.upgrade() {
-            source.state.lock().unwrap().watchers.remove(&self.id);
+            let removed = source.state.lock().unwrap().watchers.remove(&self.id);
+            if removed.is_some_and(|watcher| watcher.demand) {
+                source.wake_demand();
+            }
         }
     }
 }
 impl Source {
+    pub(crate) fn with_demand_wake(wake: Wake) -> Self {
+        Self {
+            demand_wake: Some(wake),
+            ..Self::default()
+        }
+    }
+    fn wake_demand(&self) {
+        if let Some(wake) = &self.demand_wake {
+            wake();
+        }
+    }
     pub fn publish(&self, texture: Texture) {
         self.publish_with_capture(texture, None);
     }
@@ -171,6 +192,7 @@ impl Source {
                 .map(|watcher| watcher.wake.clone())
                 .collect::<Vec<_>>()
         };
+        self.wake_demand();
         for callback in callbacks {
             callback();
         }
@@ -188,6 +210,9 @@ impl Source {
                 frames: true,
             },
         );
+        if active {
+            self.wake_demand();
+        }
         wake();
         Subscription {
             source: Arc::downgrade(self),

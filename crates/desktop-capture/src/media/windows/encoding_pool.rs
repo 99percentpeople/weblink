@@ -47,6 +47,12 @@ struct Slot {
     output: Option<Arc<Output>>,
 }
 impl Slot {
+    fn needs_capture(&self) -> bool {
+        // A paused recording keeps its encoder lease for resume. Only an active
+        // recording tap, a viewer or a warming replacement needs input frames.
+        !self.recording || self.encoder.recording.has_subscriber()
+    }
+
     fn budget(&self) -> u32 {
         self.target.unwrap_or(300_000).min(self.options.max_bitrate) as u32
     }
@@ -346,9 +352,36 @@ impl Pool {
             .map(|s| s.encoder.clone())
     }
     pub fn active(&self) -> Vec<(String, Arc<hardware::Encoder>)> {
+        self.matching_encoders(|_| true)
+    }
+    pub fn capture_inputs(&self) -> Vec<(String, Arc<hardware::Encoder>)> {
+        self.matching_encoders(Slot::needs_capture)
+    }
+    pub fn needs_readback(&self) -> bool {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .slots
+            .values()
+            .any(|slot| slot.encoder.needs_readback() && slot.needs_capture())
+    }
+    pub fn capture_frame_rate(&self) -> Option<u32> {
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .slots
+            .values()
+            .filter(|slot| slot.needs_capture())
+            .map(|slot| slot.options.frame_rate)
+            .max()
+    }
+    fn matching_encoders(
+        &self,
+        include: impl Fn(&Slot) -> bool,
+    ) -> Vec<(String, Arc<hardware::Encoder>)> {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut encoders: Vec<(String, Arc<hardware::Encoder>)> = Vec::new();
-        for slot in state.slots.values() {
+        for slot in state.slots.values().filter(|slot| include(slot)) {
             if !encoders.iter().any(|(_, e)| Arc::ptr_eq(e, &slot.encoder)) {
                 encoders.push((slot.id.clone(), slot.encoder.clone()));
             }

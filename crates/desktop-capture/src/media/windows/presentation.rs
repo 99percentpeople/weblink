@@ -120,7 +120,7 @@ impl PreviewSubscription {
             {
                 watches.remove(&self.id);
             }
-            media.notify.notify_one();
+            media.wake_capture();
         }
     }
     /// Acknowledge pixels already copied; a concurrently newer frame is notified again.
@@ -134,6 +134,7 @@ impl PreviewSubscription {
             watch.notified = false;
             if !watch.notify(media.latest_sequence.load(Ordering::Acquire)) {
                 watches.remove(&self.id);
+                media.gpu_notify.notify_one();
             }
             media.notify.notify_one();
         }
@@ -147,7 +148,7 @@ impl Drop for PreviewSubscription {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(&self.id);
-            media.notify.notify_one();
+            media.wake_capture();
         }
     }
 }
@@ -174,7 +175,7 @@ impl MediaSession {
         }
         let id = uuid::Uuid::new_v4().to_string();
         watches.insert(id.clone(), watch);
-        self.notify.notify_one();
+        self.wake_capture();
         Ok(PreviewSubscription {
             media: Arc::downgrade(self),
             id,
@@ -186,11 +187,7 @@ impl MediaSession {
             .unwrap_or_else(|e| e.into_inner())
             .values()
             .any(|peer| peer.raw_video)
-            || self
-                .hardware
-                .active()
-                .iter()
-                .any(|(_, encoder)| encoder.needs_readback())
+            || self.hardware.needs_readback()
             || self
                 .previews
                 .lock()
@@ -199,12 +196,12 @@ impl MediaSession {
                 .any(|watch| watch.visible && !watch.notified)
     }
     pub(super) fn has_consumers(&self) -> bool {
-        !self
-            .peers
+        self.peers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .is_empty()
-            || !self.hardware.active().is_empty()
+            .values()
+            .any(|peer| peer.raw_video || peer.encoded.is_some())
+            || self.hardware.capture_frame_rate().is_some()
             || self.has_visible_previews()
             || self.gpu_preview.active()
     }
@@ -216,10 +213,12 @@ impl MediaSession {
             .any(|watch| watch.visible)
     }
     pub(super) fn notify_previews(&self, sequence: u64) {
-        self.previews
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .retain(|_, watch| watch.notify(sequence));
+        let mut watches = self.previews.lock().unwrap_or_else(|e| e.into_inner());
+        let before = watches.len();
+        watches.retain(|_, watch| watch.notify(sequence));
+        if watches.len() != before {
+            self.wake_capture();
+        }
     }
     pub(super) fn end_previews(&self) {
         for (_, watch) in self

@@ -45,13 +45,13 @@ impl MediaSession {
                 if session.closed.load(Ordering::Acquire) {
                     break;
                 }
-                cadence.set_interval(session.frame_interval(), Instant::now());
-                let admit = cadence.ready(Instant::now());
+                let now = Instant::now();
+                cadence.set_interval(session.frame_interval(), now);
                 let result = tokio::task::spawn_blocking(move || {
                     session
                         .performance
                         .with_thread(crate::performance::ThreadRole::Capture, || {
-                            session.gpu_step(admit)
+                            session.gpu_step(&cadence)
                         })
                 })
                 .await;
@@ -82,7 +82,7 @@ impl MediaSession {
             }
         }
     }
-    fn gpu_step(&self, admit: bool) -> Work {
+    fn gpu_step(&self, cadence: &CaptureCadence) -> Work {
         if let Err(error) = self.hardware.reconcile(self.encoding_wake()) {
             let mut errors = self.peer_errors.lock().unwrap_or_else(|e| e.into_inner());
             if errors.len() >= 16 {
@@ -93,7 +93,7 @@ impl MediaSession {
         self.reap_failed_encoders();
         let encoders: Vec<_> = self
             .hardware
-            .active()
+            .capture_inputs()
             .into_iter()
             .map(|(_, encoder)| encoder)
             .filter(|e| !e.needs_readback())
@@ -123,7 +123,10 @@ impl MediaSession {
         } else {
             state.sent.map(|at| at + STATIC_REFRESH_INTERVAL)
         };
-        if !admit || (!dirty && repeat.is_some_and(|at| at > Instant::now())) {
+        let now = Instant::now();
+        let arrived_at = readback.available_at.filter(|_| dirty);
+        let admission = cadence.admitted_interval(arrived_at, now);
+        if admission.is_none() || (!dirty && repeat.is_some_and(|at| at > now)) {
             return Work {
                 dirty,
                 has_capacity: true,
@@ -203,11 +206,14 @@ impl MediaSession {
                     .fail(format!("Native preview conversion failed: {error}"));
             }
         }
-        let frame = Arc::new(hardware::Frame::from_gpu(
-            state.latest.as_ref().unwrap().clone(),
-            &options,
-            captured_at,
-        ));
+        let frame = Arc::new(
+            hardware::Frame::from_gpu(
+                state.latest.as_ref().unwrap().clone(),
+                &options,
+                captured_at,
+            )
+            .with_capture_interval(admission),
+        );
         for encoder in encoders {
             encoder.submit(frame.clone());
         }

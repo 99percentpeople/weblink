@@ -262,9 +262,10 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
                 continue;
             }
             assert!(media.open_recording("gpu".into(), true, None).unwrap().is_some());
+            let recording_encoder = media.hardware.encoder("recording:gpu").unwrap();
             for segment in [1, 2] {
                 media.control_recording("gpu", true, segment).unwrap();
-                let before = encoder.statistics().frames;
+                let before = recording_encoder.statistics().frames;
                 let mut data = Vec::new();
                 let start = Instant::now();
                 while start.elapsed() < Duration::from_secs(1) {
@@ -278,13 +279,16 @@ fn gpu_recording_reuses_both_codecs_and_keeps_pause_resume_and_slow_sinks_off_tr
                 assert_eq!(data[33], if codec == "video/h264" { 1 } else { 2 });
                 assert_eq!(data[34], 1, "A resumed segment must start on a keyframe");
                 assert_eq!(u32::from_le_bytes(data[4..8].try_into().unwrap()), segment);
-                assert!(encoder.statistics().frames > before);
+                assert!(recording_encoder.statistics().frames > before);
                 media.control_recording("gpu", false, segment).unwrap();
                 frames.send(&media, segment as usize);
                 tokio::time::sleep(Duration::from_millis(150)).await;
                 assert!(media.read_recording("gpu").unwrap().is_empty());
             }
             media.close_recording("gpu");
+            // Bandwidth feedback can move the viewer to a different encoder while
+            // recording. Exercise the slow sink on the viewer's live encoder.
+            let encoder = media.hardware.encoder("sender").unwrap();
             let slow = encoder.recording.subscribe().unwrap();
             encoder.request_recording_keyframe();
             let before = encoder.statistics().frames;

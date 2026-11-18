@@ -25,11 +25,13 @@ pub(super) struct Conversion {
     pending: VecDeque<PendingFrame>,
     reusable: Vec<PendingReadback>,
     composed: Vec<u8>,
+    submitted_generation: Option<u64>,
 }
 
 struct PendingFrame {
     gpu: PendingReadback,
     options: MediaOptions,
+    capture_interval: Duration,
     captured_at: Option<Instant>,
     submitted_at: Instant,
     capture_wait: Option<Duration>,
@@ -79,9 +81,8 @@ impl MediaSession {
     pub(super) fn start_capture_worker(session: &Arc<Self>) {
         let weak = Arc::downgrade(session);
         let notify = session.notify.clone();
-        let interval = session.frame_interval();
         tokio::spawn(async move {
-            let mut cadence = CaptureCadence::new(interval, Instant::now());
+            let mut active_cadence = None;
             loop {
                 let Some(session) = weak.upgrade() else { break };
                 if session.closed.load(Ordering::Acquire) {
@@ -93,22 +94,24 @@ impl MediaSession {
                     session.pause_conversion(
                         &mut session.conversion.lock().unwrap_or_else(|e| e.into_inner()),
                     );
-                    let interval = session.frame_interval();
+                    active_cadence = None;
                     drop(session);
                     notify.notified().await;
-                    cadence.reset(interval, Instant::now());
                     continue;
                 }
                 let now = Instant::now();
-                cadence.set_interval(session.frame_interval(), now);
-                let admit = cadence.ready(now);
+                let interval = session.frame_interval();
+                let cadence =
+                    active_cadence.get_or_insert_with(|| CaptureCadence::new(interval, now));
+                cadence.set_interval(interval, now);
+                let admission = *cadence;
                 // One worker operation at a time. GPU events never wait in Map;
                 // CPU conversion runs off the async executor and capture mutex.
                 let result = tokio::task::spawn_blocking(move || {
                     session
                         .performance
                         .with_thread(crate::performance::ThreadRole::Capture, || {
-                            session.capture_step(admit)
+                            session.capture_step(&admission)
                         })
                 })
                 .await;
@@ -128,7 +131,7 @@ impl MediaSession {
                     }
                 };
                 cadence.complete(work.submitted_at);
-                if let Some(wait) = work.wait(&cadence, Instant::now()) {
+                if let Some(wait) = work.wait(cadence, Instant::now()) {
                     let _ = tokio::time::timeout(wait, notify.notified()).await;
                 } else {
                     notify.notified().await;
@@ -137,7 +140,7 @@ impl MediaSession {
         });
     }
 
-    pub(super) fn capture_step(&self, admit: bool) -> Result<Work> {
+    pub(super) fn capture_step(&self, cadence: &CaptureCadence) -> Result<Work> {
         let mut conversion = self.conversion.lock().unwrap_or_else(|e| e.into_inner());
         self.reap_failed_encoders();
         if self.closed.load(Ordering::Acquire) {
@@ -215,7 +218,7 @@ impl MediaSession {
                 return Ok(Work::default());
             }
             let pixels = Arc::new(VideoFrame::new(VideoRotation::VideoRotation0, buffer));
-            self.publish_frame_at(&pixels, frame.captured_at);
+            self.publish_frame_at(&pixels, frame.captured_at, frame.capture_interval);
             *self.last_sent.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
             let mut latest = self.latest.lock().unwrap_or_else(|e| e.into_inner());
             if self.closed.load(Ordering::Acquire) {
@@ -249,7 +252,15 @@ impl MediaSession {
             readback.dirty = true;
         }
         timing.mark(0);
-        if admit && readback.dirty && conversion.pending.len() < self.readback_buffers {
+        let can_submit = readback.dirty && conversion.pending.len() < self.readback_buffers;
+        // An encoder wake may request the same retained pixels again.
+        let arrived_at = readback
+            .available_at
+            .filter(|_| conversion.submitted_generation != Some(readback.generation));
+        if let Some(capture_interval) = cadence
+            .admitted_interval(arrived_at, Instant::now())
+            .filter(|_| can_submit)
+        {
             let options = self
                 .options
                 .lock()
@@ -273,6 +284,7 @@ impl MediaSession {
             conversion.pending.push_back(PendingFrame {
                 gpu,
                 options,
+                capture_interval,
                 captured_at,
                 capture_wait,
                 submitted_at: Instant::now(),
@@ -286,6 +298,7 @@ impl MediaSession {
             // New arrivals and settings changes can mark the retained source
             // dirty while these independent staging copies are still in flight.
             readback.dirty = false;
+            conversion.submitted_generation = Some(readback.generation);
             submitted_at = Some(admitted_at);
         }
         let mut work = Work {
@@ -303,7 +316,7 @@ impl MediaSession {
         drop(readback);
         let keyframe = self
             .hardware
-            .active()
+            .capture_inputs()
             .iter()
             .any(|(_, encoder)| encoder.needs_readback() && encoder.needs_keyframe_input());
         if keyframe && work.repeat.is_some() {
@@ -311,7 +324,11 @@ impl MediaSession {
             // retained texture or perform another GPU readback on a static screen.
             work.repeat = Some(Instant::now());
         }
-        if admit && !published && work.pending.is_none() && !work.dirty {
+        let can_repeat = !published && work.pending.is_none() && !work.dirty;
+        if let Some(capture_interval) = cadence
+            .admitted_interval(None, Instant::now())
+            .filter(|_| can_repeat)
+        {
             let latest = self
                 .latest
                 .lock()
@@ -323,7 +340,7 @@ impl MediaSession {
             {
                 if let Some(frame) = latest.as_ref() {
                     work.submitted_at = Some(Instant::now());
-                    self.publish_frame_at(frame, None);
+                    self.publish_frame_at(frame, None, capture_interval);
                     *sent = Instant::now();
                     work.repeat = Some(*sent + STATIC_REFRESH_INTERVAL);
                 }

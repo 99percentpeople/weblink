@@ -272,6 +272,53 @@ fn acquire(pool: &Arc<Pool>, id: &str, recording: bool) -> Arc<Consumer> {
     .unwrap()
 }
 #[test]
+fn capture_uses_the_highest_viewer_or_active_recording_rate() {
+    let pool = Arc::new(Pool::default());
+    let attach = |id: &str, fps, recording| {
+        pool.acquire(
+            id.into(),
+            "test".into(),
+            MediaOptions {
+                frame_rate: fps,
+                ..options()
+            },
+            false,
+            recording,
+            Arc::new(|| {}),
+        )
+        .unwrap()
+    };
+    let viewer = attach("viewer", 60, false);
+    let recording = attach("recording", 155, true);
+    let encoder = recording.encoder().unwrap();
+    assert_eq!(pool.capture_frame_rate(), Some(60));
+    assert_eq!(pool.capture_inputs().len(), 1);
+
+    let tap = &encoder.recording;
+    let sub = tap.subscribe().unwrap();
+    assert_eq!(pool.capture_frame_rate(), Some(155));
+    assert_eq!(pool.capture_inputs().len(), 2);
+    tap.set_active(&sub, false, 1);
+    assert_eq!(pool.capture_frame_rate(), Some(60));
+    viewer.close();
+    assert_eq!(pool.capture_frame_rate(), None);
+    assert!(pool.capture_inputs().is_empty());
+    assert_eq!(pool.active().len(), 1);
+
+    tap.set_active(&sub, true, 2);
+    assert_eq!(pool.capture_frame_rate(), Some(155));
+    let fast_viewer = attach("another-viewer", 155, false);
+    confirm_startup(&pool);
+    assert_eq!(pool.capture_inputs().len(), 1); // A shared encoder takes one input.
+    tap.unsubscribe(&sub);
+    assert_eq!(pool.capture_frame_rate(), Some(155));
+    fast_viewer.close();
+    assert_eq!(pool.capture_frame_rate(), None);
+    recording.close();
+    pool.close();
+}
+
+#[test]
 fn concurrent_viewers_and_recording_share_one_encoder_and_own_their_lifetimes() {
     let pool = Arc::new(Pool::default());
     let threads: Vec<_> = (0..8)

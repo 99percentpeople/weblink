@@ -40,6 +40,8 @@ pub struct Frame {
     height: u32,
     captured_at: Option<Instant>,
     ready_at: Instant,
+    // The interval that admitted this frame, even if live settings have since changed.
+    capture_interval: Option<Duration>,
     damage: Damage,
 }
 #[derive(Clone)]
@@ -62,6 +64,7 @@ impl Frame {
             height,
             captured_at,
             ready_at: Instant::now(),
+            capture_interval: None,
         }
     }
     fn device(&self) -> Option<&windows::Win32::Graphics::Direct3D11::ID3D11Device> {
@@ -78,8 +81,14 @@ impl Frame {
             damage: Damage::default(),
             captured_at,
             ready_at: Instant::now(),
+            capture_interval: None,
         }
     }
+    pub(super) fn with_capture_interval(mut self, interval: Option<Duration>) -> Self {
+        self.capture_interval = interval;
+        self
+    }
+
     fn scaled(&self, options: &MediaOptions) -> Self {
         let (width, height) = match &self.input {
             Input::Texture(texture) => texture.size(),
@@ -96,6 +105,7 @@ impl Frame {
             },
             captured_at: self.captured_at,
             ready_at: self.ready_at,
+            capture_interval: self.capture_interval,
         }
     }
     fn nv12(buffer: &I420Buffer, width: u32, height: u32) -> Vec<u8> {
@@ -503,8 +513,8 @@ fn run(
     };
     let mut frame_budget = FrameBudget::new(rate_control.current());
     let mut driver_bitrate = DriverBitrateUpdates::new(rate_control.current(), started.elapsed());
-    // Each profile admits at its own cap while capture retains the publisher's
-    // ceiling. Retain the newest frame until its deadline, including static tails.
+    // Only profiles below the capture rate need their own deadline.
+    // Keep the newest input across a wait, including the final static frame.
     let mut cadence = CaptureCadence::new(
         Duration::from_secs_f64(1.0 / options.frame_rate as f64),
         started,
@@ -812,14 +822,14 @@ fn run(
                 }
             }
             if active.ready() {
-                if latest.is_some() {
+                if let Some(frame) = latest.as_ref() {
                     // A scene change can overspend a frame's budget just before
                     // capture goes idle. Keep its newest successor until eligible.
                     let budget = frame_budget.next_input_in(started.elapsed());
                     let cadence_delay = if keyframe {
                         Duration::ZERO
                     } else {
-                        cadence.remaining(Instant::now())
+                        cadence.input_wait(frame.capture_interval, Instant::now())
                     };
                     waiting_for_budget = budget.is_none_or(|wait| wait > cadence_delay);
                     let delay = budget.map(|wait| wait.max(cadence_delay));
@@ -911,7 +921,7 @@ fn run(
                         continue;
                     }
                     timeline.accepted(timestamp);
-                    cadence.complete(Some(input_at));
+                    cadence.complete_input(input_at, frame.capture_interval);
                     damage.take();
                     if active.take_controls_changed() {
                         statistics
@@ -1012,6 +1022,23 @@ fn continue_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resizing_keeps_the_original_capture_interval() {
+        let pixels = I420Buffer::new_black(64, 64);
+        let frame = Frame::from_i420(&pixels, None);
+        let settings = MediaOptions {
+            max_width: 32,
+            max_height: 32,
+            frame_rate: 60,
+            ..Default::default()
+        };
+        assert_eq!(frame.scaled(&settings).capture_interval, None);
+        let admitted = Some(Duration::from_secs_f64(1.0 / 155.0));
+        let scaled = frame.with_capture_interval(admitted).scaled(&settings);
+        assert_eq!((scaled.width, scaled.height), (32, 32));
+        assert_eq!(scaled.capture_interval, admitted);
+    }
 
     #[test]
     #[ignore = "Requires a Windows Media Foundation H.264 hardware encoder"]

@@ -78,7 +78,7 @@ fn native_hevc(gpu: bool) {
             // RTP/RTCP clock mapping, decode and the compositor handoff.
             let captured = Instant::now() - Duration::from_millis(100);
             media.capture_raw_frame(&frame, Some(captured));
-            media.publish_hardware_cpu(&frame, Some(captured), true);
+            media.publish_hardware_cpu(&frame, Some(captured), None, true);
             assert!(media.error().is_none(), "{:?}", media.error());
             if let Some(recording) = &recording {
                 let data = recording.read_frame(recorded_sequence).await.unwrap();

@@ -310,8 +310,12 @@ impl MediaSession {
         let changed = Arc::new(crate::lifecycle::Subscription::default());
         let gpu_notify = Arc::new(tokio::sync::Notify::new());
         let notify = Arc::new(tokio::sync::Notify::new());
-        let feedback = gpu_notify.clone();
+        let gpu_feedback = gpu_notify.clone();
         let cpu_feedback = notify.clone();
+        let feedback: crate::surface::gpu::Wake = Arc::new(move || {
+            gpu_feedback.notify_one();
+            cpu_feedback.notify_one();
+        });
         let session = Arc::new(Self {
             // 0..0 asks the receiver to decode and present complete frames
             // immediately, without a second presentation queue. In Chromium,
@@ -334,10 +338,7 @@ impl MediaSession {
             peers: Mutex::new(HashMap::new()),
             // Feedback only schedules group reconciliation, never a CPU readback.
             hardware: Arc::new(encoding_pool::Pool::new(
-                Arc::new(move || {
-                    feedback.notify_one();
-                    cpu_feedback.notify_one();
-                }),
+                feedback.clone(),
                 performance.clone(),
             )),
             performance,
@@ -351,7 +352,7 @@ impl MediaSession {
             readback: Mutex::new(Readback::default()),
             conversion: Mutex::new(Default::default()),
             gpu_capture: Mutex::new(Default::default()),
-            gpu_preview: Arc::new(Default::default()),
+            gpu_preview: Arc::new(crate::presentation::Source::with_demand_wake(feedback)),
             gpu_notify,
             readback_requested: Arc::new(AtomicBool::new(false)),
             readback_buffers: options.readback_buffers as usize,
@@ -372,8 +373,33 @@ impl MediaSession {
     }
 
     fn frame_interval(&self) -> Duration {
-        let options = self.options.lock().unwrap_or_else(|e| e.into_inner());
-        Duration::from_secs_f64(1.0 / options.frame_rate as f64)
+        let ceiling = self
+            .options
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .frame_rate;
+        // Local pixel previews use the publisher's selected rate while visible.
+        // Encoded viewers and recordings already have bounded profiles in the pool.
+        let fps = if self.has_visible_previews() || self.gpu_preview.active() {
+            ceiling
+        } else {
+            let raw = self
+                .peers
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .values()
+                .filter(|peer| peer.raw_video)
+                .map(|peer| {
+                    peer.limits
+                        .as_ref()
+                        .map_or(ceiling, |limits| limits.frame_rate)
+                })
+                .max();
+            raw.max(self.hardware.capture_frame_rate())
+                .unwrap_or(ceiling)
+                .min(ceiling)
+        };
+        Duration::from_secs_f64(1.0 / f64::from(fps))
     }
 
     pub fn update_video_settings(&self, settings: VideoSettings) -> Result<()> {
@@ -703,7 +729,7 @@ impl MediaSession {
     #[cfg(test)]
     pub(crate) fn publish_frame(&self, frame: &VideoFrame<libwebrtc::video_frame::I420Buffer>) {
         self.capture_raw_frame(frame, None);
-        self.publish_hardware_cpu(frame, Some(Instant::now()), true);
+        self.publish_hardware_cpu(frame, Some(Instant::now()), None, true);
     }
 
     fn capture_raw_frame<T: AsRef<dyn VideoBuffer>>(
@@ -729,21 +755,23 @@ impl MediaSession {
         &self,
         frame: &VideoFrame<T>,
         captured_at: Option<Instant>,
+        capture_interval: Duration,
     ) {
         // Both adapters borrow the same converted pixels; capture/readback and
         // BGRA conversion still happen only once per frame.
         self.capture_raw_frame(frame, captured_at);
-        self.publish_hardware_cpu(frame, captured_at, false);
+        self.publish_hardware_cpu(frame, captured_at, Some(capture_interval), false);
     }
     fn publish_hardware_cpu<T: AsRef<dyn VideoBuffer>>(
         &self,
         frame: &VideoFrame<T>,
         captured_at: Option<Instant>,
+        capture_interval: Option<Duration>,
         force: bool,
     ) {
         let hardware: Vec<_> = self
             .hardware
-            .active()
+            .capture_inputs()
             .into_iter()
             .map(|(_, encoder)| encoder)
             .filter(|encoder| force || encoder.needs_readback())
@@ -756,7 +784,9 @@ impl MediaSession {
         };
         // Conversion must not hold the encoder registry lock: a CPU fallback peer
         // cannot delay admission to independent GPU peers.
-        let frame = Arc::new(hardware::Frame::from_i420(buffer, captured_at));
+        let frame = Arc::new(
+            hardware::Frame::from_i420(buffer, captured_at).with_capture_interval(capture_interval),
+        );
         for encoder in hardware {
             encoder.submit(frame.clone());
         }
@@ -893,10 +923,13 @@ impl MediaSession {
         self.recordings.read(id)
     }
     pub fn control_recording(&self, id: &str, active: bool, segment: u32) -> Result<()> {
-        self.recordings.control(id, active, segment)
+        self.recordings.control(id, active, segment)?;
+        self.wake_capture();
+        Ok(())
     }
     pub fn close_recording(&self, id: &str) {
         self.recordings.close(id);
+        self.wake_capture();
     }
 
     /// Reuse only an already connected remote hardware H.264 sender. Software
