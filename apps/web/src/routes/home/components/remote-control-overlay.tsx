@@ -328,16 +328,6 @@ export function RemoteControlOverlay(props: {
             !!nativeKeys() &&
             !surface()?.ownerDocument.hidden,
           input: (event) => c.input(event),
-          clipboard: (action) => {
-            const input = props.keyboard?.();
-            if (!input?.clipboardEnabled?.(action))
-              return false;
-            return (
-              (action === "copy"
-                ? input.copy?.()
-                : input.paste?.()) !== false
-            );
-          },
           reset: () => {
             nativeStopped = true;
             c.resetInput();
@@ -390,24 +380,6 @@ export function RemoteControlOverlay(props: {
         if (!accepts(e)) return;
         // The Windows hook suppresses every event it forwards. Events reaching
         // the DOM were passed through (e.g. injected input) and still need forwarding.
-        if (
-          props
-            .keyboard?.()
-            ?.clipboardEnabled?.(
-              e.code === "KeyC" ? "copy" : "paste",
-            ) &&
-          (e.ctrlKey || e.metaKey) &&
-          !e.altKey &&
-          !e.shiftKey &&
-          ["KeyC", "KeyV"].includes(e.code)
-        ) {
-          keyboard?.release();
-          if (e.code === "KeyC") {
-            e.preventDefault();
-            if (!e.repeat) props.keyboard?.()?.copy?.();
-          }
-          return;
-        }
         if (keyboard?.down(e)) {
           e.preventDefault();
           e.stopPropagation();

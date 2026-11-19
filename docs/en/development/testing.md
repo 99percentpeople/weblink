@@ -165,7 +165,7 @@ entry dependency without missing-context errors. It also checks root disposal
 and keeps the source workspace unchanged.
 
 `bun run test:e2e:clipboard` checks standard text clipboard interoperability in Chromium.
-It starts a promised write from Ctrl+C, delays the data beyond transient activation,
+It writes the received data after transient activation has expired
 and verifies Unicode text and line breaks using a real Ctrl+V paste event, with no
 custom formats. The disposable browser context receives clipboard permissions for
 the local test origin.

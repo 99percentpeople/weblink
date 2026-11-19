@@ -162,6 +162,16 @@ export async function unpackClipboard(
 }
 const decode = (entry: ClipboardEntry) =>
   Uint8Array.from(atob(entry.data), (c) => c.charCodeAt(0));
+/** Empty reads are ordinary. Empty files are still pasteable files. */
+export function pasteableContent(
+  content: ClipboardContent,
+  maxFileBytes = MAX_REMOTE_FILE_BYTES,
+): ClipboardContent {
+  if (content.length) checkContent(content, maxFileBytes);
+  return content.filter(
+    (entry) => entry.type === "file" || entry.blob.size > 0,
+  );
+}
 export async function fromNativeClipboard(
   entries: ClipboardEntry[],
   signal?: AbortSignal,
@@ -229,8 +239,7 @@ export async function fromNativeClipboard(
     const blob = await compressFiles(files, name, signal);
     result.push({ type: "file", name: blob.name, blob });
   }
-  checkContent(result, maxFileBytes);
-  return result;
+  return pasteableContent(result, maxFileBytes);
 }
 export async function toNativeClipboard(
   content: ClipboardContent,
@@ -290,8 +299,7 @@ export function fromPaste(
           blob: file,
         });
     }
-    checkContent(result, maxFileBytes);
-    return result;
+    return pasteableContent(result, maxFileBytes);
   });
 }
 /** Probe APIs and permission state only; never read or overwrite clipboard data to test access. */
@@ -312,7 +320,7 @@ export async function readBrowserClipboard(): Promise<ClipboardContent> {
   if (!browserClipboardAccess().read)
     throw new Error("Clipboard read unavailable");
   if (typeof navigator.clipboard.read !== "function") {
-    return [
+    return pasteableContent([
       {
         type: "text/plain",
         blob: new Blob(
@@ -320,7 +328,7 @@ export async function readBrowserClipboard(): Promise<ClipboardContent> {
           { type: "text/plain" },
         ),
       },
-    ];
+    ]);
   }
   const items = await navigator.clipboard.read();
   const result: ClipboardContent = [];
@@ -335,8 +343,7 @@ export async function readBrowserClipboard(): Promise<ClipboardContent> {
           type: type as ClipboardContent[number]["type"],
           blob: await item.getType(type),
         });
-  checkContent(result);
-  return result;
+  return pasteableContent(result);
 }
 /** Only interoperable clipboard formats; web custom bundles are not native files. */
 export function browserClipboardFormats(): ClipboardFormat[] {
@@ -353,37 +360,6 @@ export function browserClipboardFormats(): ClipboardFormat[] {
       ? ClipboardItem.supports(type)
       : type !== "text/rtf",
   );
-}
-
-/** Start writing within the copy gesture, before a potentially long network transfer. */
-export function beginBrowserClipboardWrite(
-  content: Promise<ClipboardContent>,
-): Promise<void> | undefined {
-  if (
-    typeof ClipboardItem === "undefined" ||
-    typeof navigator.clipboard?.write !== "function" ||
-    !browserClipboardFormats().includes("text/plain")
-  )
-    return;
-  const text = content.then((entries) => {
-    checkContent(entries);
-    const plain = entries.find(
-      (entry) => entry.type === "text/plain",
-    );
-    if (plain) return plain.blob;
-    throw new Error("No plain text alternative");
-  });
-  void text.catch(() => {});
-  const data: Record<string, Promise<Blob>> = {
-    "text/plain": text,
-  };
-  try {
-    return navigator.clipboard.write([
-      new ClipboardItem(data),
-    ]);
-  } catch (error) {
-    return Promise.reject(error);
-  }
 }
 
 export async function writeBrowserClipboard(

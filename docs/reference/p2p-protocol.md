@@ -175,7 +175,7 @@ Pending 所有者可完成交接；其他观看者保留控制操作，但主机
 `controlled` 加上匹配的 client、source 标识公开所有者。可选 `controllerKind: "remote" | "automation"` 标识授权类型，`automationActive: boolean` 标识当前自动化使用，包括借用手动授权。主机向所有观察者发送两者。旧 peer 缺少这些字段仍有效，但这些字段或猜测类型都不代表接管权限；控制标签与图标直接使用它们，不依赖本地控制者信息。
 公开状态不是输入凭据：只有请求方收到绑定其连接、来源、媒体和几何的原生 grant，确认激活后才开始输入。Grant ID 和输入 epoch 从不进入公开快照。能力声明也不能替代房间 token、文件访问检查、剪贴板 grant 或测速同意。测速在打开数据通道前检查 busy，接收方仍负责仲裁并发启动。
 
-小型远程剪贴板纯文本、富文本使用一个 `remote-clipboard` 请求，包含 `action: "inline"`、方向、operation/grant ID 和 `{type, data}` 条目。编码后的条目数组最多 8 KiB，最多三种不重复文本格式。更大文本、图片和文件使用现有有界二进制通道。粘贴须等原生剪贴板应用后才完成；复制选区仍先准备原生剪贴板序列，再注入 Ctrl+C。重试、取消和撤销保留相同 grant、operation 校验。
+小型远程剪贴板纯文本、富文本使用一个 `remote-clipboard` 请求，包含 `action: "inline"`、方向、operation/grant ID 和 `{type, data}` 条目。编码后的条目数组最多 8 KiB，最多三种不重复文本格式。更大文本、图片和文件使用现有有界二进制通道。宿主写入剪贴板后确认粘贴请求。宿主的剪贴板变化通知触发读取，物理按键独立转发。重试、取消和撤销保留相同 grant、operation 校验。
 
 ## 请求类型与 ACK 策略 {#request-types-and-ack-policy}
 

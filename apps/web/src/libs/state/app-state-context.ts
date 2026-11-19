@@ -42,7 +42,7 @@ export interface AppStateContextProps {
     Partial<Pick<RemoteFileDrop, "hover" | "leave">>;
   remoteClipboard: Pick<
     RemoteClipboard,
-    "copy" | "paste" | "watch"
+    "readCurrent" | "paste" | "watch"
   >;
   permissions: AppPermissions;
   mediaCapabilities: AppMediaCapabilities;

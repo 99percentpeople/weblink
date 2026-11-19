@@ -304,8 +304,8 @@ Small remote clipboard text/rich-text entries use one `remote-clipboard` request
 with `action: "inline"`, direction, operation/grant IDs and `{type, data}` entries.
 The encoded entry array is limited to 8 KiB and three unique text formats. Larger
 text, images and files use the existing bounded binary channel. Paste completes
-only after native clipboard application; selection copy still prepares a native
-clipboard sequence before injecting Ctrl+C. Retries, cancellation and revocation
+after the host writes its clipboard. Host change notifications trigger clipboard
+reads. Physical key forwarding operates independently of these requests. Retries, cancellation and revocation
 retain the same grant/operation checks.
 
 ## Request types and ACK policy {#request-types-and-ack-policy}

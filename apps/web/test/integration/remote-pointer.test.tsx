@@ -625,6 +625,75 @@ it("captures dropped files synchronously and maps the remote position without cl
   expect(drop).toHaveBeenCalledOnce();
 });
 
+it.each([
+  ["ControlRight", "ctrlKey", 0x1d, "KeyC", 0x2e],
+  ["ControlRight", "ctrlKey", 0x1d, "KeyV", 0x2f],
+  ["MetaRight", "metaKey", 0x5c, "KeyV", 0x2f],
+  ["ShiftRight", "shiftKey", 0x36, "Insert", 0x52],
+] as const)(
+  "forwards %s (%s, %i) with %s on press, repeat and release",
+  (modifier, flag, modifierScan, code, scanCode) => {
+    const keyboard = {
+      pasteEvent: vi.fn(() => true),
+      available: () => true,
+      focused: () => false,
+      visible: () => false,
+      suppressAutomaticShow: vi.fn(),
+      show: vi.fn(),
+      remoteTap: vi.fn(),
+    };
+    render(() => (
+      <RemoteControlOverlay
+        enabled
+        keyboard={() => keyboard}
+      />
+    ));
+    const held = { code: modifier, [flag]: true };
+    const chord = { code, [flag]: true };
+    expect(fireEvent.keyDown(surface(), held)).toBe(false);
+    expect(fireEvent.keyDown(surface(), chord)).toBe(false);
+    expect(
+      fireEvent.keyDown(surface(), {
+        ...chord,
+        repeat: true,
+      }),
+    ).toBe(false);
+    expect(fireEvent.keyUp(surface(), chord)).toBe(false);
+    expect(
+      fireEvent.keyUp(surface(), { code: modifier }),
+    ).toBe(false);
+    const mod = {
+      type: "key",
+      scanCode: modifierScan,
+      extended: modifier !== "ShiftRight",
+    };
+    const key = {
+      type: "key",
+      scanCode,
+      extended: code === "Insert",
+    };
+    expect(
+      fixture.control.input.mock.calls.map(
+        ([event]: any[]) => event,
+      ),
+    ).toEqual([
+      { ...mod, down: true },
+      { ...key, down: true },
+      { ...key, down: true },
+      { ...key, down: false },
+      { ...mod, down: false },
+    ]);
+    expect(keyboard.pasteEvent).not.toHaveBeenCalled();
+    fireEvent.paste(surface(), {
+      clipboardData: {
+        getData: () => "from menu",
+        items: [],
+      },
+    });
+    expect(keyboard.pasteEvent).toHaveBeenCalledOnce();
+    expect(fixture.control.input).toHaveBeenCalledTimes(5);
+  },
+);
 it("forwards keyboard input without focusing the remote surface in local-cursor mode", () => {
   render(() => <RemoteControlOverlay enabled />);
   key();
@@ -1892,7 +1961,7 @@ it("shares native discovery and permission observers across settings and repeate
     });
   const [open, setOpen] = createSignal(false);
   const clipboard = {
-    copy: vi.fn(),
+    readCurrent: vi.fn(),
     paste: vi.fn(),
     watch: vi.fn(() => () => {}),
   };
@@ -1906,18 +1975,14 @@ it("shares native discovery and permission observers across settings and repeate
     true,
   );
   const Consumer = () => {
-    const actions = createRemoteClipboard({
+    createRemoteClipboard({
       clientId: "peer",
       control: fixture.control,
       state: "active",
       enabled: true,
       clipboard,
     });
-    return (
-      <span data-testid="clipboard-consumer">
-        {String(actions.canCopy())}
-      </span>
-    );
+    return null;
   };
   try {
     render(() => (
@@ -1938,11 +2003,7 @@ it("shares native discovery and permission observers across settings and repeate
       appState.options.remoteKeyboard.clipboardFiles,
     ).toBe("clipboard");
     setOpen(true);
-    expect(
-      screen
-        .getAllByTestId("clipboard-consumer")
-        .every((element) => element.textContent === "true"),
-    ).toBe(true);
+    expect(clipboard.watch).toHaveBeenCalledTimes(2);
     setOpen(false);
     setOpen(true);
     expect(

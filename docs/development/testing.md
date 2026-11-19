@@ -96,7 +96,7 @@ cargo test --locked -p weblink-desktop --lib automation::jobs::tests::real_shell
 
 `bun run test:e2e:hmr` 还需要 `rsync`。它将应用复制到临时接收工作区，使用两个 Chromium 客户端、本地信令、摄像头和麦克风采集运行真实组合层。批量视图同步期间必须保留应用所有者、房间、轨道和连接 peer，RTP 持续运行。上下文与视图定义一起抵达时，必须通过原生入口依赖重建，不能出现缺失上下文错误。测试也验证根销毁，不修改源工作区。
 
-`bun run test:e2e:clipboard` 验证 Chromium 标准文本剪贴板互操作：从 Ctrl+C 启动 promise 写入，将数据延迟到临时激活之后，再以真实 Ctrl+V 粘贴事件核对 Unicode 文本和换行，不使用自定义格式。一次性浏览器上下文会授予本地测试源剪贴板权限。
+`bun run test:e2e:clipboard` 验证 Chromium 标准文本剪贴板互操作：模拟对端在 Ctrl+C 临时激活结束后交付内容并写入剪贴板，再以真实 Ctrl+V 粘贴事件核对 Unicode 文本和换行，不使用自定义格式。一次性浏览器上下文会授予本地测试源剪贴板权限。
 `bun run test:e2e:clipboard-cache` 通过真实 WebRTC 数据通道、压缩与指纹 Worker、VFS 缓存和 IndexedDB，将多分块远端文件复制到文件缓存。在已收到 8 MiB 后重置控制器输入 epoch，再逐字节验证 12 MiB 文件及双方成功完成。还通过 RemoteFileDrop 反向传输，检查原生适配器参数与应用后的完成状态。浏览器测试使用原生适配器 fixture；可选 Rust `file_drop::windows::tests` 在两个 STA 线程间运行真实 OLE，验证 CF_HDROP 文件字节和剪贴板未变化。原生测试打开自己的临时目标窗口，并移动、恢复指针。
 
 `node scripts/run-browser-check.mjs --transfer --legacy-abort` 在 `AbortSignal.any` 不可用的环境运行文件流程，模拟 Safari 16 至 17.3 的 API 条件。这验证兼容路径，不能代替 iPhone 测试。

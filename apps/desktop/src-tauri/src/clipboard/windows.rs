@@ -27,18 +27,37 @@ impl Drop for Watcher {
     }
 }
 pub fn watch(changed: Box<dyn Fn() + Send>) -> Result<Watcher, String> {
-    listen(Box::new(move || {
-        if !WRITING.load(Ordering::Acquire) && sequence() != LAST_WRITE.load(Ordering::Acquire) {
+    let mut previous = sequence();
+    let formats = [
+        TEXT,
+        DROP,
+        DIB,
+        format("PNG"),
+        format("HTML Format"),
+        format("Rich Text Format"),
+    ];
+    listen(move || {
+        let current = sequence();
+        if current == previous {
+            return;
+        }
+        previous = current;
+        if !WRITING.load(Ordering::Acquire)
+            && current != LAST_WRITE.load(Ordering::Acquire)
+            && formats
+                .iter()
+                .any(|&id| unsafe { IsClipboardFormatAvailable(id).is_ok() })
+        {
             changed();
         }
-    }))
+    })
 }
-pub fn wait_after(after: u32, timeout: Duration) -> Result<(), String> {
+pub fn wait_after(after: u32, timeout: Duration) -> Result<bool, String> {
     // Copy completion must see every sequence change, including local writes;
     // continuous sync's echo suppression applies only to watch(), not this wait.
     changes::wait_for_sequence(after, timeout, sequence, listen)
 }
-fn listen(changed: Box<dyn Fn() + Send>) -> Result<Watcher, String> {
+fn listen(mut changed: impl FnMut() + Send + 'static) -> Result<Watcher, String> {
     let (send, recv) = std::sync::mpsc::sync_channel(1);
     let thread = std::thread::Builder::new()
         .name("weblink-clipboard".into())

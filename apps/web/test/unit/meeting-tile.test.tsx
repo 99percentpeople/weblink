@@ -52,7 +52,7 @@ const fixture = vi.hoisted(() => ({
     vi.fn<() => { id: string; name: string }[]>(),
   clipboard: {
     watch: vi.fn(() => () => {}),
-    copy: vi.fn(),
+    readCurrent: vi.fn(),
     paste: vi.fn(),
   },
 }));

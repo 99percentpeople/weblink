@@ -24,11 +24,10 @@ function setup(pending?: Promise<NativeKeyboardSession>) {
   const port = {
     capturing: vi.fn(),
     current: vi.fn(() => true),
-    input: vi.fn(() => true),
+    input: vi.fn<NativeKeyboardPort["input"]>(() => true),
     reset: vi.fn(),
     cancel: vi.fn(),
     stopped: vi.fn(),
-    clipboard: vi.fn((_action: "copy" | "paste") => false),
   } satisfies NativeKeyboardPort;
   const start = vi.fn((_shortcut, listener) => {
     receive = listener;
@@ -63,35 +62,38 @@ function setup(pending?: Promise<NativeKeyboardSession>) {
   };
 }
 describe("native keyboard focus and transport ownership", () => {
-  it("consumes clipboard chords once, releases remote modifiers and preserves normal keys when disabled", () => {
+  it("forwards every transition while right Ctrl stays held across C, repeated V and Insert", () => {
     const s = setup();
-    s.port.clipboard.mockReturnValue(true);
-    s.key(1, true, 0x1d);
-    s.key(2, true, 0x2f);
-    s.key(3, true, 0x2f);
-    s.key(4, false, 0x2f);
-    s.key(5, false, 0x1d);
-    expect(s.port.clipboard).toHaveBeenCalledOnce();
-    expect(s.port.clipboard).toHaveBeenCalledWith("paste");
-    expect(s.port.input).not.toHaveBeenCalledWith(
-      expect.objectContaining({ scanCode: 0x2f }),
+    const events = [
+      [0x1d, true, true],
+      [0x2e, false, true],
+      [0x2e, false, false],
+      [0x2f, false, true],
+      [0x2f, false, true],
+      [0x2f, false, false],
+      [0x52, true, true],
+      [0x52, true, false],
+      [0x1d, true, false],
+    ] as const;
+    const keys = events.map(
+      ([scanCode, extended, down]) => ({
+        type: "key" as const,
+        scanCode,
+        extended,
+        down,
+      }),
     );
-    expect(s.port.input).toHaveBeenCalledWith({
-      type: "key",
-      scanCode: 0x1d,
-      extended: false,
-      down: false,
-    });
-    s.port.clipboard.mockReturnValue(false);
-    s.key(6, true, 0x1d);
-    s.key(7, true, 0x2e);
-    expect(s.port.input).toHaveBeenCalledWith({
-      type: "key",
-      scanCode: 0x2e,
-      extended: false,
-      down: true,
-    });
+    keys.forEach((key, index) =>
+      s.receive({
+        ...key,
+        sequence: index + 1,
+        timestamp: Date.now(),
+      }),
+    );
     s.forwarder.stop();
+    expect(
+      s.port.input.mock.calls.map(([key]) => key),
+    ).toEqual(keys);
   });
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

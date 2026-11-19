@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { createRoot } from "solid-js";
 import {
   cleanup,
   fireEvent,
@@ -18,10 +17,10 @@ import {
   setAppState,
 } from "@/libs/state/app-state";
 import type { RemotePointer } from "@/libs/domain/remote-control/pointer";
-import type { AppStateContextProps } from "@/libs/state/app-state-context";
 import type { ClipboardCopyOptions } from "@/libs/application/remote-clipboard";
 import type { RuntimeCapabilities } from "@weblink/platform";
 import { createAppClipboardAccess } from "@/libs/state/create-app-clipboard-access";
+import { deferred } from "../support/rtc-transport";
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("solid-sonner", () => ({
   toast: {
@@ -38,7 +37,6 @@ vi.mock(
     ),
   }),
 );
-let dispose: (() => void) | undefined;
 function mountAccess() {
   let capabilities: RuntimeCapabilities | undefined;
   createAppClipboardAccess({
@@ -51,99 +49,74 @@ function mountAccess() {
 }
 afterEach(() => {
   cleanup();
-  dispose?.();
-  dispose = undefined;
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   setAppState(reconcile(createInitialAppState()));
 });
-it("successive copy gestures fetch new selections and automatically write rich formats", async () => {
-  vi.stubGlobal("isSecureContext", true);
-  setAppState(
-    "options",
-    "remoteKeyboard",
-    "clipboard",
-    true,
-  );
-  const copy = vi.fn(
-    async (
-      _peer: string,
-      _control: RemotePointer,
-      _selection: boolean,
-      options?: ClipboardCopyOptions,
-    ) => {
-      const content = [
-        {
-          type: "text/plain" as const,
-          blob: new Blob(["text"]),
-        },
-        {
-          type: "text/html" as const,
-          blob: new Blob(["<b>text</b>"]),
-        },
-      ];
-      await options?.receive?.(
-        content,
-        new AbortController().signal,
-      );
-      return content;
-    },
-  );
-  const clipboard: AppStateContextProps["remoteClipboard"] =
-    { copy, paste: vi.fn(), watch: () => () => {} };
-  const write = vi.fn(async () => {});
-  vi.stubGlobal("navigator", { clipboard: { write } });
-  vi.stubGlobal(
-    "ClipboardItem",
-    class {
-      static supports = () => true;
-      constructor(readonly data: unknown) {}
-    },
-  );
-  const control = {
-    clipboardGrant: () => "grant",
-  } as RemotePointer;
-  const actions = createRoot((stop) => {
-    dispose = stop;
-    mountAccess();
-    return createRemoteClipboard({
-      clientId: "peer",
-      control,
-      state: "active",
-      enabled: true,
-      clipboard,
-    });
-  });
+it("waits for a host change before reading or writing clipboard content", async () => {
+  const { write, read } = browser(true);
+  const { readCurrent, changed } = await mountClipboard([
+    { type: "text/plain", blob: new Blob(["new"]) },
+    { type: "text/html", blob: new Blob(["<b>new</b>"]) },
+  ]);
+  await Promise.resolve();
+  expect(readCurrent).not.toHaveBeenCalled();
+  expect(read).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(toast.info).not.toHaveBeenCalled();
+  changed();
   await vi.waitFor(() =>
-    expect(appState.capabilities.clipboard.ready).toBe(
-      true,
-    ),
+    expect(write).toHaveBeenCalledOnce(),
   );
-  actions.copy();
+  expect(
+    Object.keys((write.mock.calls[0] as any)[0][0].data),
+  ).toEqual(["text/plain", "text/html"]);
+});
+it("skips local writes and feedback when a notified clipboard has already been cleared", async () => {
+  const { write } = browser(true);
+  const { changed, readCurrent } = await mountClipboard([]);
+  changed();
+  await readCurrent.mock.results[0].value;
+  expect(write).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(toast.info).not.toHaveBeenCalled();
+});
+it("coalesces changes during a write and reads the latest content once", async () => {
+  const { write } = browser(true);
+  const content: ClipboardContent = [
+    { type: "text/plain", blob: new Blob(["first"]) },
+  ];
+  const { changed, readCurrent } =
+    await mountClipboard(content);
+  let finish!: () => void;
+  write.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  changed();
+  await vi.waitFor(() =>
+    expect(write).toHaveBeenCalledOnce(),
+  );
+  content[0] = {
+    type: "text/plain",
+    blob: new Blob(["latest"]),
+  };
+  changed();
+  changed();
+  expect(readCurrent).toHaveBeenCalledOnce();
+  finish();
   await vi.waitFor(() =>
     expect(write).toHaveBeenCalledTimes(2),
   );
-  // Let the clipboard write and busy-state cleanup settle.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  actions.copy();
-  await vi.waitFor(() =>
-    expect(copy).toHaveBeenCalledTimes(2),
-  );
-  setAppState(
-    "options",
-    "remoteKeyboard",
-    "clipboard",
-    false,
-  );
-  expect(actions.enabled()).toBe(false);
-  actions.copy();
-  expect(copy).toHaveBeenCalledTimes(2);
-  expect(appState.options.remoteKeyboard.clipboard).toBe(
-    false,
-  );
+  expect(readCurrent).toHaveBeenCalledTimes(2);
+  expect(
+    (write.mock.calls[1] as any)[0][0].data["text/plain"],
+  ).toBe(content[0].blob);
 });
-
 async function mountClipboard(
   content: ClipboardContent = [
     { type: "text/plain", blob: new Blob(["remote"]) },
@@ -155,11 +128,10 @@ async function mountClipboard(
     "clipboard",
     true,
   );
-  const copy = vi.fn(
+  const readCurrent = vi.fn(
     async (
       _peer: string,
       _control: RemotePointer,
-      _selection: boolean,
       options?: ClipboardCopyOptions,
     ) => {
       await options?.receive?.(
@@ -170,13 +142,7 @@ async function mountClipboard(
     },
   );
   const paste = vi.fn(
-    async (
-      _peer,
-      _control,
-      content: Promise<
-        import("@/libs/application/clipboard-content").ClipboardContent
-      >,
-    ) => {
+    async (_peer, _control, content: ClipboardContent) => {
       await content;
     },
   );
@@ -188,22 +154,26 @@ async function mountClipboard(
       return stop;
     },
   );
-  const clipboard = { copy, paste, watch };
+  const clipboard = {
+    readCurrent,
+    paste,
+    watch,
+  };
   const control = {
     clipboardGrant: () => "grant",
-  } as RemotePointer;
-  let actions!: ReturnType<typeof createRemoteClipboard>;
+    clipboardEpoch: () => "epoch",
+  };
   render(() => {
     mountAccess();
-    actions = createRemoteClipboard({
+    const { pasteEvent } = createRemoteClipboard({
       clientId: "peer",
-      control,
+      control: control as unknown as RemotePointer,
       state: "active",
       enabled: true,
       clipboard,
     });
     const input = document.createElement("textarea");
-    input.addEventListener("paste", actions.pasteEvent);
+    input.addEventListener("paste", pasteEvent);
     return input;
   });
   await vi.waitFor(() =>
@@ -212,8 +182,8 @@ async function mountClipboard(
     ),
   );
   return {
-    actions,
-    copy,
+    control,
+    readCurrent,
     paste,
     watch,
     stop,
@@ -240,6 +210,125 @@ function browser(secure: boolean) {
   );
   return { write, read };
 }
+function pasteText(text: string) {
+  fireEvent.paste(document.querySelector("textarea")!, {
+    clipboardData: {
+      getData: (type: string) =>
+        type === "text/plain" ? text : "",
+      items: [],
+    },
+  });
+}
+it("keeps distinct system pastes in gesture order while a host copy is being written", async () => {
+  const { write } = browser(true);
+  const writing = deferred<void>();
+  write.mockReturnValueOnce(writing.promise);
+  const { changed, paste } = await mountClipboard();
+  changed();
+  await vi.waitFor(() =>
+    expect(write).toHaveBeenCalledOnce(),
+  );
+  const applied = deferred<void>();
+  paste.mockImplementationOnce(() => applied.promise);
+  pasteText("A");
+  pasteText("BB");
+  expect(paste).not.toHaveBeenCalled();
+  writing.resolve();
+  await vi.waitFor(() =>
+    expect(paste).toHaveBeenCalledOnce(),
+  );
+  applied.resolve();
+  await vi.waitFor(() =>
+    expect(paste).toHaveBeenCalledTimes(2),
+  );
+  expect(
+    paste.mock.calls.map(
+      ([, , entries]) => entries[0].blob.size,
+    ),
+  ).toEqual([1, 2]);
+});
+it.each([
+  "focus reset",
+  "disable and re-enable",
+  "unmount",
+])("discards queued paste after %s", async (change) => {
+  const { write } = browser(true);
+  const writing = deferred<void>();
+  write.mockReturnValueOnce(writing.promise);
+  const { changed, paste, control } =
+    await mountClipboard();
+  changed();
+  await vi.waitFor(() =>
+    expect(write).toHaveBeenCalledOnce(),
+  );
+  pasteText("private");
+  if (change === "focus reset")
+    vi.spyOn(control, "clipboardEpoch").mockReturnValue(
+      "next",
+    );
+  else if (change === "unmount") cleanup();
+  else {
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "clipboard",
+      false,
+    );
+    setAppState(
+      "options",
+      "remoteKeyboard",
+      "clipboard",
+      true,
+    );
+  }
+  writing.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(paste).not.toHaveBeenCalled();
+});
+it("allows a local paste when a host copy is waiting for a browser write gesture", async () => {
+  const { write } = browser(true);
+  write.mockRejectedValueOnce(
+    new DOMException("Denied", "NotAllowedError"),
+  );
+  const { changed, paste } = await mountClipboard();
+  changed();
+  await vi.waitFor(() =>
+    expect(toast.info).toHaveBeenCalledOnce(),
+  );
+  pasteText("");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(toast.dismiss).not.toHaveBeenCalled();
+  expect(paste).not.toHaveBeenCalled();
+  pasteText("local");
+  await vi.waitFor(() =>
+    expect(paste).toHaveBeenCalledOnce(),
+  );
+  expect(toast.dismiss).toHaveBeenCalledOnce();
+  expect(toast.error).not.toHaveBeenCalled();
+});
+it("skips empty or unsupported paste events without probing the clipboard", async () => {
+  const { read, write } = browser(true);
+  const { paste } = await mountClipboard();
+  fireEvent.paste(document.querySelector("textarea")!, {
+    clipboardData: {
+      getData: () => "",
+      items: [
+        {
+          kind: "string",
+          type: "application/custom",
+          getAsFile: () => null,
+        },
+      ],
+    },
+  });
+  expect(read).not.toHaveBeenCalled();
+  pasteText("");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(paste).not.toHaveBeenCalled();
+  expect(write).not.toHaveBeenCalled();
+  expect(toast.error).not.toHaveBeenCalled();
+  expect(toast.info).not.toHaveBeenCalled();
+});
 it("allows copy and paste gestures while browser permissions are still prompt", async () => {
   const { write, read } = browser(true);
   setAppState(
@@ -254,13 +343,8 @@ it("allows copy and paste gestures while browser permissions are still prompt", 
   Object.assign(navigator, {
     permissions: { query: vi.fn(async () => permission) },
   });
-  read.mockResolvedValue([
-    {
-      types: ["text/plain"],
-      getType: async () => new Blob(["local"]),
-    },
-  ]);
-  const { actions, copy, paste } = await mountClipboard();
+  const { changed, readCurrent, paste } =
+    await mountClipboard();
   expect(appState.capabilities.clipboard).toMatchObject({
     ready: true,
     readPermission: "prompt",
@@ -271,21 +355,21 @@ it("allows copy and paste gestures while browser permissions are still prompt", 
   });
   expect(read).not.toHaveBeenCalled();
   expect(write).not.toHaveBeenCalled();
-  expect(actions.copy()).toBe(true);
+  changed();
   await vi.waitFor(() =>
     expect(write).toHaveBeenCalledOnce(),
   );
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(copy).toHaveBeenCalledOnce();
-  expect(copy.mock.calls[0][3]).toMatchObject({
+  expect(readCurrent).toHaveBeenCalledOnce();
+  expect(readCurrent.mock.calls[0][2]).toMatchObject({
     files: true,
     formats: expect.arrayContaining([
       "text/plain",
       "image/png",
     ]),
   });
-  expect(actions.paste()).toBe(true);
-  expect(read).toHaveBeenCalledOnce();
+  pasteText("local");
+  expect(read).not.toHaveBeenCalled();
   await vi.waitFor(() =>
     expect(paste).toHaveBeenCalledOnce(),
   );
@@ -303,12 +387,10 @@ it("accepts a real system paste without clipboard APIs or action buttons", async
     "clipboardFiles",
     "clipboard",
   );
-  const { actions, copy, paste, watch } =
+  const { readCurrent, paste, watch } =
     await mountClipboard();
-  expect(actions.canCopy()).toBe(false);
-  expect(actions.copy()).toBe(false);
-  expect(actions.paste()).toBe(false);
-  expect(copy).not.toHaveBeenCalled();
+  expect(paste).not.toHaveBeenCalled();
+  expect(readCurrent).not.toHaveBeenCalled();
   expect(watch).not.toHaveBeenCalled();
   fireEvent.paste(document.querySelector("textarea")!, {
     clipboardData: {
@@ -317,7 +399,9 @@ it("accepts a real system paste without clipboard APIs or action buttons", async
       items: [],
     },
   });
-  expect(paste).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(paste).toHaveBeenCalledOnce(),
+  );
   const content = await paste.mock.calls[0][2];
   expect(
     content.map((entry) => [entry.type, entry.blob.size]),
@@ -350,58 +434,51 @@ it("updates read and write permissions independently without probing clipboard c
       ),
     },
   });
-  const { actions, watch, stop } = await mountClipboard();
+  const { watch, stop } = await mountClipboard();
   await vi.waitFor(() =>
     expect(watch).toHaveBeenCalledOnce(),
   );
-  expect(actions.canCopy()).toBe(true);
-  expect(actions.paste()).toBe(false);
   expect(read).not.toHaveBeenCalled();
   writePermission.state = "denied";
   writePermission.dispatchEvent(new Event("change"));
-  expect(actions.canCopy()).toBe(false);
   expect(stop).toHaveBeenCalledOnce();
   expect(write).not.toHaveBeenCalled();
   writePermission.state = "granted";
   writePermission.dispatchEvent(new Event("change"));
-  expect(actions.canCopy()).toBe(true);
+  expect(watch).toHaveBeenCalledTimes(2);
 });
-it("retries on the next real copy and emits no toast for failed operations", async () => {
-  const { write, read } = browser(true);
+it("retries the received text from the permission prompt without another transfer", async () => {
+  const { write } = browser(true);
   write.mockRejectedValueOnce(
     new DOMException("Denied", "NotAllowedError"),
   );
-  read.mockRejectedValueOnce(
-    new DOMException("Denied", "NotAllowedError"),
-  );
-  const { actions, copy, paste } = await mountClipboard();
-  actions.copy();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  actions.copy();
+  const { changed, readCurrent } = await mountClipboard();
+  changed();
   await vi.waitFor(() =>
-    expect(write).toHaveBeenCalledTimes(3),
+    expect(toast.info).toHaveBeenCalledOnce(),
   );
-  expect(copy).toHaveBeenCalledTimes(2);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  actions.paste();
+  const options = vi.mocked(toast.info).mock.calls[0][1]!;
+  (
+    options.action as { onClick(event: MouseEvent): void }
+  ).onClick(new MouseEvent("click"));
   await vi.waitFor(() =>
-    expect(paste).toHaveBeenCalledOnce(),
+    expect(toast.dismiss).toHaveBeenCalledOnce(),
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(write).toHaveBeenCalledTimes(2);
+  expect(readCurrent).toHaveBeenCalledOnce();
   expect(toast.error).not.toHaveBeenCalled();
-  expect(toast.info).not.toHaveBeenCalled();
 });
 it("naturally synchronizes remote context-menu copies and stops watching when disabled", async () => {
   const { write, read } = browser(true);
-  const { changed, copy, stop } = await mountClipboard();
+  const { changed, readCurrent, stop } =
+    await mountClipboard();
   changed();
   await vi.waitFor(() =>
     expect(write).toHaveBeenCalledOnce(),
   );
-  expect(copy).toHaveBeenCalledWith(
+  expect(readCurrent).toHaveBeenCalledWith(
     "peer",
     expect.anything(),
-    false,
     expect.objectContaining({
       receive: expect.any(Function),
     }),
@@ -415,7 +492,7 @@ it("naturally synchronizes remote context-menu copies and stops watching when di
   );
   expect(stop).toHaveBeenCalledOnce();
   changed();
-  expect(copy).toHaveBeenCalledOnce();
+  expect(readCurrent).toHaveBeenCalledOnce();
 });
 it("uses native availability instead of assuming that a bridge means clipboard support", async () => {
   browser(false);
@@ -441,9 +518,9 @@ it("uses native availability instead of assuming that a bridge means clipboard s
       "clipboardFiles",
       "clipboard",
     );
-    const { actions } = await mountClipboard();
+    const { watch } = await mountClipboard();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(actions.canCopy()).toBe(false);
+    expect(watch).not.toHaveBeenCalled();
     expect(
       platform.clipboard!.write,
     ).not.toHaveBeenCalled();
@@ -455,13 +532,14 @@ it("uses native availability instead of assuming that a bridge means clipboard s
 
 it("uses actual browser APIs even when the context flag is false", async () => {
   const { write } = browser(false);
-  const { actions, copy } = await mountClipboard();
-  expect(actions.canCopy()).toBe(true);
-  expect(actions.copy()).toBe(true);
+  const { changed, readCurrent } = await mountClipboard();
+  changed();
   await vi.waitFor(() =>
-    expect(copy).toHaveBeenCalledOnce(),
+    expect(readCurrent).toHaveBeenCalledOnce(),
   );
-  expect(write).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(write).toHaveBeenCalledOnce(),
+  );
   expect(toast.info).not.toHaveBeenCalled();
 });
 
@@ -473,14 +551,14 @@ it("allows file-cache copying and context-menu watching without browser clipboar
     "clipboardFiles",
     "cache",
   );
-  const { actions, copy, watch } = await mountClipboard();
+  const { changed, readCurrent, watch, stop } =
+    await mountClipboard();
   await vi.waitFor(() =>
     expect(watch).toHaveBeenCalledOnce(),
   );
-  expect(actions.canCopy()).toBe(true);
-  expect(actions.copy()).toBe(true);
+  changed();
   await vi.waitFor(() =>
-    expect(copy).toHaveBeenCalledOnce(),
+    expect(readCurrent).toHaveBeenCalledOnce(),
   );
   setAppState(
     "options",
@@ -488,41 +566,37 @@ it("allows file-cache copying and context-menu watching without browser clipboar
     "clipboardFiles",
     "off",
   );
-  expect(actions.canCopy()).toBe(false);
+  expect(stop).toHaveBeenCalledOnce();
 });
-it.each([true, false])(
-  "requests copied files without changing the clipboard destination (selection=%s)",
-  async (selection) => {
-    browser(true);
-    vi.stubGlobal(
-      "ClipboardItem",
-      class {
-        static supports = (type: string) =>
-          type === "text/plain" || type.startsWith("web ");
-        constructor(readonly data: unknown) {}
-      },
-    );
-    setAppState(
-      "options",
-      "remoteKeyboard",
-      "clipboardFiles",
-      "clipboard",
-    );
-    const { actions, copy } = await mountClipboard();
-    expect(actions.copy(selection)).toBe(true);
-    await vi.waitFor(() =>
-      expect(copy).toHaveBeenCalledWith(
-        "peer",
-        expect.anything(),
-        selection,
-        expect.objectContaining({
-          files: true,
-          formats: ["text/plain"],
-        }),
-      ),
-    );
-  },
-);
+it("requests copied files without changing the clipboard destination", async () => {
+  browser(true);
+  vi.stubGlobal(
+    "ClipboardItem",
+    class {
+      static supports = (type: string) =>
+        type === "text/plain" || type.startsWith("web ");
+      constructor(readonly data: unknown) {}
+    },
+  );
+  setAppState(
+    "options",
+    "remoteKeyboard",
+    "clipboardFiles",
+    "clipboard",
+  );
+  const { changed, readCurrent } = await mountClipboard();
+  changed();
+  await vi.waitFor(() =>
+    expect(readCurrent).toHaveBeenCalledWith(
+      "peer",
+      expect.anything(),
+      expect.objectContaining({
+        files: true,
+        formats: ["text/plain"],
+      }),
+    ),
+  );
+});
 it("requests cache files without text or images when browser writing is unavailable", async () => {
   vi.stubGlobal("navigator", {});
   setAppState(
@@ -531,12 +605,11 @@ it("requests cache files without text or images when browser writing is unavaila
     "clipboardFiles",
     "cache",
   );
-  const { actions, copy } = await mountClipboard();
-  actions.copy();
-  expect(copy).toHaveBeenCalledWith(
+  const { changed, readCurrent } = await mountClipboard();
+  changed();
+  expect(readCurrent).toHaveBeenCalledWith(
     "peer",
     expect.anything(),
-    true,
     expect.objectContaining({ files: true, formats: [] }),
   );
 });
@@ -568,15 +641,15 @@ it.each(["png", "jpg"])(
     vi.mocked(
       browserClipboardContent,
     ).mockResolvedValueOnce(image);
-    const { changed, copy } = await mountClipboard(files);
+    const { changed, readCurrent } =
+      await mountClipboard(files);
     changed();
     await vi.waitFor(() =>
       expect(write).toHaveBeenCalledOnce(),
     );
-    expect(copy).toHaveBeenCalledWith(
+    expect(readCurrent).toHaveBeenCalledWith(
       "peer",
       expect.anything(),
-      false,
       expect.objectContaining({ files: true }),
     );
     expect(browserClipboardContent).toHaveBeenCalledWith(
@@ -604,7 +677,8 @@ it("retains an image when automatic writing is denied and retries from a click w
       }),
     },
   ];
-  const { changed, copy } = await mountClipboard(image);
+  const { changed, readCurrent } =
+    await mountClipboard(image);
   changed();
   await vi.waitFor(() =>
     expect(toast.info).toHaveBeenCalledOnce(),
@@ -618,7 +692,7 @@ it("retains an image when automatic writing is denied and retries from a click w
   await vi.waitFor(() =>
     expect(toast.dismiss).toHaveBeenCalled(),
   );
-  expect(copy).toHaveBeenCalledOnce();
+  expect(readCurrent).toHaveBeenCalledOnce();
   expect(write).toHaveBeenCalledTimes(2);
   expect(
     (write.mock.calls[1] as any)[0][0].data["image/png"],
@@ -635,7 +709,7 @@ it("reports unsupported PDF copying without changing the clipboard or file desti
     "clipboardFiles",
     "clipboard",
   );
-  const { changed, copy } = await mountClipboard([
+  const { changed, readCurrent } = await mountClipboard([
     {
       type: "file",
       name: "test.pdf",
@@ -652,10 +726,9 @@ it("reports unsupported PDF copying without changing the clipboard or file desti
       },
     ),
   );
-  expect(copy).toHaveBeenCalledWith(
+  expect(readCurrent).toHaveBeenCalledWith(
     "peer",
     expect.anything(),
-    false,
     expect.objectContaining({ files: true }),
   );
   expect(write).not.toHaveBeenCalled();

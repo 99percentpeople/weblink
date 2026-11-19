@@ -1625,6 +1625,48 @@ it("keeps direct contacts held through a local context menu without emulating a 
   expect(fixture.control.resetInput).not.toHaveBeenCalled();
 });
 
+it("forwards physical keys from the soft-keyboard editor with their original modifiers", () => {
+  const { editor, keyboard } = renderKeyboardControl();
+  keyboard()?.show();
+  fixture.control.input.mockClear();
+  const meta = {
+    code: "MetaRight",
+    key: "Meta",
+    metaKey: true,
+  };
+  const v = { code: "KeyV", key: "v", metaKey: true };
+  expect(fireEvent.keyDown(editor, meta)).toBe(false);
+  expect(fireEvent.keyDown(editor, v)).toBe(false);
+  expect(
+    fireEvent.keyDown(editor, { ...v, repeat: true }),
+  ).toBe(false);
+  expect(fireEvent.keyUp(editor, v)).toBe(false);
+  expect(
+    fireEvent.keyUp(editor, { ...meta, metaKey: false }),
+  ).toBe(false);
+  const rightMeta = {
+    type: "key",
+    scanCode: 0x5c,
+    extended: true,
+  };
+  const keyV = {
+    type: "key",
+    scanCode: 0x2f,
+    extended: false,
+  };
+  expect(
+    fixture.control.input.mock.calls.map(
+      ([event]: any[]) => event,
+    ),
+  ).toEqual([
+    { ...rightMeta, down: true },
+    { ...keyV, down: true },
+    { ...keyV, down: true },
+    { ...keyV, down: false },
+    { ...rightMeta, down: false },
+  ]);
+});
+
 it.each(["", "Unidentified"])(
   "forwards IME keys with code '%s' and selection-only navigation repeatedly",
   (code) => {

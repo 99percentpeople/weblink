@@ -31,9 +31,6 @@ import {
 } from "@/libs/domain/remote-control/text-input";
 
 export interface RemoteKeyboardInputHandle {
-  clipboardEnabled?(action?: "copy" | "paste"): boolean;
-  copy?(): void | boolean;
-  paste?(): void | boolean;
   pasteEvent?(event: ClipboardEvent): boolean;
   available(): boolean;
   focused(): boolean;
@@ -325,12 +322,6 @@ export function RemoteKeyboardInput(props: {
     if (props.registerKeyboard)
       onCleanup(
         props.registerKeyboard({
-          clipboardEnabled: (action) =>
-            action === "copy"
-              ? clipboard.canCopy()
-              : clipboard.enabled(),
-          copy: clipboard.copy,
-          paste: clipboard.paste,
           pasteEvent: clipboard.pasteEvent,
           available,
           visible,
@@ -424,32 +415,18 @@ export function RemoteKeyboardInput(props: {
           if (
             input.hasComposition ||
             event.isComposing ||
-            event.key === "Process"
+            event.key === "Process" ||
+            event.keyCode === 229
           )
             return;
+          if (event.code && event.code !== "Unidentified") {
+            if (keys?.down(event)) event.preventDefault();
+            return;
+          }
+          // Software keyboards can provide a logical navigation key without a physical code.
+          const code = event.key;
           const shortcut =
             event.ctrlKey || event.altKey || event.metaKey;
-          if (
-            clipboard.enabled() &&
-            (event.ctrlKey || event.metaKey) &&
-            !event.altKey &&
-            !event.shiftKey
-          ) {
-            if (event.code === "KeyV") return;
-            if (
-              event.code === "KeyC" &&
-              clipboard.canCopy()
-            ) {
-              event.preventDefault();
-              if (!event.repeat) clipboard.copy();
-              return;
-            }
-          }
-          // Software keyboards need not report a physical key position.
-          const code =
-            event.code && event.code !== "Unidentified"
-              ? event.code
-              : event.key;
           if (
             (shortcut &&
               !/^(Control|Alt|Shift|Meta)/.test(code)) ||
@@ -460,6 +437,7 @@ export function RemoteKeyboardInput(props: {
               "ArrowRight",
               "ArrowUp",
               "ArrowDown",
+              "Insert",
               "Home",
               "End",
               "PageUp",
@@ -475,7 +453,10 @@ export function RemoteKeyboardInput(props: {
             ]);
           }
         }}
-        onKeyUp={(event) => event.stopPropagation()}
+        onKeyUp={(event) => {
+          event.stopPropagation();
+          if (keys?.up(event)) event.preventDefault();
+        }}
       />
     </Show>
   );

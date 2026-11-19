@@ -8,7 +8,6 @@ import type { ExitControlShortcut } from "../domain/remote-control/keyboard-opti
 
 export interface NativeKeyboardPort {
   capturing?(active: boolean): void;
-  clipboard?(action: "copy" | "paste"): boolean;
   current(): boolean;
   input(event: RemoteKeyEvent): boolean;
   reset(): void;
@@ -23,7 +22,6 @@ export class NativeKeyboardForwarder {
   private renewing = false;
   private sequence = 0;
   private readonly held = new Map<number, RemoteKeyEvent>();
-  private readonly clipboardKeys = new Set<number>();
   constructor(
     api: NativeKeyboard,
     shortcut: ExitControlShortcut,
@@ -122,28 +120,6 @@ export class NativeKeyboardForwarder {
       down,
     };
     const id = scanCode + (extended ? 256 : 0);
-    if (this.clipboardKeys.has(id)) {
-      if (!down) this.clipboardKeys.delete(id);
-      return;
-    }
-    if (
-      down &&
-      !extended &&
-      [0x2e, 0x2f].includes(scanCode) &&
-      (this.held.has(0x1d) || this.held.has(0x11d)) &&
-      ![0x38, 0x138, 0x2a, 0x36, 0x15b, 0x15c].some((id) =>
-        this.held.has(id),
-      ) &&
-      this.port.clipboard?.(
-        scanCode === 0x2e ? "copy" : "paste",
-      )
-    ) {
-      this.clipboardKeys.add(id);
-      for (const held of [...this.held.values()].reverse())
-        this.port.input({ ...held, down: false });
-      this.held.clear();
-      return;
-    }
     if (down) this.held.set(id, key);
     else this.held.delete(id);
     if (!this.port.input(key)) {

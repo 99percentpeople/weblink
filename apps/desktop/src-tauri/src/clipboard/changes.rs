@@ -9,10 +9,10 @@ pub(super) fn wait_for_sequence<W>(
     timeout: Duration,
     mut sequence: impl FnMut() -> u32,
     listen: impl FnOnce(Box<dyn Fn() + Send>) -> Result<W, String>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let deadline = Instant::now() + timeout;
     if sequence() != after {
-        return Ok(());
+        return Ok(true);
     }
     let (send, receive) = mpsc::sync_channel(1);
     let _listener = listen(Box::new(move || {
@@ -22,21 +22,17 @@ pub(super) fn wait_for_sequence<W>(
     loop {
         // Subscribe before rechecking: a copy during registration cannot be lost.
         if sequence() != after {
-            return Ok(());
+            return Ok(true);
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err("The remote application did not copy new content".into());
+            return Ok(false);
         }
         match receive.recv_timeout(remaining) {
             Ok(()) => (),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 // Resolve a notification that raced the deadline using current state.
-                return if sequence() != after {
-                    Ok(())
-                } else {
-                    Err("The remote application did not copy new content".into())
-                };
+                return Ok(sequence() != after);
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err("Clipboard listener stopped".into());
@@ -65,20 +61,20 @@ mod tests {
 
     #[test]
     fn already_copied_content_does_not_create_a_listener() {
-        wait_for_sequence(
+        assert!(wait_for_sequence(
             1,
             Duration::from_secs(1),
             || 2,
             |_| -> Result<(), String> { panic!("already changed") },
         )
-        .unwrap();
+        .unwrap());
     }
 
     #[test]
     fn copy_during_registration_is_observed_and_releases_the_listener() {
         let sequence = AtomicU32::new(1);
         let stopped = Arc::new(AtomicBool::new(false));
-        wait_for_sequence(
+        assert!(wait_for_sequence(
             1,
             Duration::from_secs(1),
             || sequence.load(Ordering::Acquire),
@@ -91,7 +87,7 @@ mod tests {
                 })
             },
         )
-        .unwrap();
+        .unwrap());
         assert!(stopped.load(Ordering::Acquire));
     }
 
@@ -113,10 +109,7 @@ mod tests {
                 })
             },
         );
-        assert_eq!(
-            result.unwrap_err(),
-            "The remote application did not copy new content"
-        );
+        assert!(!result.unwrap());
         assert_eq!(reads.load(Ordering::Acquire), 3);
         assert!(stopped.load(Ordering::Acquire));
     }
@@ -146,7 +139,7 @@ mod tests {
         let callback = subscription.recv_timeout(Duration::from_secs(1)).unwrap();
         sequence.store(2, Ordering::Release);
         callback.lock().unwrap()();
-        worker.join().unwrap().unwrap();
+        assert!(worker.join().unwrap().unwrap());
         assert!(stopped.load(Ordering::Acquire));
     }
 }

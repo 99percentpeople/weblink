@@ -98,11 +98,7 @@ function setup() {
     state: () => "active",
     clipboardGrant: () => grant,
     clipboardEpoch: () => epoch,
-    input: vi.fn((event) => {
-      if (event.down && event.scanCode === 0x2f)
-        events.push("paste");
-      return true;
-    }),
+    input: vi.fn(() => true),
     cancel: vi.fn(),
   }) as unknown as RemotePointer;
   const sides = [0, 1].map((i) => {
@@ -238,12 +234,11 @@ function setup() {
   };
 }
 describe("authorized remote clipboard", () => {
-  it("copies and pastes small rich text without a transfer channel, and waits for native application before Ctrl+V", async () => {
+  it("transfers small rich text inline and completes after the host writes it", async () => {
     const s = setup();
-    const copied = await s.a.service.copy(
+    const copied = await s.a.service.readCurrent(
       "peer1",
       s.control,
-      false,
     );
     expect(await copied[0].blob.text()).toBe("remote text");
     const rich = [
@@ -263,7 +258,8 @@ describe("authorized remote clipboard", () => {
     expect(s.events).toEqual(["write"]);
     s.applied.resolve();
     await paste;
-    expect(s.events).toEqual(["write", "applied", "paste"]);
+    expect(s.events).toEqual(["write", "applied"]);
+    expect(s.control.input).not.toHaveBeenCalled();
     for (const side of [s.a, s.b]) {
       expect(
         side.session.createChannel,
@@ -278,31 +274,28 @@ describe("authorized remote clipboard", () => {
       ).toBe(true);
     }
   });
-  it.each([true, false])(
-    "enforces the controller file budget on remote copy (selection=%s)",
-    async (selection) => {
-      const s = setup();
-      s.limit(5);
-      s.native.read.mockResolvedValue({
-        sequence: 8,
-        entries: [
-          { type: "file", name: "a", data: btoa("abc") },
-          { type: "file", name: "b", data: btoa("def") },
-        ],
-      });
-      await expect(
-        s.a.service.copy("peer1", s.control, selection),
-      ).rejects.toThrow("MiB limit");
-      expect(s.native.read).toHaveBeenCalledWith(
-        expect.anything(),
-        selection ? 7 : undefined,
-        true,
-        5,
-      );
-      expect(s.a.caches.size).toBe(0);
-      expect(s.b.caches.size).toBe(0);
-    },
-  );
+  it("enforces the controller file budget on remote copy", async () => {
+    const s = setup();
+    s.limit(5);
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        { type: "file", name: "a", data: btoa("abc") },
+        { type: "file", name: "b", data: btoa("def") },
+      ],
+    });
+    await expect(
+      s.a.service.readCurrent("peer1", s.control),
+    ).rejects.toThrow("MiB limit");
+    expect(s.native.read).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      true,
+      5,
+    );
+    expect(s.a.caches.size).toBe(0);
+    expect(s.b.caches.size).toBe(0);
+  });
   it("rejects oversized paste before transferring and does not limit text with the file preference", async () => {
     const s = setup();
     s.limit(3);
@@ -335,7 +328,10 @@ describe("authorized remote clipboard", () => {
       entries: ClipboardEntry[];
     }>();
     s.native.read.mockImplementation(() => ready.promise);
-    const copy = s.a.service.copy("peer1", s.control);
+    const copy = s.a.service.readCurrent(
+      "peer1",
+      s.control,
+    );
     s.limit(1);
     ready.resolve({
       sequence: 8,
@@ -346,7 +342,7 @@ describe("authorized remote clipboard", () => {
     const content = await copy;
     expect(s.native.read).toHaveBeenCalledWith(
       expect.anything(),
-      7,
+      undefined,
       true,
       limit,
     );
@@ -381,10 +377,9 @@ describe("authorized remote clipboard", () => {
         },
       ],
     });
-    const done = s.a.service.copy(
+    const done = s.a.service.readCurrent(
       "peer1",
       s.control,
-      false,
       {
         files: true,
         formats: ["text/plain", "image/png"],
@@ -419,10 +414,9 @@ describe("authorized remote clipboard", () => {
           },
         ],
       });
-      const content = await s.a.service.copy(
+      const content = await s.a.service.readCurrent(
         "peer1",
         s.control,
-        false,
         { files: true, formats: ["image/png"] },
       );
       expect(content).toMatchObject([
@@ -446,10 +440,9 @@ describe("authorized remote clipboard", () => {
       async () => stored.promise,
     );
     const receive = vi.fn(async () => {});
-    const operation = s.a.service.copy(
+    const operation = s.a.service.readCurrent(
       "peer1",
       s.control,
-      true,
       { receive },
     );
     await vi.waitFor(() =>
@@ -473,63 +466,60 @@ describe("authorized remote clipboard", () => {
     );
     stored.resolve();
     expect(await operation).toEqual([]);
-    expect(receive).toHaveBeenCalledWith(
-      [],
-      expect.any(AbortSignal),
-    );
+    expect(receive).not.toHaveBeenCalled();
     expect(s.a.service.tasks()[0].status).toBe("completed");
     expect(s.native.write).not.toHaveBeenCalled();
   });
-  it.each([true, false])(
-    "keeps an authorized copy alive across a focus reset while reading (selection: %s)",
-    async (selection) => {
-      const s = setup();
-      s.destination("cache");
-      const snapshot = deferred<{
-        sequence: number;
-        entries: ClipboardEntry[];
-      }>();
-      s.native.read.mockReturnValue(snapshot.promise);
-      const operation = s.a.service.copy(
-        "peer1",
-        s.control,
-        selection,
-      );
-      await vi.waitFor(() =>
-        expect(s.native.read).toHaveBeenCalledOnce(),
-      );
-      const inputCount = vi.mocked(s.control.input).mock
-        .calls.length;
-      s.blur();
-      snapshot.resolve({
-        sequence: 8,
-        entries: copiedFiles,
-      });
-      expect(await operation).toEqual([]);
-      expect(s.cacheFile).toHaveBeenCalledOnce();
-      expect(s.control.input).toHaveBeenCalledTimes(
-        inputCount,
-      );
-      for (const side of [s.a, s.b])
-        expect(side.service.tasks()[0].status).toBe(
-          "completed",
-        );
-    },
-  );
-  it("does not inject Ctrl+C after a focus reset while preparing the copy", async () => {
+  it("keeps an authorized copy alive across a focus reset while reading", async () => {
     const s = setup();
-    const sequence = deferred<number>();
-    s.native.sequence.mockReturnValue(sequence.promise);
-    const operation = s.a.service.copy("peer1", s.control);
-    const failure = expect(operation).rejects.toThrow();
-    await vi.waitFor(() =>
-      expect(s.native.sequence).toHaveBeenCalledOnce(),
+    s.destination("cache");
+    const snapshot = deferred<{
+      sequence: number;
+      entries: ClipboardEntry[];
+    }>();
+    s.native.read.mockReturnValue(snapshot.promise);
+    const operation = s.a.service.readCurrent(
+      "peer1",
+      s.control,
     );
+    await vi.waitFor(() =>
+      expect(s.native.read).toHaveBeenCalledOnce(),
+    );
+    const inputCount = vi.mocked(s.control.input).mock.calls
+      .length;
     s.blur();
-    sequence.resolve(7);
-    await failure;
-    await flushRtc();
-    expect(s.control.input).not.toHaveBeenCalled();
+    snapshot.resolve({
+      sequence: 8,
+      entries: copiedFiles,
+    });
+    expect(await operation).toEqual([]);
+    expect(s.cacheFile).toHaveBeenCalledOnce();
+    expect(s.control.input).toHaveBeenCalledTimes(
+      inputCount,
+    );
+    for (const side of [s.a, s.b])
+      expect(side.service.tasks()[0].status).toBe(
+        "completed",
+      );
+  });
+  it("unsubscribes a pending host watcher without reading the clipboard", async () => {
+    const s = setup();
+    const registered = deferred<() => void>();
+    const unsubscribe = vi.fn();
+    s.native.watch.mockReturnValue(registered.promise);
+    const stop = s.a.service.watch(
+      "peer1",
+      s.control,
+      vi.fn(),
+    );
+    await vi.waitFor(() =>
+      expect(s.native.watch).toHaveBeenCalledOnce(),
+    );
+    stop();
+    registered.resolve(unsubscribe);
+    await vi.waitFor(() =>
+      expect(unsubscribe).toHaveBeenCalledOnce(),
+    );
     expect(s.native.read).not.toHaveBeenCalled();
   });
   it("excludes disabled files at the native read boundary without opening a transfer or cache", async () => {
@@ -540,11 +530,11 @@ describe("authorized remote clipboard", () => {
       entries: copiedFiles,
     });
     expect(
-      await s.a.service.copy("peer1", s.control),
+      await s.a.service.readCurrent("peer1", s.control),
     ).toEqual([]);
     expect(s.native.read).toHaveBeenCalledWith(
       expect.anything(),
-      7,
+      undefined,
       false,
       64 * 1024 * 1024,
     );
@@ -565,7 +555,7 @@ describe("authorized remote clipboard", () => {
         { type: "image/png", data: btoa("image") },
       ],
     });
-    const content = await s.a.service.copy(
+    const content = await s.a.service.readCurrent(
       "peer1",
       s.control,
     );
@@ -575,76 +565,61 @@ describe("authorized remote clipboard", () => {
     ]);
     expect(s.cacheFile).not.toHaveBeenCalled();
   });
-  it.each([true, false])(
-    "filters unsupported formats on the host before transfer (selection=%s)",
-    async (selection) => {
-      const s = setup();
-      // Invalid RTF data must not even be decoded for a browser that cannot write it.
-      s.native.read.mockResolvedValue({
-        sequence: 8,
-        entries: [
-          ...copiedFiles,
-          { type: "text/rtf", data: "invalid base64!" },
-          { type: "text/plain", data: btoa("text") },
-          { type: "text/html", data: btoa("<b>text</b>") },
-          { type: "image/png", data: btoa("image") },
-        ],
-      });
-      const formats = [
-        "text/plain",
-        "text/html",
-        "image/png",
-      ] as const;
-      const content = await s.a.service.copy(
-        "peer1",
-        s.control,
-        selection,
-        { files: false, formats: [...formats] },
-      );
-      expect(content.map((e) => e.type)).toEqual(formats);
-      expect(s.native.read).toHaveBeenCalledWith(
-        expect.anything(),
-        selection ? 7 : undefined,
-        false,
-        64 * 1024 * 1024,
-      );
-      expect(s.cacheFile).not.toHaveBeenCalled();
-    },
-  );
-  it.each([true, false])(
-    "does not open a transfer for unsupported-only clipboard contents (selection=%s)",
-    async (selection) => {
-      const s = setup();
-      s.native.read.mockResolvedValue({
-        sequence: 8,
-        entries: [
-          ...copiedFiles,
-          { type: "text/rtf", data: btoa("rtf") },
-        ],
-      });
-      const receive = vi.fn(async () => {});
-      expect(
-        await s.a.service.copy(
-          "peer1",
-          s.control,
-          selection,
-          {
-            files: false,
-            formats: ["text/plain", "image/png"],
-            receive,
-          },
-        ),
-      ).toEqual([]);
-      expect(receive).toHaveBeenCalledWith(
-        [],
-        expect.any(AbortSignal),
-      );
-      expect(s.a.caches.size).toBe(0);
-      expect(s.b.caches.size).toBe(0);
-      expect(s.a.service.tasks()).toEqual([]);
-      expect(s.b.service.tasks()).toEqual([]);
-    },
-  );
+  it("filters unsupported formats on the host before transfer", async () => {
+    const s = setup();
+    // Invalid RTF data must not even be decoded for a browser that cannot write it.
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        ...copiedFiles,
+        { type: "text/rtf", data: "invalid base64!" },
+        { type: "text/plain", data: btoa("text") },
+        { type: "text/html", data: btoa("<b>text</b>") },
+        { type: "image/png", data: btoa("image") },
+      ],
+    });
+    const formats = [
+      "text/plain",
+      "text/html",
+      "image/png",
+    ] as const;
+    const content = await s.a.service.readCurrent(
+      "peer1",
+      s.control,
+      { files: false, formats: [...formats] },
+    );
+    expect(content.map((e) => e.type)).toEqual(formats);
+    expect(s.native.read).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      false,
+      64 * 1024 * 1024,
+    );
+    expect(s.cacheFile).not.toHaveBeenCalled();
+  });
+  it("does not open a transfer for unsupported-only clipboard contents", async () => {
+    const s = setup();
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [
+        ...copiedFiles,
+        { type: "text/rtf", data: btoa("rtf") },
+      ],
+    });
+    const receive = vi.fn(async () => {});
+    expect(
+      await s.a.service.readCurrent("peer1", s.control, {
+        files: false,
+        formats: ["text/plain", "image/png"],
+        receive,
+      }),
+    ).toEqual([]);
+    expect(receive).not.toHaveBeenCalled();
+    expect(s.a.caches.size).toBe(0);
+    expect(s.b.caches.size).toBe(0);
+    expect(s.a.service.tasks()).toEqual([]);
+    expect(s.b.service.tasks()).toEqual([]);
+  });
   it("receives cache files without unsupported alternatives when no browser write formats exist", async () => {
     const s = setup();
     s.destination("cache");
@@ -657,7 +632,7 @@ describe("authorized remote clipboard", () => {
       ],
     });
     expect(
-      await s.a.service.copy("peer1", s.control, true, {
+      await s.a.service.readCurrent("peer1", s.control, {
         files: true,
         formats: [],
       }),
@@ -693,10 +668,9 @@ describe("authorized remote clipboard", () => {
       ],
     });
     const receive = vi.fn(async () => {});
-    const content = await s.a.service.copy(
+    const content = await s.a.service.readCurrent(
       "peer1",
       s.control,
-      true,
       { files: false, formats: ["text/plain"], receive },
     );
     expect(content.map((e) => e.type)).toEqual([
@@ -715,10 +689,9 @@ describe("authorized remote clipboard", () => {
     });
     const writing = deferred<void>();
     const receive = vi.fn(async () => writing.promise);
-    const operation = s.a.service.copy(
+    const operation = s.a.service.readCurrent(
       "peer1",
       s.control,
-      true,
       { receive },
     );
     const failure =
@@ -753,10 +726,9 @@ describe("authorized remote clipboard", () => {
         async () => stored.promise,
       );
       const receive = vi.fn(async () => {});
-      const operation = s.a.service.copy(
+      const operation = s.a.service.readCurrent(
         "peer1",
         s.control,
-        false,
         { receive },
       );
       const failure = expect(operation).rejects.toThrow();
@@ -781,7 +753,64 @@ describe("authorized remote clipboard", () => {
       );
     },
   );
-  it("synchronizes text without a task and waits for native application before Ctrl+V", async () => {
+  it("leaves the host clipboard alone for empty paste payloads and preserves zero-byte files", async () => {
+    const s = setup();
+    await s.a.service.paste("peer1", s.control, []);
+    await s.a.service.paste("peer1", s.control, [
+      { type: "text/plain", blob: new Blob([]) },
+    ]);
+    expect(s.native.write).not.toHaveBeenCalled();
+    expect(s.control.input).not.toHaveBeenCalled();
+    expect(s.a.transport.sendCalls).toHaveLength(0);
+    s.applied.resolve();
+    await s.a.service.paste("peer1", s.control, [
+      {
+        type: "file",
+        name: "empty.txt",
+        blob: new Blob([]),
+      },
+    ]);
+    expect(s.native.write).toHaveBeenCalledOnce();
+    expect(s.events).toEqual(["write", "applied"]);
+    expect(s.control.input).not.toHaveBeenCalled();
+  });
+  it("does not echo a paste when processing a delayed change notification", async () => {
+    const s = setup();
+    s.applied.resolve();
+    await s.a.service.paste("peer1", s.control, [
+      { type: "text/plain", blob: new Blob(["local"]) },
+    ]);
+    s.native.sequence.mockResolvedValueOnce(9);
+    expect(
+      await s.a.service.readCurrent("peer1", s.control),
+    ).toEqual([]);
+    expect(s.native.read).not.toHaveBeenCalled();
+    s.native.sequence.mockResolvedValueOnce(10);
+    s.native.read.mockResolvedValueOnce({
+      sequence: 10,
+      entries: [{ type: "text/plain", data: btoa("next") }],
+    });
+    const next = await s.a.service.readCurrent(
+      "peer1",
+      s.control,
+    );
+    expect(await next[0].blob.text()).toBe("next");
+    expect(s.native.read).toHaveBeenCalledOnce();
+  });
+  it("propagates a host clipboard write failure", async () => {
+    const s = setup();
+    s.native.write.mockRejectedValueOnce(
+      new Error("Clipboard is busy"),
+    );
+    await expect(
+      s.a.service.paste("peer1", s.control, [
+        { type: "text/plain", blob: new Blob(["new"]) },
+      ]),
+    ).rejects.toThrow("Clipboard is busy");
+    expect(s.native.write).toHaveBeenCalledOnce();
+    expect(s.control.input).not.toHaveBeenCalled();
+  });
+  it("synchronizes text without a task or synthetic keystrokes", async () => {
     const s = setup();
     const operation = s.a.service.paste(
       "peer1",
@@ -801,7 +830,8 @@ describe("authorized remote clipboard", () => {
     expect(s.b.service.tasks()).toEqual([]);
     s.applied.resolve();
     await operation;
-    expect(s.events).toEqual(["write", "applied", "paste"]);
+    expect(s.events).toEqual(["write", "applied"]);
+    expect(s.control.input).not.toHaveBeenCalled();
     expect(s.native.write.mock.calls[0][0]).toEqual([
       {
         type: "text/plain",
@@ -850,7 +880,7 @@ describe("authorized remote clipboard", () => {
         sequence: 8,
         entries: await toNativeClipboard(content),
       });
-      const copied = await s.a.service.copy(
+      const copied = await s.a.service.readCurrent(
         "peer1",
         s.control,
       );
@@ -899,32 +929,103 @@ describe("authorized remote clipboard", () => {
       }
     },
   );
-  it("samples the clipboard before Ctrl+C and waits for new remote content", async () => {
+  it("reads only after the host reports a clipboard change", async () => {
     const s = setup();
-    const result = await s.a.service.copy(
-      "peer1",
-      s.control,
-    );
-    expect(await result[0].blob.text()).toBe("remote text");
-    expect(s.native.read).toHaveBeenCalledWith(
-      {
-        ownerId: "owner",
-        clientId: "peer0",
-        grantId: "grant",
-      },
-      7,
-      true,
-      64 * 1024 * 1024,
-    );
-    expect(s.control.input).toHaveBeenCalledWith({
-      type: "key",
-      scanCode: 0x2e,
-      extended: false,
-      down: true,
+    const received = deferred<ClipboardContent>();
+    s.a.service.watch("peer1", s.control, () => {
+      void s.a.service
+        .readCurrent("peer1", s.control)
+        .then(received.resolve, received.reject);
     });
-    expect(s.native.write).not.toHaveBeenCalled();
+    await flushRtc();
+    expect(s.native.read).not.toHaveBeenCalled();
+    expect(s.native.sequence).not.toHaveBeenCalled();
+    expect(
+      s.a.transport.sendCalls.map(
+        ({ message }) =>
+          message.type === "remote-clipboard" &&
+          message.action,
+      ),
+    ).toEqual(["watch"]);
+    s.changed();
+    expect(
+      await (await received.promise)[0].blob.text(),
+    ).toBe("remote text");
+    expect(s.native.read).toHaveBeenCalledOnce();
+    expect(s.control.input).not.toHaveBeenCalled();
   });
-  it("cancels a clipboard file task before sending the final paste shortcut", async () => {
+  it("quietly finishes a read cleared on an older host and propagates genuine read failures", async () => {
+    const s = setup();
+    const receive = vi.fn();
+    s.native.read.mockRejectedValueOnce(
+      "No supported clipboard content",
+    );
+    expect(
+      await s.a.service.readCurrent("peer1", s.control, {
+        receive,
+      }),
+    ).toEqual([]);
+    expect(receive).not.toHaveBeenCalled();
+    s.native.read.mockRejectedValueOnce(
+      "Clipboard is busy; try again",
+    );
+    await expect(
+      s.a.service.readCurrent("peer1", s.control, {
+        receive,
+      }),
+    ).rejects.toThrow("Clipboard is busy");
+    expect(receive).not.toHaveBeenCalled();
+  });
+  it("acknowledges an empty host snapshot without sending any content", async () => {
+    const s = setup();
+    s.native.read.mockResolvedValue({
+      sequence: 8,
+      entries: [],
+    });
+    expect(
+      await s.a.service.readCurrent("peer1", s.control),
+    ).toEqual([]);
+    for (const side of [s.a, s.b]) {
+      expect(side.caches.size).toBe(0);
+      expect(side.service.tasks()).toEqual([]);
+      expect(
+        side.session.createChannel,
+      ).not.toHaveBeenCalled();
+    }
+  });
+  it("acknowledges an older controller's unchanged selection without offering its existing clipboard", async () => {
+    const s = setup();
+    const request = {
+      operationId: "legacy-copy",
+      grantId: "grant",
+    };
+    await s.a.protocol.call(
+      s.a.session,
+      "remote-clipboard",
+      { ...request, action: "prepare" },
+    );
+    s.native.read.mockResolvedValue({
+      sequence: 7,
+      entries: [],
+    });
+    await s.a.protocol.call(
+      s.a.session,
+      "remote-clipboard",
+      { ...request, action: "read" },
+    );
+    expect(s.native.read).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+      undefined,
+      expect.any(Number),
+    );
+    expect(
+      s.b.transport.sendCalls.every(
+        ({ message }) => message.type === "ack",
+      ),
+    ).toBe(true);
+  });
+  it("cancels a clipboard file task while the host write is pending", async () => {
     const s = setup();
     const operation = s.a.service.paste(
       "peer1",
@@ -950,10 +1051,10 @@ describe("authorized remote clipboard", () => {
     s.applied.resolve();
     await failure;
     await flushRtc();
-    expect(s.events).not.toContain("paste");
+    expect(s.control.input).not.toHaveBeenCalled();
   });
   it.each(["disable", "revoke", "blur"] as const)(
-    "does not inject paste after %s while native write is pending",
+    "rejects a pending write after %s",
     async (action) => {
       const s = setup();
       const operation = s.a.service.paste(
@@ -969,7 +1070,7 @@ describe("authorized remote clipboard", () => {
       s.applied.resolve();
       await failure;
       await flushRtc();
-      expect(s.events).not.toContain("paste");
+      expect(s.control.input).not.toHaveBeenCalled();
     },
   );
   it("rejects unsolicited clipboard data before opening a cache", async () => {

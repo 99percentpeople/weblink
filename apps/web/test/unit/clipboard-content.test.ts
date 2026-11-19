@@ -14,7 +14,6 @@ import {
   browserClipboardAccess,
   readBrowserClipboard,
   writeBrowserClipboard,
-  beginBrowserClipboardWrite,
   browserClipboardFormats,
   fromPaste,
 } from "@/libs/application/clipboard-content";
@@ -396,30 +395,6 @@ it("writes supported standard formats without packaging files or unsupported RTF
     await toNativeClipboard(content.slice(0, 3)),
   );
 });
-it("starts a standard text write during the gesture and waits for the transferred bytes", async () => {
-  const s = browserClipboard();
-  let resolve!: (
-    content: import("@/libs/application/clipboard-content").ClipboardContent,
-  ) => void;
-  const pending = beginBrowserClipboardWrite(
-    new Promise((yes) => {
-      resolve = yes;
-    }),
-  );
-  expect(s.write).toHaveBeenCalledOnce();
-  expect(s.saved.size).toBe(0);
-  resolve([
-    {
-      type: "text/plain",
-      blob: new Blob(["中文\nabc"]),
-    },
-  ]);
-  await pending;
-  expect(await s.saved.get("text/plain")!.text()).toBe(
-    "中文\nabc",
-  );
-  expect([...s.saved.keys()]).toEqual(["text/plain"]);
-});
 it("uses actual system paste data without reading custom browser formats", async () => {
   const s = browserClipboard();
   s.read.mockRejectedValue(
@@ -468,12 +443,6 @@ it("preserves the clipboard instead of writing files as names or custom bundles"
     "No supported browser clipboard format",
   );
   expect(s.write).not.toHaveBeenCalled();
-  expect(await s.saved.get("text/plain")!.text()).toBe(
-    "existing clipboard",
-  );
-  await expect(
-    beginBrowserClipboardWrite(Promise.resolve(content)),
-  ).rejects.toThrow("No plain text alternative");
   expect(await s.saved.get("text/plain")!.text()).toBe(
     "existing clipboard",
   );

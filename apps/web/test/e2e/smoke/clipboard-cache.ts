@@ -282,7 +282,7 @@ async function main() {
         a.pc.connectionState === "connected" &&
         b.pc.connectionState === "connected",
     );
-    await a.service.copy("peer1", control);
+    await a.service.readCurrent("peer1", control);
     if (
       imported !== 1 ||
       peers.some(
@@ -334,7 +334,7 @@ async function main() {
       entries = await toNativeClipboard([
         { type: "file", name: `copied.${extension}`, blob },
       ]);
-      await a.service.copy("peer1", control, false, {
+      await a.service.readCurrent("peer1", control, {
         files: true,
         formats: ["image/png"],
         receive: async (content, signal) => {
@@ -400,7 +400,7 @@ async function main() {
     ]);
     let pdfRejected = false;
     try {
-      await a.service.copy("peer1", control, false, {
+      await a.service.readCurrent("peer1", control, {
         files: true,
         formats: [],
         receive: async (content, signal) =>

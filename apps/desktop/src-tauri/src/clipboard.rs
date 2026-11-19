@@ -159,7 +159,12 @@ pub async fn clipboard_read(
             let changed = native::wait_after(after, Duration::from_millis(1800));
             // Waiting holds no control lock and never extends authorization.
             access(&service, &scope, || Ok(()))?;
-            changed?;
+            if !changed? {
+                return Ok(Snapshot {
+                    sequence: after,
+                    entries: Vec::new(),
+                });
+            }
         }
         // Delayed clipboard rendering belongs to another application and may block.
         // Never hold the control actor lock while asking it for data; revalidate before delivery.
@@ -185,11 +190,16 @@ pub async fn clipboard_read(
             )?;
         }
         access(&service, &scope, || {
-            if native::sequence() != snapshot.sequence {
+            let sequence = native::sequence();
+            if sequence != snapshot.sequence {
+                if scope.is_some() {
+                    // The host watcher owns the next change. Discard this superseded remote read.
+                    return Ok(Snapshot {
+                        sequence,
+                        entries: Vec::new(),
+                    });
+                }
                 return Err("Clipboard changed during copy; try again".into());
-            }
-            if snapshot.entries.is_empty() && !(files == Some(false) && !paths.is_empty()) {
-                return Err("No supported clipboard content".into());
             }
             Ok(snapshot)
         })
@@ -385,7 +395,7 @@ mod native {
     pub fn sequence() -> u32 {
         0
     }
-    pub fn wait_after(_: u32, _: Duration) -> Result<(), String> {
+    pub fn wait_after(_: u32, _: Duration) -> Result<bool, String> {
         Err("Clipboard unavailable".into())
     }
     pub fn read() -> Result<(Snapshot, Vec<String>), String> {

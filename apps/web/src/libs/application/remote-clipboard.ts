@@ -3,8 +3,6 @@ import { createSignal } from "solid-js";
 import type { PlatformRuntime } from "@weblink/platform";
 import type { PeerSession } from "../domain/session";
 import type { RemotePointer } from "../domain/remote-control/pointer";
-import { RemoteKeyboard } from "../domain/remote-control/keyboard";
-import { defaultRemoteKeyboardOptions } from "../domain/remote-control/keyboard-options";
 import type { ClipboardFileDestination } from "../domain/remote-control/keyboard-options";
 import { createUuid } from "../domain/ids";
 import type {
@@ -16,6 +14,7 @@ import {
   CLIPBOARD_INLINE_BYTES,
   validInlineClipboard,
 } from "../domain/protocol/clipboard";
+import { P2PProtocolError } from "../domain/protocol/errors";
 import type { RequestContext } from "../domain/protocol/request-manager";
 import type { FileCacheFactory } from "./cache-service";
 import type { RemoteControlHost } from "./remote-control-host";
@@ -28,6 +27,7 @@ import {
   clipboardContentKind,
   checkContent,
   packClipboard,
+  pasteableContent,
   toNativeClipboard,
   unpackClipboard,
   type ClipboardContent,
@@ -101,6 +101,10 @@ export class RemoteClipboard {
   private observers = new Map<
     PeerSession,
     { id: string; grantId: string; stop?: () => void }
+  >();
+  private readonly pastedSequence = new WeakMap<
+    PeerSession,
+    number
   >();
   private jobs = new Map<PeerSession, Job>();
   private readonly state = createSignal<SharedFileTask[]>(
@@ -253,6 +257,7 @@ export class RemoteClipboard {
       "operationId" | "grantId" | "maxFileBytes"
     >,
     control?: RemotePointer,
+    requiresInputEpoch = false,
   ): Job {
     const seen =
       this.consumed.get(session) ?? new Set<string>();
@@ -275,7 +280,7 @@ export class RemoteClipboard {
       grantId: request.grantId,
       control,
       epoch: control?.clipboardEpoch(),
-      requiresInputEpoch: true,
+      requiresInputEpoch,
       lifetime: new AbortController(),
       offered: false,
       maxFileBytes: resolveRemoteFileLimit(
@@ -312,6 +317,7 @@ export class RemoteClipboard {
   private controller(
     peerId: string,
     control: RemotePointer,
+    requiresInputEpoch: boolean,
   ): Job {
     const session = this.options.getSession(peerId);
     const grantId = control.clipboardGrant();
@@ -319,7 +325,7 @@ export class RemoteClipboard {
       !session ||
       this.options.supported?.(session) === false ||
       !grantId ||
-      control.state() !== "active"
+      (requiresInputEpoch && control.state() !== "active")
     )
       throw new Error("Remote control is not active");
     return this.start(
@@ -330,6 +336,7 @@ export class RemoteClipboard {
         maxFileBytes: this.options.maxFileBytes?.(),
       },
       control,
+      requiresInputEpoch,
     );
   }
   private call(
@@ -347,8 +354,7 @@ export class RemoteClipboard {
         ...payload,
         operationId: job.id,
         grantId: job.grantId,
-        ...(payload.action === "prepare" ||
-        payload.action === "read-current" ||
+        ...(payload.action === "read-current" ||
         (payload.action === "offer" &&
           payload.direction === "paste")
           ? { maxFileBytes: job.maxFileBytes }
@@ -360,20 +366,6 @@ export class RemoteClipboard {
         retries: 0,
       },
     );
-  }
-  private tap(job: Job, code: "KeyC" | "KeyV") {
-    this.check(job);
-    const keys = new RemoteKeyboard(
-      {
-        input: (event) => job.control!.input(event),
-        cancel: () => job.control!.cancel(),
-      },
-      defaultRemoteKeyboardOptions,
-    );
-    if (!keys.tap(code, ["ControlLeft"]))
-      throw new Error(
-        "Remote clipboard shortcut could not be sent",
-      );
   }
   watch(
     peerId: string,
@@ -427,38 +419,39 @@ export class RemoteClipboard {
       .catch(close);
     return close;
   }
-  async copy(
+  async readCurrent(
     peerId: string,
     control: RemotePointer,
-    selection = true,
     options: ClipboardCopyOptions = {},
   ): Promise<ClipboardContent> {
-    const job = this.controller(peerId, control);
+    const job = this.controller(peerId, control, false);
     job.fileDestination = this.fileDestination();
     try {
-      if (selection) {
-        await this.call(job, { action: "prepare" });
-        this.tap(job, "KeyC");
-      }
-      // Copy injects no more input. Focus resets can safely leave its transfer running.
-      // The grant, connection, settings and explicit cancellation still apply.
-      job.requiresInputEpoch = false;
       await this.call(job, {
-        action: selection ? "read" : "read-current",
+        action: "read-current",
         files:
           job.fileDestination !== "off" &&
           options.files !== false,
         formats: options.formats,
+      }).catch((error: unknown) => {
+        // Older hosts report a clipboard cleared between notification and read as an error.
+        if (
+          error instanceof P2PProtocolError &&
+          error.code === "remote-error" &&
+          error.message === "No supported clipboard content"
+        )
+          return;
+        throw error;
       });
       this.check(job);
-      let content = job.content ?? [];
-      // Older hosts may ignore the optional format filter.
-      if (options.formats)
-        content = content.filter(
-          (entry) =>
-            entry.type === "file" ||
-            options.formats!.includes(entry.type),
-        );
+      // Older hosts may ignore the optional format filter or offer empty text.
+      let content = (job.content ?? []).filter(
+        (entry) =>
+          entry.type === "file" ||
+          (entry.blob.size > 0 &&
+            (!options.formats ||
+              options.formats.includes(entry.type))),
+      );
       const files = content.filter(
         (entry) => entry.type === "file",
       );
@@ -483,7 +476,11 @@ export class RemoteClipboard {
           (entry) => entry.type !== "file",
         );
       }
-      await options.receive?.(content, job.lifetime.signal);
+      if (content.length)
+        await options.receive?.(
+          content,
+          job.lifetime.signal,
+        );
       this.check(job);
       this.update(job, {
         status: "completed",
@@ -491,7 +488,13 @@ export class RemoteClipboard {
       });
       return content;
     } catch (e) {
-      this.stop(job, e);
+      if (
+        !(
+          e instanceof DOMException &&
+          e.name === "AbortError"
+        )
+      )
+        this.stop(job, e);
       throw e;
     } finally {
       this.stop(job);
@@ -505,13 +508,17 @@ export class RemoteClipboard {
     control: RemotePointer,
     content: Promise<ClipboardContent> | ClipboardContent,
   ): Promise<void> {
-    const job = this.controller(peerId, control);
+    const job = this.controller(peerId, control, true);
     try {
-      const value = await content;
+      const value = pasteableContent(
+        await content,
+        job.maxFileBytes,
+      );
       this.check(job);
+      if (!value.length) return;
       await this.send(job, value, "paste");
       // ACK means the complete payload is in the host clipboard, not just that bytes arrived.
-      this.tap(job, "KeyV");
+      this.check(job);
       this.update(job, {
         status: "completed",
         canPause: false,
@@ -564,7 +571,7 @@ export class RemoteClipboard {
             this.syncPermissions();
             if (
               this.observers.get(session) !== watch ||
-              this.jobs.has(session)
+              this.jobs.get(session)?.baseline !== undefined
             )
               return;
             void this.options.protocol
@@ -597,7 +604,7 @@ export class RemoteClipboard {
         watch.grantId !== message.grantId
       )
         throw new Error("Stale clipboard notification");
-      if (!this.jobs.has(session)) watch.changed();
+      watch.changed();
       return;
     }
     let job = this.jobs.get(session);
@@ -615,16 +622,16 @@ export class RemoteClipboard {
         session.targetClientId,
         message.grantId,
       );
+      // Older controllers prepare a baseline and read the resulting selection themselves.
       const baseline =
-        await this.options.platform.clipboard.sequence(
-          scope,
-        );
+        message.action === "prepare"
+          ? await this.options.platform.clipboard.sequence(
+              scope,
+            )
+          : undefined;
       signal.throwIfAborted();
       job = this.start(session, message);
-      job.baseline =
-        message.action === "read-current"
-          ? undefined
-          : baseline;
+      job.baseline = baseline;
     }
     if (
       !job ||
@@ -653,26 +660,38 @@ export class RemoteClipboard {
           session.targetClientId,
           job.grantId,
         );
-        const snapshot =
-          await this.options.platform.clipboard!.read(
-            scope,
-            job.baseline,
-            message.files,
-            job.maxFileBytes,
-          );
+        const clipboard = this.options.platform.clipboard!;
+        const pasted = this.pastedSequence.get(session);
+        if (
+          message.action === "read-current" &&
+          pasted !== undefined
+        ) {
+          // An earlier change notification may arrive after this peer's paste replaced the clipboard.
+          const sequence = await clipboard.sequence(scope);
+          this.check(job);
+          if (sequence === pasted) {
+            this.stop(job);
+            return;
+          }
+          this.pastedSequence.delete(session);
+        }
+        const snapshot = await clipboard.read(
+          scope,
+          job.baseline,
+          message.files,
+          job.maxFileBytes,
+        );
         this.check(job);
         // Filter before packaging or sending unsupported formats to the controller.
         const entries = snapshot.entries.filter((entry) =>
           entry.type === "file" ||
           entry.type === "directory"
             ? message.files !== false
-            : !message.formats ||
-              message.formats.includes(entry.type),
+            : entry.data.length > 0 &&
+              (!message.formats ||
+                message.formats.includes(entry.type)),
         );
-        if (
-          !entries.length &&
-          (message.files === false || message.formats)
-        ) {
+        if (!entries.length) {
           this.stop(job);
           return;
         }
@@ -722,15 +741,17 @@ export class RemoteClipboard {
         else {
           const entries = await toNativeClipboard(content);
           this.check(job);
-          await this.options.platform.clipboard!.write(
-            entries,
-            this.options.host.clipboardScope(
-              session.targetClientId,
-              job.grantId,
-            ),
-            job.maxFileBytes,
-          );
+          const sequence =
+            await this.options.platform.clipboard!.write(
+              entries,
+              this.options.host.clipboardScope(
+                session.targetClientId,
+                job.grantId,
+              ),
+              job.maxFileBytes,
+            );
           this.check(job);
+          this.pastedSequence.set(session, sequence);
         }
       }
       if (!job.control) {

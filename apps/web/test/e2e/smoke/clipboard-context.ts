@@ -6,7 +6,7 @@ const unexpected = async (): Promise<never> => {
 };
 export const clipboardFixture: AppStateContextProps["remoteClipboard"] =
   {
-    copy: unexpected,
+    readCurrent: unexpected,
     paste: unexpected,
     watch: () => () => {},
   };

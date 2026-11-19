@@ -1978,15 +1978,14 @@ Omitting the list preserves native and older-client behavior. Older hosts may ig
 the optional list, so controllers also filter unsupported alternatives on receipt.
 
 The portable `remote-clipboard` request binds a one-shot `operationId` to the current
-native `grantId` and its authenticated peer session. Explicit copy samples the host
-clipboard sequence before sending Ctrl+C, then waits for a newer sequence.
-The copy wait subscribes before rechecking the sequence and wakes on Windows
-clipboard notifications, with one completion deadline instead of periodic reads.
-It revalidates the control grant after waiting and before delivering content.
-Context menu copies use `watch`/`changed`/`unwatch` subscriptions and Windows
-clipboard change notifications. Notifications contain no clipboard data, require
-the current watch identity and do not echo application-owned clipboard writes.
-They never import an existing clipboard merely because control was granted.
+native `grantId` and its authenticated peer session. The controller subscribes to host clipboard changes
+with `watch`. The host sends the same `changed` notification for copies made with a
+shortcut, a menu or another application action. If the clipboard stays unchanged,
+the subscription stays idle. The controller checks the watch identity
+and requests `read-current` under its grant. Windows suppresses duplicate
+sequences, application-owned writes and updates without a supported format.
+An empty snapshot completes the read without offering content. Hosts also accept
+the earlier `prepare` / `read` sequence from older controllers.
 
 Clipboard bundles use the existing file sender, receiver, transfer registry,
 compression and backpressure. Text-only content (including HTML/RTF) never creates
@@ -1996,14 +1995,15 @@ list. The offer declares the content kind, which is checked again after unpackin
 Transport caches are temporary. Only the explicit File cache destination imports
 received files into the library; clipboard operations do not create chat messages or
 clipboard history. Copy completes after the selected destination finishes writing or
-importing the files. Once Ctrl+C has been sent (or an existing clipboard read has
-started), Copy no longer depends on the input epoch: a focus reset during receipt
-or import does not cancel it. Before Ctrl+C, the original epoch must still be valid.
-Paste acknowledges only
-after the complete bundle is validated and written to the host clipboard; Ctrl+V
-then uses the original control grant and input epoch. Revocation, disabling the
+importing the files. An authorized read can finish across a focus reset.
+For a local paste event, the host acknowledges the complete bundle after validating
+and writing it to its clipboard. Revocation, disabling the
 controller setting, changing the copy destination, switching sources, disconnection
 and task cancellation stop pending work.
+Each local system paste event supplies its own clipboard payload. While a transfer is
+running, distinct paste gestures wait in order under their original grant and
+input epoch. Empty or unreadable local content leaves the host clipboard alone.
+A Paste command in the remote application's own menu uses the host clipboard.
 The native adapter independently enforces the live grant and current capture at
 clipboard access, including after asynchronous file preparation.
 
@@ -2017,9 +2017,9 @@ again. Pending or unsupported permission queries remain distinct from denied acc
 Native capability is reported by the implemented backend. Without write capability,
 local clipboard writes are disabled; the File cache destination can still receive
 files and subscribe to changes. Otherwise the change subscription is disabled and
-ordinary remote Ctrl+C still works.
-Without programmatic read capability, Ctrl+V/system paste events remain supported
-through the focused remote input surface or soft-keyboard editor. Text and single-chunk
+physical keys still reach the host.
+A local system paste event can supply content to the remote input surface or its
+soft-keyboard editor even when programmatic reading is unavailable. Text and single-chunk
 copy/paste operations need no progress toast. A browser that refuses an automatic
 clipboard write keeps the received content pending and offers a Copy to clipboard
 button; clicking writes the existing bytes without another transfer. Cancellation,
@@ -2031,14 +2031,13 @@ background notifications are not repeated for each chunk. Cancellation stops the
 task and removes its loading notice. No action-bar buttons or separate paste dialog are added.
 Failed clipboard tasks retain an expandable diagnostic error for troubleshooting.
 
-Controllers intercept Ctrl+C/Ctrl+V during keyboard forwarding outside local editors. Browser
-paste consumes the real paste event, preserving line breaks instead of typing Enter.
-The browser copy gesture starts a promised text ClipboardItem before the remote reply,
-preserving text write activation across the transfer. It then attempts supported
-rich/image formats automatically. Browser paste consumes formats and actual files
-exposed by the real paste event, without probing the async read API for custom bundles.
-A denied write does not create a separate save action; a later copy gesture requests fresh
-content. Browser controllers can write only formats supported by their clipboard
+The controller forwards physical key presses, repeats and releases. The host OS and
+focused application interpret the shortcut and use the host clipboard for paste.
+A local browser paste event transfers only the formats and files it carries,
+preserving line breaks. Completing that transfer sends no additional keystrokes.
+After a host change notification and transfer, the browser writes the supported
+formats together.
+Browser controllers can write only formats supported by their clipboard
 API; they do not read or write Weblink custom clipboard formats. To receive copied
 files on the Web, select File cache and download them. The Clipboard (limited)
 destination remains selectable for supported text/image formats when browser write

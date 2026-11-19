@@ -1,5 +1,5 @@
 import {
-  beginBrowserClipboardWrite,
+  writeBrowserClipboard,
   fromPaste,
   readBrowserClipboard,
   type ClipboardContent,
@@ -35,11 +35,11 @@ const surface = document.getElementById("surface")!;
 surface.addEventListener("keydown", (event) => {
   if (!event.ctrlKey || event.code !== "KeyC") return;
   event.preventDefault();
-  // Simulate a transfer that outlasts transient user activation.
+  // Simulate the host notifying and delivering content after transient activation.
   const received = new Promise<ClipboardContent>(
     (resolve) => setTimeout(() => resolve(content), 6000),
   );
-  void beginBrowserClipboardWrite(received)!.then(() => {
+  void received.then(writeBrowserClipboard).then(() => {
     fixture.__CLIPBOARD_COPIED__ = true;
   }, fail);
 });
